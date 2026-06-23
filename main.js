@@ -86,8 +86,8 @@ async function* generate(messages, { maxTokens = 1024, temperature = 0.0, stopId
   if (stopIds.includes(first)) return;
   { const d = emit(first); if (d) yield d; }
   let emitted = 1;
-  while (emitted < maxTokens) {
-    const K = Math.min(rt.MAXBATCH, maxTokens - emitted);
+  while (emitted < maxTokens && pos < rt.maxCtx) {                   // stop before the KV cache fills
+    const K = Math.min(rt.MAXBATCH, maxTokens - emitted, rt.maxCtx - pos);
     const batch = await rt.decodeBatch(pos, K); pos += K;            // K new tokens, one readback
     let stop = false;
     for (const id of batch) {

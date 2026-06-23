@@ -35,9 +35,9 @@ export class QwenWGPU {
   // `source` is a base URL string OR a reader { range, text } (e.g. hfReader/fileReader).
   async build(source, onProgress = () => {}) {
     const dev = this.dev, c = this.cfg;
-    this.CHUNK = 128; this.MAXBATCH = 16; this.maxPrefillT = 512;
+    this.CHUNK = 128; this.MAXBATCH = 16; this.maxPrefillT = 8192;
     this.pipes = { gemv: this._pipe(GEMV), loraA: this._pipe(LORA_A), rms: this._pipe(RMSNORM), rope: this._pipe(ROPE), attnP: this._pipe(ATTN_PARTIAL), attnC: this._pipe(ATTN_COMBINE), add: this._pipe(ADD), silu: this._pipe(SILUMUL), embed: this._pipe(EMBED), embedBuf: this._pipe(EMBED_BUF), argmax: this._pipe(ARGMAX), gemv4: this._pipe(GEMV4),
-      gemm4: this._pipe(GEMM4), rmsT: this._pipe(RMSNORM_T), ropeT: this._pipe(ROPE_T), embedT: this._pipe(EMBED_T), attnPrefill: this._pipe(ATTN_PREFILL(this.maxPrefillT)) };
+      gemm4: this._pipe(GEMM4), rmsT: this._pipe(RMSNORM_T), ropeT: this._pipe(ROPE_T), embedT: this._pipe(EMBED_T), attnPrefill: this._pipe(ATTN_PREFILL) };
     onProgress('loading f32 weights', 0);
     const W = await this._loadRaw(source, onProgress);
     onProgress('quantizing to int8 + uploading', 0.5);
@@ -73,12 +73,8 @@ export class QwenWGPU {
       idsBuf: this._buf(this.MAXBATCH * 4),
     };
     this.idsRead = this._buf(this.MAXBATCH * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ);
-    // T-batched scratch for prefill (T<=maxPrefillT)
-    const P = this.maxPrefillT;
-    this.sT = {
-      hidden: this._buf(P * H * 4), normed: this._buf(P * H * 4), q: this._buf(P * qd * 4), k: this._buf(P * kvd * 4), v: this._buf(P * kvd * 4),
-      attn: this._buf(P * qd * 4), tmp: this._buf(P * I * 4), tmp2: this._buf(P * I * 4), ids: this._buf(P * 4),
-    };
+    // prefill scratch is allocated lazily (sized to the actual prompt) — see _ensurePrefillScratch.
+    this.sT = null; this.sTcap = 0;
     onProgress('ready', 1);
     this._uniCache = {};
     return this;
@@ -212,8 +208,8 @@ export class QwenWGPU {
     this.gemv(enc, S.normed, this.q['model.embed_tokens.weight'], S.logits, null, null); // lm_head (tied)
   }
 
-  _addInto(enc, yBuf, aBuf, n) { this._dispatch(enc, this.pipes.add, this._bg(this.pipes.add, [aBuf, yBuf, this._uni(new Uint32Array([n]))]), Math.ceil(n/256), 1, 'add'); }
-  _siluMul(enc, gateBuf, upBuf, n) { this._dispatch(enc, this.pipes.silu, this._bg(this.pipes.silu, [gateBuf, upBuf, this._uni(new Uint32Array([n]))]), Math.ceil(n/256), 1, 'silu'); }
+  _addInto(enc, yBuf, aBuf, n) { this._dispatch(enc, this.pipes.add, this._bg(this.pipes.add, [aBuf, yBuf, this._uni(new Uint32Array([n]))]), Math.min(Math.ceil(n/256), 65535), 1, 'add'); }
+  _siluMul(enc, gateBuf, upBuf, n) { this._dispatch(enc, this.pipes.silu, this._bg(this.pipes.silu, [gateBuf, upBuf, this._uni(new Uint32Array([n]))]), Math.min(Math.ceil(n/256), 65535), 1, 'silu'); }
   embedRow(enc, id) { const e = this.q['model.embed_tokens.weight']; this._dispatch(enc, this.pipes.embed, this._bg(this.pipes.embed, [e.w, e.scale, this.s.hidden, this._uni(new Uint32Array([id, this.cfg.hiddenSize]))]), Math.ceil(this.cfg.hiddenSize/256), 1, 'embed'); }
   async argmaxLogits() {
     const enc = this.dev.createCommandEncoder();
@@ -269,16 +265,30 @@ export class QwenWGPU {
     this._dispatch(enc, this.pipes.attnPrefill, this._bg(this.pipes.attnPrefill, [qBuf, kc, vc, oBuf, this._uni(new Uint32Array([c.numHeads, c.numKVHeads, c.headDim, T]))]), c.numHeads, T, 'attnPrefill');
   }
 
+  // (re)allocate prefill scratch sized to T (grows as needed; only paid when prefilling).
+  _ensurePrefillScratch(T) {
+    if (this.sTcap >= T) return;
+    if (this.sT) for (const k in this.sT) this.sT[k].destroy();
+    const c = this.cfg, H = c.hiddenSize, qd = c.numHeads * c.headDim, kvd = c.numKVHeads * c.headDim, I = c.intermediateSize;
+    this.sT = {
+      hidden: this._buf(T * H * 4), normed: this._buf(T * H * 4), q: this._buf(T * qd * 4), k: this._buf(T * kvd * 4), v: this._buf(T * kvd * 4),
+      attn: this._buf(T * qd * 4), tmp: this._buf(T * I * 4), tmp2: this._buf(T * I * 4), ids: this._buf(T * 4),
+    };
+    this.sTcap = T;
+  }
+
   // Prefill the prompt (positions 0..T-1). Leaves last-row logits in s.logits and the
   // KV cache populated, so decode continues from pos=T. T must be <= maxPrefillT and no LoRA.
   prefillBatch(ids) {
-    const c = this.cfg, S = this.s, ST = this.sT, T = ids.length, hd = c.headDim, kvd = c.numKVHeads * hd, H = c.hiddenSize;
+    const c = this.cfg, S = this.s, T = ids.length, hd = c.headDim, kvd = c.numKVHeads * hd, H = c.hiddenSize;
     if (T > this.maxPrefillT) throw new Error(`prompt ${T} > maxPrefillT ${this.maxPrefillT}`);
+    if (T > this.maxCtx) throw new Error(`prompt ${T} > maxCtx ${this.maxCtx}`);
+    this._ensurePrefillScratch(T); const ST = this.sT;
     this._resetUni();
     this.dev.queue.writeBuffer(ST.ids, 0, new Uint32Array(ids));
     const enc = this.dev.createCommandEncoder();
     const e = this.q['model.embed_tokens.weight'];
-    this._dispatch(enc, this.pipes.embedT, this._bg(this.pipes.embedT, [e.w, e.scale, ST.hidden, ST.ids, this._uni(new Uint32Array([T, H]))]), Math.ceil(T * H / 256), 1, 'embedT');
+    this._dispatch(enc, this.pipes.embedT, this._bg(this.pipes.embedT, [e.w, e.scale, ST.hidden, ST.ids, this._uni(new Uint32Array([T, H]))]), Math.min(Math.ceil(T * H / 256), 65535), 1, 'embedT');
     for (let i = 0; i < c.numLayers; i++) {
       const p = `model.layers.${i}`;
       this.rmsT(enc, ST.hidden, this.bufs[`${p}.input_layernorm.weight`], ST.normed, T, H);

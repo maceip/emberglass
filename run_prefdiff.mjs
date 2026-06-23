@@ -4,4 +4,4 @@ const p = await b.newPage(); const L=[];
 p.on('console',m=>{const t=m.text(); if(t.startsWith('VWG')){L.push(t);console.log(t);}});
 p.on('pageerror',e=>console.log('PAGEERR',String(e).slice(0,200)));
 await p.goto('http://localhost:8013/prefdiff.html');
-const t0=Date.now(); while(Date.now()-t0<120000){ if(L.some(l=>l.includes('VWG DONE')||l.includes('VWG ERROR')))break; await p.waitForTimeout(500);} await b.close();
+const t0=Date.now(); while(Date.now()-t0<240000){ if(L.some(l=>l.includes('VWG DONE')||l.includes('VWG ERROR')))break; await p.waitForTimeout(500);} await b.close();

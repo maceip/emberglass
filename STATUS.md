@@ -74,17 +74,26 @@ Requires: WebGPU + `subgroups` device feature. Tested in Chrome Canary
 - `readers.js` (tf-free) underpins all of it; `build()` takes a reader or a URL.
 - Live demo: https://maceip.github.io/qwen-webgpu-lora/ (GitHub Pages, BYO model from HF).
 
-## Batched prefill (done)
-Prefill now processes the whole prompt in one pass via a **tiled int4 GEMM** (`GEMM4`,
+## Batched prefill (done — scales to ctx 8192)
+Prefill processes the whole prompt in one pass via a **tiled int4 GEMM** (`GEMM4`,
 BM=16 tokens × BN=64 cols, A K-slice staged in shared memory so activations are reused
 across columns — the naive per-column kernel re-reads activations N× and is *slower*
-than sequential). New T>1 kernels: `GEMM4`, `RMSNORM_T`, `ROPE_T`, `EMBED_T`,
-`ATTN_PREFILL` (causal); `ADD`/`SILUMUL` reused elementwise; lm_head on the last row
-reuses the decode GEMV. `prefillBatch(ids)` is bit-exact (validated: prefill argmax 4913
-+ decode continuation == ref.gen_ids). GEMM verified standalone vs CPU (max err 2.5e-6).
-TTFT 3.1× faster on the 18-token ref prompt (larger win at realistic prompt lengths).
-Base-model only — when a LoRA adapter is active the app falls back to sequential prefill
-(the proven, adapter-correct path); prompts > maxPrefillT (512) also fall back.
+than sequential). T>1 kernels: `GEMM4`, `RMSNORM_T` (one wg/row), `ROPE_T`, `EMBED_T`,
+`ATTN_PREFILL`; lm_head on the last row reuses the decode GEMV.
+- **`ATTN_PREFILL` is FLASH / online-softmax**: streams keys in 256-wide blocks with a
+  running (max, denom, weighted-V acc), so workgroup memory is O(block) not O(ctx). A full
+  `sc[ctx]` array would be 32KB at ctx=8192 = the entire workgroup-storage budget — flash
+  is what lets prefill reach 8192.
+- **`ADD`/`SILUMUL`/`EMBED_T` are grid-stride** (use `num_workgroups`): at T=8192, n reaches
+  T·I≈90M → 352k workgroups, far past the 65535/dim dispatch limit; grid-stride + a 65535
+  cap covers any n. (Backward-compatible: decode's tiny n loops once.)
+- `prefillBatch(ids)`: lazy scratch sized to the prompt (grows on demand). maxPrefillT=8192.
+- Validated in-browser: batched == sequential bit-exact at L=16/17/256/257/512/1024
+  (incl. multi-block flash, ctx>256); 4096 prefill 6.6s, 8192 prefill 20s, both finite +
+  valid argmax. GEMM verified vs CPU (err 2.5e-6). Decode/LoRA still match HF after the
+  ADD/SILUMUL change (argmax 4913, hot-swap 5/5).
+- Base-model only — LoRA-active prefill falls back to sequential (proven adapter-correct
+  path). Decode stops at maxCtx (KV-cache guard).
 
 ## Not pursued (with reasons)
 - **attnC fusion:** not possible. Split-K's combine needs every split's partial first,

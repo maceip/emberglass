@@ -212,21 +212,28 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
   }
 }`;
 
-// y += a (elementwise)
+// y += a (elementwise). Grid-stride so it covers any n with a dispatch capped at the
+// 65535-workgroup limit (n reaches T*H ~ 16.7M during prefill).
 export const ADD = `
 @group(0) @binding(0) var<storage,read> a: array<f32>;
 @group(0) @binding(1) var<storage,read_write> y: array<f32>;
 @group(0) @binding(2) var<uniform> n: u32;
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) g: vec3<u32>) { let i = g.x; if (i >= n) { return; } y[i] = y[i] + a[i]; }`;
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * 256u;
+  for (var i = g.x; i < n; i = i + stride) { y[i] = y[i] + a[i]; }
+}`;
 
-// gate = silu(gate) * up  (in place)
+// gate = silu(gate) * up  (in place). Grid-stride (n reaches T*I ~ 90M during prefill).
 export const SILUMUL = `
 @group(0) @binding(0) var<storage,read_write> gate: array<f32>;
 @group(0) @binding(1) var<storage,read> up: array<f32>;
 @group(0) @binding(2) var<uniform> n: u32;
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) g: vec3<u32>) { let i = g.x; if (i >= n) { return; } let v = gate[i]; gate[i] = (v/(1.0+exp(-v)))*up[i]; }`;
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * 256u;
+  for (var i = g.x; i < n; i = i + stride) { let v = gate[i]; gate[i] = (v/(1.0+exp(-v)))*up[i]; }
+}`;
 
 // embed lookup: dequant row `id` of int8 embed [vocab][hidden] -> out[hidden]
 export const EMBED = `
@@ -302,41 +309,67 @@ export const EMBED_T = `
 @group(0) @binding(3) var<storage,read> ids: array<u32>;
 @group(0) @binding(4) var<uniform> m: vec2<u32>;   // T, H
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let i = gid.x; let T = m.x; let H = m.y; if (i >= T*H) { return; }
-  let t = i / H; let k = i % H; let id = ids[t];
-  let v = unpack4xI8(w[id*(H/4u) + (k>>2u)]); let lane = k & 3u;
-  var b: i32; if (lane==0u){b=v.x;} else if (lane==1u){b=v.y;} else if (lane==2u){b=v.z;} else {b=v.w;}
-  out[i] = f32(b) * scale[id];
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let T = m.x; let H = m.y; let N = T*H; let stride = nwg.x * 256u;
+  for (var i = gid.x; i < N; i = i + stride) {
+    let t = i / H; let k = i % H; let id = ids[t];
+    let v = unpack4xI8(w[id*(H/4u) + (k>>2u)]); let lane = k & 3u;
+    var b: i32; if (lane==0u){b=v.x;} else if (lane==1u){b=v.y;} else if (lane==2u){b=v.z;} else {b=v.w;}
+    out[i] = f32(b) * scale[id];
+  }
 }`;
 
 // Causal attention for prefill: query row t attends keys 0..t. One workgroup per (head, t).
-// sc holds scores for keys 0..ctx-1; ctx <= T <= maxPrefillT, so sc is sized to maxPrefillT
-// (passed in) — keeping the array size and the prompt cap in lockstep (no silent OOB).
-export const ATTN_PREFILL = (maxT = 2048) => `
+// FLASH / online-softmax: keys are streamed in 256-wide blocks, maintaining a running
+// max (mrun), denominator (lrun) and weighted-V accumulator (acc[hd]) — so workgroup
+// memory is O(block), NOT O(ctx). This is what lets prefill scale to ctx=8192+ (a full
+// sc[ctx] array would be 32KB at 8192 = the entire workgroup-storage budget).
+export const ATTN_PREFILL = `
 enable subgroups;
 @group(0) @binding(0) var<storage,read> q: array<f32>;       // [T][nHeads*hd]
 @group(0) @binding(1) var<storage,read> kc: array<f32>;      // [ctx][nKV*hd]
 @group(0) @binding(2) var<storage,read> vc: array<f32>;
 @group(0) @binding(3) var<storage,read_write> o: array<f32>; // [T][nHeads*hd]
 @group(0) @binding(4) var<uniform> m: vec4<u32>;             // nHeads, nKV, hd, T
-var<workgroup> sc: array<f32,${maxT}>;
+var<workgroup> ps: array<f32,256>;   // exp-scores for the current key block
+var<workgroup> acc: array<f32,128>;  // running weighted-V accumulator (hd<=128)
 var<workgroup> red: array<f32,64>;
 @compute @workgroup_size(256)
 fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
         @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
   let h = wid.x; let t = wid.y; let tid = lid.x; let nHeads = m.x; let nKV = m.y; let hd = m.z;
   let ctx = t + 1u; let kvh = h / (nHeads / nKV);
-  let qbase = t*nHeads*hd + h*hd; let stride = nKV*hd; let hoff = kvh*hd; let scale = 1.0/sqrt(f32(hd));
+  let qbase = t*nHeads*hd + h*hd; let stride = nKV*hd; let hoff = kvh*hd; let scl = 1.0/sqrt(f32(hd));
   let nsg = (256u + sgsz - 1u) / sgsz;
-  var lmax = -1e30;
-  for (var k = tid; k < ctx; k = k + 256u) { var dot = 0.0; let kb = k*stride + hoff; for (var d = 0u; d < hd; d = d + 1u) { dot = dot + q[qbase+d]*kc[kb+d]; } let s = dot*scale; sc[k] = s; lmax = max(lmax, s); }
-  let sgm = subgroupMax(lmax); if (sgid == 0u) { red[tid/sgsz] = sgm; } workgroupBarrier();
-  var gmax = -1e30; for (var i = 0u; i < nsg; i = i + 1u) { gmax = max(gmax, red[i]); } workgroupBarrier();
-  var lsum = 0.0; for (var k = tid; k < ctx; k = k + 256u) { let e = exp(sc[k]-gmax); sc[k] = e; lsum = lsum + e; }
-  let sgs = subgroupAdd(lsum); if (sgid == 0u) { red[tid/sgsz] = sgs; } workgroupBarrier();
-  var Z = 0.0; for (var i = 0u; i < nsg; i = i + 1u) { Z = Z + red[i]; } let invZ = 1.0/Z; workgroupBarrier();
-  for (var d = tid; d < hd; d = d + 256u) { var acc = 0.0; for (var k = 0u; k < ctx; k = k + 1u) { acc = acc + sc[k]*vc[k*stride + hoff + d]; } o[qbase + d] = acc * invZ; }
+  for (var d = tid; d < hd; d = d + 256u) { acc[d] = 0.0; }
+  var mrun = -1e30; var lrun = 0.0;
+  let nblk = (ctx + 255u) / 256u;
+  for (var blk = 0u; blk < nblk; blk = blk + 1u) {
+    let kbase = blk*256u; let kk = kbase + tid;
+    var s = -1e30;
+    if (kk < ctx) { var dot = 0.0; let kb = kk*stride + hoff; for (var d = 0u; d < hd; d = d + 1u) { dot = dot + q[qbase+d]*kc[kb+d]; } s = dot*scl; }
+    let sgm = subgroupMax(s); if (sgid == 0u) { red[tid/sgsz] = sgm; }
+    workgroupBarrier();                                   // A: block-max partials visible
+    var bm = -1e30; for (var i = 0u; i < nsg; i = i + 1u) { bm = max(bm, red[i]); }
+    let mnew = max(mrun, bm); let corr = exp(mrun - mnew);
+    var p = 0.0; if (kk < ctx) { p = exp(s - mnew); }
+    ps[tid] = p;
+    workgroupBarrier();                                   // B: bm reads done + ps visible
+    let sgs = subgroupAdd(p); if (sgid == 0u) { red[tid/sgsz] = sgs; }
+    workgroupBarrier();                                   // C: block-sum partials visible
+    var bs = 0.0; for (var i = 0u; i < nsg; i = i + 1u) { bs = bs + red[i]; }
+    lrun = lrun*corr + bs;
+    let bcount = min(256u, ctx - kbase);
+    for (var d = tid; d < hd; d = d + 256u) {
+      var aa = acc[d]*corr;
+      for (var j = 0u; j < bcount; j = j + 1u) { aa = aa + ps[j]*vc[(kbase+j)*stride + hoff + d]; }
+      acc[d] = aa;
+    }
+    mrun = mnew;
+    workgroupBarrier();                                   // D: acc's ps reads done before next block
+  }
+  let invL = 1.0/lrun;
+  for (var d = tid; d < hd; d = d + 256u) { o[qbase + d] = acc[d]*invL; }
 }`;
 
 // GPU argmax over logits -> out[0] = best index (one 4-byte readback instead of 608KB)

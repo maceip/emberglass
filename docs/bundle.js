@@ -34899,13 +34899,19 @@ var ADD = `
 @group(0) @binding(1) var<storage,read_write> y: array<f32>;
 @group(0) @binding(2) var<uniform> n: u32;
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) g: vec3<u32>) { let i = g.x; if (i >= n) { return; } y[i] = y[i] + a[i]; }`;
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * 256u;
+  for (var i = g.x; i < n; i = i + stride) { y[i] = y[i] + a[i]; }
+}`;
 var SILUMUL = `
 @group(0) @binding(0) var<storage,read_write> gate: array<f32>;
 @group(0) @binding(1) var<storage,read> up: array<f32>;
 @group(0) @binding(2) var<uniform> n: u32;
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) g: vec3<u32>) { let i = g.x; if (i >= n) { return; } let v = gate[i]; gate[i] = (v/(1.0+exp(-v)))*up[i]; }`;
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * 256u;
+  for (var i = g.x; i < n; i = i + stride) { let v = gate[i]; gate[i] = (v/(1.0+exp(-v)))*up[i]; }
+}`;
 var EMBED = `
 @group(0) @binding(0) var<storage,read> w: array<u32>;
 @group(0) @binding(1) var<storage,read> scale: array<f32>;
@@ -34967,37 +34973,61 @@ var EMBED_T = `
 @group(0) @binding(3) var<storage,read> ids: array<u32>;
 @group(0) @binding(4) var<uniform> m: vec2<u32>;   // T, H
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let i = gid.x; let T = m.x; let H = m.y; if (i >= T*H) { return; }
-  let t = i / H; let k = i % H; let id = ids[t];
-  let v = unpack4xI8(w[id*(H/4u) + (k>>2u)]); let lane = k & 3u;
-  var b: i32; if (lane==0u){b=v.x;} else if (lane==1u){b=v.y;} else if (lane==2u){b=v.z;} else {b=v.w;}
-  out[i] = f32(b) * scale[id];
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let T = m.x; let H = m.y; let N = T*H; let stride = nwg.x * 256u;
+  for (var i = gid.x; i < N; i = i + stride) {
+    let t = i / H; let k = i % H; let id = ids[t];
+    let v = unpack4xI8(w[id*(H/4u) + (k>>2u)]); let lane = k & 3u;
+    var b: i32; if (lane==0u){b=v.x;} else if (lane==1u){b=v.y;} else if (lane==2u){b=v.z;} else {b=v.w;}
+    out[i] = f32(b) * scale[id];
+  }
 }`;
-var ATTN_PREFILL = (maxT = 2048) => `
+var ATTN_PREFILL = `
 enable subgroups;
 @group(0) @binding(0) var<storage,read> q: array<f32>;       // [T][nHeads*hd]
 @group(0) @binding(1) var<storage,read> kc: array<f32>;      // [ctx][nKV*hd]
 @group(0) @binding(2) var<storage,read> vc: array<f32>;
 @group(0) @binding(3) var<storage,read_write> o: array<f32>; // [T][nHeads*hd]
 @group(0) @binding(4) var<uniform> m: vec4<u32>;             // nHeads, nKV, hd, T
-var<workgroup> sc: array<f32,${maxT}>;
+var<workgroup> ps: array<f32,256>;   // exp-scores for the current key block
+var<workgroup> acc: array<f32,128>;  // running weighted-V accumulator (hd<=128)
 var<workgroup> red: array<f32,64>;
 @compute @workgroup_size(256)
 fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
         @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
   let h = wid.x; let t = wid.y; let tid = lid.x; let nHeads = m.x; let nKV = m.y; let hd = m.z;
   let ctx = t + 1u; let kvh = h / (nHeads / nKV);
-  let qbase = t*nHeads*hd + h*hd; let stride = nKV*hd; let hoff = kvh*hd; let scale = 1.0/sqrt(f32(hd));
+  let qbase = t*nHeads*hd + h*hd; let stride = nKV*hd; let hoff = kvh*hd; let scl = 1.0/sqrt(f32(hd));
   let nsg = (256u + sgsz - 1u) / sgsz;
-  var lmax = -1e30;
-  for (var k = tid; k < ctx; k = k + 256u) { var dot = 0.0; let kb = k*stride + hoff; for (var d = 0u; d < hd; d = d + 1u) { dot = dot + q[qbase+d]*kc[kb+d]; } let s = dot*scale; sc[k] = s; lmax = max(lmax, s); }
-  let sgm = subgroupMax(lmax); if (sgid == 0u) { red[tid/sgsz] = sgm; } workgroupBarrier();
-  var gmax = -1e30; for (var i = 0u; i < nsg; i = i + 1u) { gmax = max(gmax, red[i]); } workgroupBarrier();
-  var lsum = 0.0; for (var k = tid; k < ctx; k = k + 256u) { let e = exp(sc[k]-gmax); sc[k] = e; lsum = lsum + e; }
-  let sgs = subgroupAdd(lsum); if (sgid == 0u) { red[tid/sgsz] = sgs; } workgroupBarrier();
-  var Z = 0.0; for (var i = 0u; i < nsg; i = i + 1u) { Z = Z + red[i]; } let invZ = 1.0/Z; workgroupBarrier();
-  for (var d = tid; d < hd; d = d + 256u) { var acc = 0.0; for (var k = 0u; k < ctx; k = k + 1u) { acc = acc + sc[k]*vc[k*stride + hoff + d]; } o[qbase + d] = acc * invZ; }
+  for (var d = tid; d < hd; d = d + 256u) { acc[d] = 0.0; }
+  var mrun = -1e30; var lrun = 0.0;
+  let nblk = (ctx + 255u) / 256u;
+  for (var blk = 0u; blk < nblk; blk = blk + 1u) {
+    let kbase = blk*256u; let kk = kbase + tid;
+    var s = -1e30;
+    if (kk < ctx) { var dot = 0.0; let kb = kk*stride + hoff; for (var d = 0u; d < hd; d = d + 1u) { dot = dot + q[qbase+d]*kc[kb+d]; } s = dot*scl; }
+    let sgm = subgroupMax(s); if (sgid == 0u) { red[tid/sgsz] = sgm; }
+    workgroupBarrier();                                   // A: block-max partials visible
+    var bm = -1e30; for (var i = 0u; i < nsg; i = i + 1u) { bm = max(bm, red[i]); }
+    let mnew = max(mrun, bm); let corr = exp(mrun - mnew);
+    var p = 0.0; if (kk < ctx) { p = exp(s - mnew); }
+    ps[tid] = p;
+    workgroupBarrier();                                   // B: bm reads done + ps visible
+    let sgs = subgroupAdd(p); if (sgid == 0u) { red[tid/sgsz] = sgs; }
+    workgroupBarrier();                                   // C: block-sum partials visible
+    var bs = 0.0; for (var i = 0u; i < nsg; i = i + 1u) { bs = bs + red[i]; }
+    lrun = lrun*corr + bs;
+    let bcount = min(256u, ctx - kbase);
+    for (var d = tid; d < hd; d = d + 256u) {
+      var aa = acc[d]*corr;
+      for (var j = 0u; j < bcount; j = j + 1u) { aa = aa + ps[j]*vc[(kbase+j)*stride + hoff + d]; }
+      acc[d] = aa;
+    }
+    mrun = mnew;
+    workgroupBarrier();                                   // D: acc's ps reads done before next block
+  }
+  let invL = 1.0/lrun;
+  for (var d = tid; d < hd; d = d + 256u) { o[qbase + d] = acc[d]*invL; }
 }`;
 var ARGMAX = `
 @group(0) @binding(0) var<storage,read> logits: array<f32>;
@@ -35201,7 +35231,7 @@ var QwenWGPU = class {
     const dev2 = this.dev, c = this.cfg;
     this.CHUNK = 128;
     this.MAXBATCH = 16;
-    this.maxPrefillT = 512;
+    this.maxPrefillT = 8192;
     this.pipes = {
       gemv: this._pipe(GEMV),
       loraA: this._pipe(LORA_A),
@@ -35219,7 +35249,7 @@ var QwenWGPU = class {
       rmsT: this._pipe(RMSNORM_T),
       ropeT: this._pipe(ROPE_T),
       embedT: this._pipe(EMBED_T),
-      attnPrefill: this._pipe(ATTN_PREFILL(this.maxPrefillT))
+      attnPrefill: this._pipe(ATTN_PREFILL)
     };
     onProgress("loading f32 weights", 0);
     const W = await this._loadRaw(source, onProgress);
@@ -35279,18 +35309,8 @@ var QwenWGPU = class {
       idsBuf: this._buf(this.MAXBATCH * 4)
     };
     this.idsRead = this._buf(this.MAXBATCH * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ);
-    const P = this.maxPrefillT;
-    this.sT = {
-      hidden: this._buf(P * H * 4),
-      normed: this._buf(P * H * 4),
-      q: this._buf(P * qd * 4),
-      k: this._buf(P * kvd * 4),
-      v: this._buf(P * kvd * 4),
-      attn: this._buf(P * qd * 4),
-      tmp: this._buf(P * I * 4),
-      tmp2: this._buf(P * I * 4),
-      ids: this._buf(P * 4)
-    };
+    this.sT = null;
+    this.sTcap = 0;
     onProgress("ready", 1);
     this._uniCache = {};
     return this;
@@ -35481,10 +35501,10 @@ var QwenWGPU = class {
     this.gemv(enc, S.normed, this.q["model.embed_tokens.weight"], S.logits, null, null);
   }
   _addInto(enc, yBuf, aBuf, n) {
-    this._dispatch(enc, this.pipes.add, this._bg(this.pipes.add, [aBuf, yBuf, this._uni(new Uint32Array([n]))]), Math.ceil(n / 256), 1, "add");
+    this._dispatch(enc, this.pipes.add, this._bg(this.pipes.add, [aBuf, yBuf, this._uni(new Uint32Array([n]))]), Math.min(Math.ceil(n / 256), 65535), 1, "add");
   }
   _siluMul(enc, gateBuf, upBuf, n) {
-    this._dispatch(enc, this.pipes.silu, this._bg(this.pipes.silu, [gateBuf, upBuf, this._uni(new Uint32Array([n]))]), Math.ceil(n / 256), 1, "silu");
+    this._dispatch(enc, this.pipes.silu, this._bg(this.pipes.silu, [gateBuf, upBuf, this._uni(new Uint32Array([n]))]), Math.min(Math.ceil(n / 256), 65535), 1, "silu");
   }
   embedRow(enc, id) {
     const e = this.q["model.embed_tokens.weight"];
@@ -35560,16 +35580,37 @@ var QwenWGPU = class {
     const c = this.cfg;
     this._dispatch(enc, this.pipes.attnPrefill, this._bg(this.pipes.attnPrefill, [qBuf, kc, vc, oBuf, this._uni(new Uint32Array([c.numHeads, c.numKVHeads, c.headDim, T]))]), c.numHeads, T, "attnPrefill");
   }
+  // (re)allocate prefill scratch sized to T (grows as needed; only paid when prefilling).
+  _ensurePrefillScratch(T) {
+    if (this.sTcap >= T) return;
+    if (this.sT) for (const k2 in this.sT) this.sT[k2].destroy();
+    const c = this.cfg, H = c.hiddenSize, qd = c.numHeads * c.headDim, kvd = c.numKVHeads * c.headDim, I = c.intermediateSize;
+    this.sT = {
+      hidden: this._buf(T * H * 4),
+      normed: this._buf(T * H * 4),
+      q: this._buf(T * qd * 4),
+      k: this._buf(T * kvd * 4),
+      v: this._buf(T * kvd * 4),
+      attn: this._buf(T * qd * 4),
+      tmp: this._buf(T * I * 4),
+      tmp2: this._buf(T * I * 4),
+      ids: this._buf(T * 4)
+    };
+    this.sTcap = T;
+  }
   // Prefill the prompt (positions 0..T-1). Leaves last-row logits in s.logits and the
   // KV cache populated, so decode continues from pos=T. T must be <= maxPrefillT and no LoRA.
   prefillBatch(ids) {
-    const c = this.cfg, S = this.s, ST = this.sT, T = ids.length, hd = c.headDim, kvd = c.numKVHeads * hd, H = c.hiddenSize;
+    const c = this.cfg, S = this.s, T = ids.length, hd = c.headDim, kvd = c.numKVHeads * hd, H = c.hiddenSize;
     if (T > this.maxPrefillT) throw new Error(`prompt ${T} > maxPrefillT ${this.maxPrefillT}`);
+    if (T > this.maxCtx) throw new Error(`prompt ${T} > maxCtx ${this.maxCtx}`);
+    this._ensurePrefillScratch(T);
+    const ST = this.sT;
     this._resetUni();
     this.dev.queue.writeBuffer(ST.ids, 0, new Uint32Array(ids));
     const enc = this.dev.createCommandEncoder();
     const e = this.q["model.embed_tokens.weight"];
-    this._dispatch(enc, this.pipes.embedT, this._bg(this.pipes.embedT, [e.w, e.scale, ST.hidden, ST.ids, this._uni(new Uint32Array([T, H]))]), Math.ceil(T * H / 256), 1, "embedT");
+    this._dispatch(enc, this.pipes.embedT, this._bg(this.pipes.embedT, [e.w, e.scale, ST.hidden, ST.ids, this._uni(new Uint32Array([T, H]))]), Math.min(Math.ceil(T * H / 256), 65535), 1, "embedT");
     for (let i = 0; i < c.numLayers; i++) {
       const p = `model.layers.${i}`;
       this.rmsT(enc, ST.hidden, this.bufs[`${p}.input_layernorm.weight`], ST.normed, T, H);
@@ -35799,8 +35840,8 @@ ${m.content}<|im_end|>
     if (d) yield d;
   }
   let emitted = 1;
-  while (emitted < maxTokens) {
-    const K2 = Math.min(rt2.MAXBATCH, maxTokens - emitted);
+  while (emitted < maxTokens && pos < rt2.maxCtx) {
+    const K2 = Math.min(rt2.MAXBATCH, maxTokens - emitted, rt2.maxCtx - pos);
     const batch = await rt2.decodeBatch(pos, K2);
     pos += K2;
     let stop = false;
