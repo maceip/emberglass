@@ -1,0 +1,16 @@
+{
+  "name": "qwen-webgpu-lora",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "In-browser Qwen2.5 (bug-bounty triage) on WebGPU via TensorFlow.js, with runtime-swappable LoRA adapters. BYO model file.",
+  "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@tensorflow/tfjs-backend-cpu": "^4.22.0",
+    "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
+    "@tensorflow/tfjs-core": "^4.22.0",
+    "esbuild": "^0.28.1",
+    "http-server": "^14.1.1",
+    "playwright": "^1.61.0"
+  }
+}

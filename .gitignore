@@ -1,0 +1,6 @@
+node_modules/
+model/
+*_bundle.js
+bundle.js
+*.output
+.DS_Store

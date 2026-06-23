@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VibeBounty · in-browser Qwen2.5 triage (WebGPU) + LoRA hot-swap</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 940px; padding: 24px; background:#0e0f13; color:#e6e6e6; }
+  h1 { font-size: 19px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+  input[type=text]{ flex:1; min-width:340px; padding:6px 8px; background:#1a1c22; color:#e6e6e6; border:1px solid #333; border-radius:6px; }
+  textarea{ width:100%; box-sizing:border-box; background:#1a1c22; color:#e6e6e6; border:1px solid #333; border-radius:6px; padding:8px; font:13px ui-monospace,monospace; }
+  button{ padding:7px 14px; border-radius:6px; border:1px solid #3a3f4b; background:#2a2f3a; color:#fff; cursor:pointer; }
+  button:disabled{ opacity:.5; cursor:default; }
+  select{ padding:6px; background:#1a1c22; color:#e6e6e6; border:1px solid #333; border-radius:6px; }
+  #status{ font-size:13px; color:#9ad; margin:8px 0; white-space:pre-wrap; }
+  #out{ background:#11160f; border:1px solid #2c3a22; border-radius:6px; padding:10px; white-space:pre-wrap; font:13px ui-monospace,monospace; min-height:120px; }
+  .banner{ background:#241a0a; border:1px solid #5a4520; border-radius:6px; padding:10px 12px; font-size:13px; margin:12px 0; }
+</style>
+</head>
+<body>
+<h1>VibeBounty · in-browser Qwen2.5-3B triage <span style="color:#7c8">(WebGPU · custom WGSL runtime · int4 · runtime LoRA swap)</span></h1>
+<div class="banner">
+  Runs the bug-bounty triage model <b>entirely client-side</b> on WebGPU. Custom WGSL compute kernels (int4 weights, GPU-resident KV cache) — we own every matmul,
+  so LoRA adapters can be <b>hot-swapped at runtime</b> with no base reload. ~50 tok/s decode. BYO model: served under <code>/model/</code>.
+</div>
+
+<div class="row">
+  <input id="modelUrl" type="text" value="/model">
+  <button id="load">Load model</button>
+</div>
+<div id="status">idle.</div>
+
+<h3>LoRA adapter</h3>
+<div class="row">
+  <select id="adapter"><option value="none">none (base / merged)</option></select>
+  <input id="loraFile" type="file" multiple disabled accept=".safetensors,.json">
+  <span style="color:#9ad;font-size:12px">load adapter_config.json + adapter .safetensors → appears in dropdown → Triage to hot-swap</span>
+</div>
+
+<h3>Researcher submission</h3>
+<textarea id="report" rows="9">Title: IDOR: download any user's invoice PDF via sequential id
+Asset: api.example.com. GET /api/v1/invoices/{id}/pdf returns any invoice with no ownership check; ids are sequential. Decrementing id returns other customers' invoice PDFs (PII). PoCs + raw HTTP requests with only my own session cookie attached.</textarea>
+<div class="row"><button id="go" disabled>Triage</button></div>
+
+<h3>Output</h3>
+<div id="out">—</div>
+
+<script type="module" src="./bundle.js"></script>
+</body>
+</html>
