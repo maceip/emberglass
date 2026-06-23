@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const macCanary = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
-const executablePath = process.env.CHROME_PATH || (existsSync(macCanary) ? macCanary : undefined);
+const linuxChrome = '/usr/local/bin/google-chrome';
+const executablePath = process.env.CHROME_PATH || (existsSync(linuxChrome) ? linuxChrome : (existsSync(macCanary) ? macCanary : undefined));
 const browser = await chromium.launch({
   ...(executablePath ? { executablePath } : {}),
   headless: false,

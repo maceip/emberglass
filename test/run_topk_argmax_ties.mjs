@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { extname, isAbsolute, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 
 const root = process.cwd();
@@ -14,8 +14,9 @@ const types = new Map([
 const server = createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://127.0.0.1').pathname);
-    const file = normalize(join(root, pathname === '/' ? 'index.html' : pathname));
-    if (!file.startsWith(root)) {
+    const file = resolve(root, pathname === '/' ? 'index.html' : `.${pathname}`);
+    const rel = relative(root, file);
+    if (rel.startsWith('..') || isAbsolute(rel)) {
       res.writeHead(403);
       res.end('forbidden');
       return;
@@ -32,7 +33,8 @@ const server = createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 
 const macCanary = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
-const executablePath = process.env.CHROME_PATH || (existsSync(macCanary) ? macCanary : undefined);
+const linuxChrome = '/usr/local/bin/google-chrome';
+const executablePath = process.env.CHROME_PATH || (existsSync(linuxChrome) ? linuxChrome : (existsSync(macCanary) ? macCanary : undefined));
 const browser = await chromium.launch({
   ...(executablePath ? { executablePath } : {}),
   headless: process.env.HEADED !== '1',
