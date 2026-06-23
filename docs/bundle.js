@@ -36176,13 +36176,15 @@ var QwenWGPU = class {
     this.gemv(enc, S.normed, this.q[this.plan.embed.name], S.logits, null, null);
   }
   _addInto(enc, yBuf, aBuf, n) {
-    const u = n === this.cfg.hiddenSize ? this.u.addHidden : this._staticUni(`u32:${n}`, new Uint32Array([n]));
-    const bg = this._bgCached(this.pipes.add, [aBuf, yBuf, u], `add:${n}`);
+    const cache2 = n === this.cfg.hiddenSize;
+    const u = cache2 ? this.u.addHidden : this._uni(new Uint32Array([n]));
+    const bg = cache2 ? this._bgCached(this.pipes.add, [aBuf, yBuf, u], `add:${n}`) : this._bg(this.pipes.add, [aBuf, yBuf, u]);
     this._dispatch(enc, this.pipes.add, bg, Math.min(Math.ceil(n / 256), 65535), 1, "add");
   }
   _siluMul(enc, gateBuf, upBuf, n) {
-    const u = n === this.cfg.intermediateSize ? this.u.siluIntermediate : this._staticUni(`u32:${n}`, new Uint32Array([n]));
-    const bg = this._bgCached(this.pipes.silu, [gateBuf, upBuf, u], `silu:${n}`);
+    const cache2 = n === this.cfg.intermediateSize;
+    const u = cache2 ? this.u.siluIntermediate : this._uni(new Uint32Array([n]));
+    const bg = cache2 ? this._bgCached(this.pipes.silu, [gateBuf, upBuf, u], `silu:${n}`) : this._bg(this.pipes.silu, [gateBuf, upBuf, u]);
     this._dispatch(enc, this.pipes.silu, bg, Math.min(Math.ceil(n / 256), 65535), 1, "silu");
   }
   embedRow(enc, id) {
@@ -36274,15 +36276,15 @@ var QwenWGPU = class {
   // ---- PREFILL (T>1): process the whole prompt at once via tiled GEMM. If a LoRA
   // adapter has the projection module, add its batched delta immediately after base GEMM.
   gemm4(enc, aBuf, q, yBuf, T, biasBuf, moduleKey) {
-    const meta = this._staticUni(`gemm4T:${q.K}:${q.N}:${T}:${q.gpr}:${biasBuf ? 1 : 0}`, new Uint32Array([q.K, q.N, T, q.gpr, biasBuf ? 1 : 0, 0, 0, 0]));
-    const bg = this._bgCached(this.pipes.gemm4, [aBuf, q.w, q.scale, biasBuf || this.s.dummy, yBuf, meta], `gemm4T:${q.K}:${q.N}:${T}:${q.gpr}:${biasBuf ? 1 : 0}`);
+    const meta = this._uni(new Uint32Array([q.K, q.N, T, q.gpr, biasBuf ? 1 : 0, 0, 0, 0]));
+    const bg = this._bg(this.pipes.gemm4, [aBuf, q.w, q.scale, biasBuf || this.s.dummy, yBuf, meta]);
     this._dispatch(enc, this.pipes.gemm4, bg, Math.ceil(q.N / 64), Math.ceil(T / 16), "gemm4");
     const mod = this.lora?.modules?.[moduleKey];
     if (mod) this.loraBatchDelta(enc, aBuf, yBuf, q, T, mod);
   }
   loraBatchDelta(enc, xBuf, yBuf, q, T, mod) {
-    const uA = this._staticUni(`loraABatch:${this._loraEpoch}:${q.K}:${mod.rank}:${T}`, new Uint32Array([q.K, mod.rank, T, 0]));
-    const bgA = this._bgCached(this.pipes.loraABatch, [xBuf, mod.A, this.sT.loraD, uA], `loraABatch:${this._loraEpoch}:${q.K}:${mod.rank}:${T}`, { sensitive: true });
+    const uA = this._uni(new Uint32Array([q.K, mod.rank, T, 0]));
+    const bgA = this._bg(this.pipes.loraABatch, [xBuf, mod.A, this.sT.loraD, uA]);
     this._dispatch(enc, this.pipes.loraABatch, bgA, mod.rank, T, "loraA:T");
     const meta = new ArrayBuffer(32);
     const dv = new DataView(meta);
@@ -36292,8 +36294,8 @@ var QwenWGPU = class {
     dv.setUint32(12, 0, true);
     dv.setFloat32(16, mod.scale, true);
     const groups = Math.min(Math.ceil(T * q.N / 256), 65535);
-    const uB = this._staticUni(`loraBAddT:${this._loraEpoch}:${T}:${q.N}:${mod.rank}:${mod.scale}`, new Uint8Array(meta));
-    const bgB = this._bgCached(this.pipes.loraBAddT, [this.sT.loraD, mod.B, yBuf, uB], `loraBAddT:${this._loraEpoch}:${T}:${q.N}:${mod.rank}:${mod.scale}`, { sensitive: true });
+    const uB = this._uni(new Uint8Array(meta));
+    const bgB = this._bg(this.pipes.loraBAddT, [this.sT.loraD, mod.B, yBuf, uB]);
     this._dispatch(enc, this.pipes.loraBAddT, bgB, groups, 1, "loraB:T");
   }
   rmsT(enc, xBuf, gBuf, yBuf, T, K2) {
@@ -36301,18 +36303,18 @@ var QwenWGPU = class {
     const dv = new DataView(u);
     dv.setFloat32(0, K2, true);
     dv.setFloat32(4, this.cfg.rmsNormEps, true);
-    const uni = this._staticUni(`rmsT:${K2}:${this.cfg.rmsNormEps}`, new Uint8Array(u));
-    this._dispatch(enc, this.pipes.rmsT, this._bgCached(this.pipes.rmsT, [xBuf, gBuf, yBuf, uni], `rmsT:${K2}`), T, 1, "rmsT");
+    const uni = this._uni(new Uint8Array(u));
+    this._dispatch(enc, this.pipes.rmsT, this._bg(this.pipes.rmsT, [xBuf, gBuf, yBuf, uni]), T, 1, "rmsT");
   }
   ropeT(enc, xBuf, T, nHeads) {
     const hd = this.cfg.headDim;
-    const uni = this._staticUni(`ropeT:${nHeads}:${hd}:${T}:0`, new Uint32Array([nHeads, hd, T, 0]));
-    this._dispatch(enc, this.pipes.ropeT, this._bgCached(this.pipes.ropeT, [xBuf, this.ropeCos, this.ropeSin, uni], `ropeT:${nHeads}:${T}`), Math.ceil(T * nHeads * (hd / 2) / 256), 1, "ropeT");
+    const uni = this._uni(new Uint32Array([nHeads, hd, T, 0]));
+    this._dispatch(enc, this.pipes.ropeT, this._bg(this.pipes.ropeT, [xBuf, this.ropeCos, this.ropeSin, uni]), Math.ceil(T * nHeads * (hd / 2) / 256), 1, "ropeT");
   }
   attnPrefill(enc, qBuf, kc, vc, oBuf, T) {
     const c = this.cfg;
-    const uni = this._staticUni(`attnPrefill:${c.numHeads}:${c.numKVHeads}:${c.headDim}:${T}`, new Uint32Array([c.numHeads, c.numKVHeads, c.headDim, T]));
-    this._dispatch(enc, this.pipes.attnPrefill, this._bgCached(this.pipes.attnPrefill, [qBuf, kc, vc, oBuf, uni], `attnPrefill:${T}`), c.numHeads, T, "attnPrefill");
+    const uni = this._uni(new Uint32Array([c.numHeads, c.numKVHeads, c.headDim, T]));
+    this._dispatch(enc, this.pipes.attnPrefill, this._bg(this.pipes.attnPrefill, [qBuf, kc, vc, oBuf, uni]), c.numHeads, T, "attnPrefill");
   }
   // (re)allocate prefill scratch sized to T (grows as needed; only paid when prefilling).
   _ensurePrefillScratch(T, loraRank = 0) {
@@ -36357,8 +36359,8 @@ var QwenWGPU = class {
     this.dev.queue.writeBuffer(ST.ids, 0, new Uint32Array(ids));
     const enc = this.dev.createCommandEncoder();
     const e = this.q[this.plan.embed.name];
-    const embedUni = this._staticUni(`embedT:${T}:${H}`, new Uint32Array([T, H]));
-    this._dispatch(enc, this.pipes.embedT, this._bgCached(this.pipes.embedT, [e.w, e.scale, ST.hidden, ST.ids, embedUni], `embedT:${T}:${H}`), Math.min(Math.ceil(T * H / 256), 65535), 1, "embedT");
+    const embedUni = this._uni(new Uint32Array([T, H]));
+    this._dispatch(enc, this.pipes.embedT, this._bg(this.pipes.embedT, [e.w, e.scale, ST.hidden, ST.ids, embedUni]), Math.min(Math.ceil(T * H / 256), 65535), 1, "embedT");
     for (let i = 0; i < c.numLayers; i++) {
       const L = this.plan.layers[i];
       this.rmsT(enc, ST.hidden, this.bufs[L.inputNorm], ST.normed, T, H);
