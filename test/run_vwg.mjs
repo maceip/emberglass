@@ -6,7 +6,7 @@ const page = await browser.newPage();
 const lines = [];
 page.on('console', m => { const t = m.text(); if (t.startsWith("VWG")) { lines.push(t); console.log(t); } });
 page.on('pageerror', e => console.log('PAGEERR', String(e).slice(0,200)));
-await page.goto('http://localhost:8013/vwg.html', { waitUntil: 'domcontentloaded' });
+await page.goto('http://localhost:8013/test/vwg.html', { waitUntil: 'domcontentloaded' });
 const t0 = Date.now();
 while (Date.now() - t0 < 300000) { if (lines.some(l => l.includes('VWG DONE'))) break; await page.waitForTimeout(1000); }
 await browser.close();

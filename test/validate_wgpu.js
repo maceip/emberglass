@@ -1,5 +1,5 @@
-import { QwenWGPU } from './qwgpu/runtime.js';
-import { QWEN25_3B } from './config.js';
+import { QwenWGPU } from '../src/qwgpu/runtime.js';
+import { QWEN25_3B } from '../src/config.js';
 window.run = async () => {
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   const dev = await adapter.requestDevice({ requiredFeatures: ['subgroups'], requiredLimits: { maxBufferSize: adapter.limits.maxBufferSize, maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize } });

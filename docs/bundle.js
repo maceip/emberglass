@@ -34710,7 +34710,7 @@ ${this.boa_token}${this.audio_token.repeat(this._compute_audio_num_tokens(audio_
   }
 });
 
-// qwgpu/kernels.js
+// src/qwgpu/kernels.js
 var GEMV = `
 enable subgroups;
 struct Meta { K:u32, N:u32, rank:u32, hasBias:u32, hasLora:u32, gridX:u32, scaleLo:f32, gpr:u32 };
@@ -35086,7 +35086,7 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
   }
 }`;
 
-// qwgpu/quantize.js
+// src/qwgpu/quantize.js
 function quantizeInt8RowMajor(f322, outDim, inDim) {
   const scale = new Float32Array(outDim);
   const q = new Int8Array(outDim * inDim);
@@ -35146,7 +35146,7 @@ function quantizeInt4Group(f322, outDim, inDim, group = 128) {
   return { packed, scale, groupsPerRow };
 }
 
-// readers.js
+// src/readers.js
 function urlReader(baseUrl, headers = {}) {
   const base = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
   return {
@@ -35181,7 +35181,7 @@ function fileReader(fileMap) {
   };
 }
 
-// qwgpu/runtime.js
+// src/qwgpu/runtime.js
 var STORAGE = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
 var UNIFORM = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
 var QwenWGPU = class {
@@ -35643,7 +35643,7 @@ var QwenWGPU = class {
   }
 };
 
-// config.js
+// src/config.js
 var QWEN25_3B = {
   hiddenSize: 2048,
   numLayers: 36,
@@ -35659,7 +35659,7 @@ var QWEN25_3B = {
   attentionBias: true
 };
 
-// lora_gpu.js
+// src/lora_gpu.js
 function parseSt(buf) {
   const dv = new DataView(buf);
   const hl = Number(dv.getBigUint64(0, true));
@@ -35738,7 +35738,7 @@ async function loadLoraAdapterGPU(dev2, files, cfg) {
   return { name, modules };
 }
 
-// main.js
+// src/main.js
 var $2 = (id) => document.getElementById(id);
 var log = (m) => {
   const s = $2("status");

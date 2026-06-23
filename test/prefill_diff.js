@@ -3,8 +3,8 @@
 //     flash online-softmax multi-block rescale (ctx>256), GEMM tiles, grid-stride kernels.
 // (2) smoke at 4096 / 8192: runs end-to-end, logits finite, argmax valid (exercises the
 //     65535-dispatch grid-stride paths and flash attention at long ctx).
-import { QwenWGPU } from './qwgpu/runtime.js';
-import { QWEN25_3B } from './config.js';
+import { QwenWGPU } from '../src/qwgpu/runtime.js';
+import { QWEN25_3B } from '../src/config.js';
 window.run = async () => {
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   const dev = await adapter.requestDevice({ requiredFeatures: ['subgroups'], requiredLimits: { maxBufferSize: adapter.limits.maxBufferSize, maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize } });

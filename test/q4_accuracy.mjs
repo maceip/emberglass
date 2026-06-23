@@ -1,9 +1,9 @@
-import * as tf from '@tensorflow/tfjs-core'; import '@tensorflow/tfjs-backend-cpu'; import fs from 'fs';
-import { QwenModel, QWEN25_3B } from './qwen25.js'; import { loadModelWeights } from './weights.js';
-import { quantizeInt4Group } from './qwgpu/quantize.js';
+import * as tf from '@tensorflow/tfjs-core'; import '@tensorflow/tfjs-backend-cpu'; import fs from 'fs'; import { fileURLToPath } from 'url';
+import { QwenModel, QWEN25_3B } from '../src/qwen25.js'; import { loadModelWeights } from '../src/weights.js';
+import { quantizeInt4Group } from '../src/qwgpu/quantize.js';
 await tf.setBackend('cpu'); await tf.ready();
-const MD='model'; const fds={}; const reader={async range(p,s,e){const l=e-s;const b=Buffer.allocUnsafe(l);fs.readSync(fds[p]??=fs.openSync(`${MD}/${p}`,'r'),b,0,l,s);return b.buffer.slice(b.byteOffset,b.byteOffset+l);},async text(p){return fs.readFileSync(`${MD}/${p}`,'utf8');}};
-const ref=JSON.parse(fs.readFileSync('ref.json')); const ids=ref.ids;
+const MD=fileURLToPath(new URL('../model', import.meta.url)); const fds={}; const reader={async range(p,s,e){const l=e-s;const b=Buffer.allocUnsafe(l);fs.readSync(fds[p]??=fs.openSync(`${MD}/${p}`,'r'),b,0,l,s);return b.buffer.slice(b.byteOffset,b.byteOffset+l);},async text(p){return fs.readFileSync(`${MD}/${p}`,'utf8');}};
+const ref=JSON.parse(fs.readFileSync(new URL('./ref.json', import.meta.url))); const ids=ref.ids;
 const weights=await loadModelWeights(reader);
 const suf=['self_attn.q_proj','self_attn.k_proj','self_attn.v_proj','self_attn.o_proj','mlp.gate_proj','mlp.up_proj','mlp.down_proj'];
 for(let i=0;i<QWEN25_3B.numLayers;i++) for(const s of suf){

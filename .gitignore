@@ -2,7 +2,7 @@ node_modules/
 model
 adapters_sel
 adapters_v1
-/*_bundle.js
+*_bundle.js
 /bundle.js
 *.output
 .DS_Store

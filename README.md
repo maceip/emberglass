@@ -48,6 +48,8 @@ The page asks your browser for a WebGPU device, streams the model's weight tenso
 ## Run it
 
 ```bash
+npm install
+npm run build                              # bundle src/main.js -> bundle.js + docs/bundle.js
 npx http-server . -p 8013 -c-1 --cors      # serve the page + your ./model
 # open http://localhost:8013 in a WebGPU browser with the `subgroups` feature
 ```
@@ -55,10 +57,10 @@ npx http-server . -p 8013 -c-1 --cors      # serve the page + your ./model
 Verification harnesses (Playwright + Chrome Canary):
 
 ```bash
-node run_vwg.mjs      # base correctness + decode speed
-node run_lorav.mjs    # LoRA hot-swap: 6/6 checks, bit-exact
-node run_prof.mjs     # per-kernel GPU time breakdown
-node run_app_e2e.mjs  # full app: load the model, triage a report, measure tok/s
+node test/run_vwg.mjs      # base correctness + decode speed
+node test/run_lorav.mjs    # LoRA hot-swap: 6/6 checks, bit-exact
+node test/run_prof.mjs     # per-kernel GPU time breakdown
+node test/run_app_e2e.mjs  # full app: load the model, triage a report, measure tok/s
 ```
 
 Requires a browser exposing WebGPU **with the `subgroups` device feature** (Chrome Canary: `--enable-unsafe-webgpu --use-angle=metal`). Built and validated on an Apple M5 Max.

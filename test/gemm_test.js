@@ -1,5 +1,5 @@
-import { GEMM4 } from './qwgpu/kernels.js';
-import { quantizeInt4Group } from './qwgpu/quantize.js';
+import { GEMM4 } from '../src/qwgpu/kernels.js';
+import { quantizeInt4Group } from '../src/qwgpu/quantize.js';
 window.run = async () => {
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   const dev = await adapter.requestDevice();

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "In-browser Qwen2.5 (bug-bounty triage) on WebGPU via TensorFlow.js, with runtime-swappable LoRA adapters. BYO model file.",
+  "description": "Emberglass \u2014 in-browser Qwen2.5-3B on a custom WebGPU runtime with runtime-swappable LoRA adapters. BYO model.",
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@tensorflow/tfjs-backend-cpu": "^4.22.0",
@@ -12,5 +12,13 @@
     "esbuild": "^0.28.1",
     "http-server": "^14.1.1",
     "playwright": "^1.61.0"
+  },
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=esm --platform=browser --outfile=bundle.js && esbuild src/main.js --bundle --format=esm --platform=browser --outfile=docs/bundle.js",
+    "serve": "http-server . -p 8013 -c-1 --cors",
+    "test:correctness": "esbuild test/validate_wgpu.js --bundle --format=esm --platform=browser --outfile=test/vwg_bundle.js && node test/run_vwg.mjs",
+    "test:lora": "esbuild test/lora_validate.js --bundle --format=esm --platform=browser --outfile=test/lorav_bundle.js && node test/run_lorav.mjs",
+    "test:app": "node test/run_app_e2e.mjs",
+    "test:prefill": "esbuild test/prefill_diff.js --bundle --format=esm --platform=browser --outfile=test/prefdiff_bundle.js && node test/run_prefdiff.mjs"
   }
 }

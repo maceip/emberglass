@@ -2,9 +2,9 @@
 // the same loader the UI uses, and prove runtime hot-swap end-to-end: the adapter
 // parses, changes the model's logits, reverts bit-exact on clear, and two different
 // checkpoints produce different outputs. Also measures decode speed with it active.
-import { QwenWGPU } from './qwgpu/runtime.js';
-import { QWEN25_3B } from './config.js';
-import { loadLoraAdapterGPU } from './lora_gpu.js';
+import { QwenWGPU } from '../src/qwgpu/runtime.js';
+import { QWEN25_3B } from '../src/config.js';
+import { loadLoraAdapterGPU } from '../src/lora_gpu.js';
 
 window.run = async () => {
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });

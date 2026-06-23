@@ -17,7 +17,7 @@ Custom pure-WebGPU runtime (WGSL compute kernels, no tf.js, no wasm/bazel).
 | LoRA active (180 modules) | 22.8 tok/s |
 
 ## Vehicle (final decision)
-**Custom WGSL runtime** in `qwgpu/`. We own every kernel, so LoRA `A`/`B` are GPU
+**Custom WGSL runtime** in `src/qwgpu/`. We own every kernel, so LoRA `A`/`B` are GPU
 buffers consumed in-kernel → adapters hot-swap by swapping buffers (no requant, no
 base reload). int4 group-128 weights (EXACT output), f32 norms/biases, GPU-resident
 KV cache (ctx window 8192). tf.js path abandoned (1.6 tok/s + matMul transposeB bug).
@@ -25,17 +25,23 @@ KV cache (ctx window 8192). tf.js path abandoned (1.6 tok/s + matMul transposeB 
 Dead ends (closed, per user): A = build litert-lm wasm (Rust-atomics link wall);
 LiteRT.js (`@litertjs/tensor` unpublished + needs unbuilt `@ml_drift`).
 
+## Layout
+- `src/` — runtime + app: `qwgpu/` (WGSL kernels, runtime, quantize), `config.js`, `weights.js`,
+  `readers.js`, `lora_gpu.js`, `main.js`, `qwen25.js` (tf.js reference, used only by the accuracy gates).
+- `test/` — Playwright harnesses (`run_*.mjs` + `*.html` + sources), accuracy gates, `ref.json`.
+- `docs/` — GitHub Pages demo (`index.html` + built `bundle.js`). Root: `index.html` (local app), `package.json`.
+
 ## Architecture
-- `qwgpu/kernels.js` — WGSL: GEMV (int8, lm_head), GEMV4 (int4 group-128, layers),
+- `src/qwgpu/kernels.js` — WGSL: GEMV (int8, lm_head), GEMV4 (int4 group-128, layers),
   LORA_A (parallel subgroup GEMV), RMSNORM, ROPE (pair-wise, no race), ATTN_PARTIAL +
   ATTN_COMBINE (split-K decode attention), ADD, SILUMUL, EMBED, ARGMAX.
-- `qwgpu/runtime.js` — `QwenWGPU`: build() loads+quantizes (int4 layers, int8 embed),
+- `src/qwgpu/runtime.js` — `QwenWGPU`: build() loads+quantizes (int4 layers, int8 embed),
   KV cache, RoPE tables; token()/step()/argmaxLogits(); setLora()/clearLora() (live swap);
   gemv()/gemv4()/attn() (2-pass split-K); enableProf()/profToken() (GPU timestamp profiling).
-- `qwgpu/quantize.js` — int8 per-channel + int4 group-128 (both preserve output EXACTLY).
-- `weights.js` — per-tensor Range-fetch safetensors, BF16→F32.
-- `lora_gpu.js` — tf-free PEFT/MLX adapter → GPU buffers (A transposed [rank][in], B [rank][out]).
-- `main.js` + `index.html` — BYO-model app: load, LoRA dropdown (drag adapter files), triage.
+- `src/qwgpu/quantize.js` — int8 per-channel + int4 group-128 (both preserve output EXACTLY).
+- `src/weights.js` — per-tensor Range-fetch safetensors, BF16→F32.
+- `src/lora_gpu.js` — tf-free PEFT/MLX adapter → GPU buffers (A transposed [rank][in], B [rank][out]).
+- `src/main.js` + `index.html` — BYO-model app: load, LoRA dropdown (drag adapter files), triage.
 
 ## Perf engineering (this session: 9.1 → 35.4 tok/s, all via measurement not guessing)
 1. GEMV workgroup 256→64: each thread reads >1 word → memory-level parallelism.
@@ -58,10 +64,10 @@ gives ns-resolution per-kernel GPU time. `prof.cap` query slots.
 ```
 cd ~/edge-thinker/qwen-webgpu
 npx http-server . -p 8013 -c-1 --cors &              # serve app + ./model symlink
-node run_vwg.mjs       # base correctness: argmax 4913, gen==ref, speed
-node run_lorav.mjs     # LoRA hot-swap 6/6 + determinism + LoRA-active speed
-node run_prof.mjs      # per-kernel GPU breakdown (edit WARM for ctx length)
-node run_app_e2e.mjs   # full app: load 3B, run triage, measure tok/s
+node test/run_vwg.mjs       # base correctness: argmax 4913, gen==ref, speed
+node test/run_lorav.mjs     # LoRA hot-swap 6/6 + determinism + LoRA-active speed
+node test/run_prof.mjs      # per-kernel GPU breakdown (edit WARM for ctx length)
+node test/run_app_e2e.mjs   # full app: load 3B, run triage, measure tok/s
 # or open http://localhost:8013/ in a WebGPU browser (needs 'subgroups' feature)
 ```
 Requires: WebGPU + `subgroups` device feature. Tested in Chrome Canary

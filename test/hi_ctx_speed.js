@@ -1,7 +1,7 @@
 // Verify the >=20 tok/s requirement holds at HIGH context (near maxCtx), where attention
 // is most expensive. Reach the context fast via batched prefill, then time decode.
-import { QwenWGPU } from './qwgpu/runtime.js';
-import { QWEN25_3B } from './config.js';
+import { QwenWGPU } from '../src/qwgpu/runtime.js';
+import { QWEN25_3B } from '../src/config.js';
 window.run = async () => {
   const a = await navigator.gpu.requestAdapter({ powerPreference:'high-performance' });
   const dev = await a.requestDevice({ requiredFeatures:['subgroups'], requiredLimits:{ maxBufferSize:a.limits.maxBufferSize, maxStorageBufferBindingSize:a.limits.maxStorageBufferBindingSize } });
