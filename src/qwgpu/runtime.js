@@ -22,6 +22,7 @@ export class QwenWGPU {
     this.pool = new GPUBufferPool(device, { cacheBindGroups: opts.cacheBindGroups !== false });
     this._loraEpoch = 0;
     this._argmaxReadBusy = false;
+    this._topKReadBusy = false;
   }
 
   _buf(size, usage = STORAGE) { return this.pool.buffer(size, usage); }
@@ -328,20 +329,27 @@ export class QwenWGPU {
     }
   }
   async topKLogits(k = this.samplingTopK) {
-    k = Math.min(Math.max(1, Math.floor(k)), this.maxSamplingTopK, this.cfg.vocabSize);
-    const enc = this.dev.createCommandEncoder();
-    for (let i = 0; i < k; i++) {
-      const u = this._staticUni(`topk:${this.cfg.vocabSize}:${i}`, new Uint32Array([this.cfg.vocabSize, i]));
-      this._dispatch(enc, this.pipes.topkSelect, this._bgCached(this.pipes.topkSelect, [this.s.logits, this.s.sampleIds, this.s.sampleVals, u], `topk:${i}`), 1, 1, 'topk');
+    if (this._topKReadBusy) throw new Error('topKLogits() is already in flight; concurrent sampling is not supported');
+    this._topKReadBusy = true;
+    try {
+      k = Math.min(Math.max(1, Math.floor(k)), this.maxSamplingTopK, this.cfg.vocabSize);
+      const enc = this.dev.createCommandEncoder();
+      for (let i = 0; i < k; i++) {
+        const u = this._staticUni(`topk:${this.cfg.vocabSize}:${i}`, new Uint32Array([this.cfg.vocabSize, i]));
+        this._dispatch(enc, this.pipes.topkSelect, this._bgCached(this.pipes.topkSelect, [this.s.logits, this.s.sampleIds, this.s.sampleVals, u], `topk:${i}`), 1, 1, 'topk');
+      }
+      enc.copyBufferToBuffer(this.s.sampleIds, 0, this.sampleIdsRead, 0, k * 4);
+      enc.copyBufferToBuffer(this.s.sampleVals, 0, this.sampleValsRead, 0, k * 4);
+      this.dev.queue.submit([enc.finish()]);
+      await Promise.all([this.sampleIdsRead.mapAsync(GPUMapMode.READ), this.sampleValsRead.mapAsync(GPUMapMode.READ)]);
+      const ids = Array.from(new Uint32Array(this.sampleIdsRead.getMappedRange(), 0, k));
+      const vals = Array.from(new Float32Array(this.sampleValsRead.getMappedRange(), 0, k));
+      return ids.map((id, i) => ({ id, logit: vals[i] }));
+    } finally {
+      if (this.sampleIdsRead.mapState !== 'unmapped') this.sampleIdsRead.unmap();
+      if (this.sampleValsRead.mapState !== 'unmapped') this.sampleValsRead.unmap();
+      this._topKReadBusy = false;
     }
-    enc.copyBufferToBuffer(this.s.sampleIds, 0, this.sampleIdsRead, 0, k * 4);
-    enc.copyBufferToBuffer(this.s.sampleVals, 0, this.sampleValsRead, 0, k * 4);
-    this.dev.queue.submit([enc.finish()]);
-    await Promise.all([this.sampleIdsRead.mapAsync(GPUMapMode.READ), this.sampleValsRead.mapAsync(GPUMapMode.READ)]);
-    const ids = Array.from(new Uint32Array(this.sampleIdsRead.getMappedRange(), 0, k));
-    const vals = Array.from(new Float32Array(this.sampleValsRead.getMappedRange(), 0, k));
-    this.sampleIdsRead.unmap(); this.sampleValsRead.unmap();
-    return ids.map((id, i) => ({ id, logit: vals[i] }));
   }
   // Run one token end-to-end (embed + step) and submit.
   token(id, pos) { this._resetUni(); const enc = this.dev.createCommandEncoder(); this.embedRow(enc, id); this.step(enc, id, pos); this.dev.queue.submit([enc.finish()]); }
