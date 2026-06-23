@@ -67,7 +67,19 @@ node run_app_e2e.mjs   # full app: load 3B, run triage, measure tok/s
 Requires: WebGPU + `subgroups` device feature. Tested in Chrome Canary
 (`--enable-unsafe-webgpu --use-angle=metal`) on M5 Max.
 
-## Remaining headroom (optional)
-- Prefill is sequential T=1 (~ctx × per-token); a batched prefill kernel would cut TTFT.
-- attnC combine runs 16 workgroups (low occupancy, ~4%); could fuse.
-- A live "checkpoint selector": the UI dropdown lists adapters; selecting one hot-swaps it live.
+## Loading (done)
+- Model: from Hugging Face (`hfReader`, streams safetensors over CORS-enabled range
+  requests, optional token for gated/private), same-origin URL, or a local folder picker.
+- Adapter: from a Hugging Face LoRA repo (PEFT or MLX), or local files. Hot-swaps live.
+- `readers.js` (tf-free) underpins all of it; `build()` takes a reader or a URL.
+- Live demo: https://maceip.github.io/qwen-webgpu-lora/ (GitHub Pages, BYO model from HF).
+
+## Remaining headroom (optional / larger)
+- **Batched prefill (biggest TTFT win, larger effort):** prefill is currently sequential
+  T=1 (one decode step per prompt token → ~ctx×per-token before first output). A true
+  batched prefill needs T>1 GEMM kernels + causal-masked attention — effectively a second
+  forward path. Deferred to keep the shipped decode runtime stable.
+- attnC combine runs nHeads workgroups (low occupancy, ~4%); could fuse into attnP.
+- **WebNN second backend (future):** `navigator.ml` not yet exposed in tested Canary;
+  hot-swap survivable via graph inputs, potential ANE access. App/tokenizer/LoRA layers
+  are already backend-agnostic, so it'd be isolated to a `QwenWebNN` sibling of `QwenWGPU`.
