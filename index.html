@@ -27,8 +27,13 @@
 </div>
 
 <div class="row">
+  <input id="hfRepo" type="text" value="WeiboAI/VibeThinker-3B" placeholder="Hugging Face repo id">
+  <input id="hfToken" type="password" placeholder="HF token (optional)" style="flex:0 0 200px">
+  <button id="loadHF">Load from Hugging Face</button>
+</div>
+<div class="row">
   <input id="modelUrl" type="text" value="/model">
-  <button id="load">Load model</button>
+  <button id="load">Load (same-origin)</button>
 </div>
 <div id="status">idle.</div>
 

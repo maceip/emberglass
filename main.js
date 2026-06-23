@@ -1,10 +1,10 @@
 // Browser harness: load our Qwen2.5-3B bug-bounty triage model and run it on a
 // custom pure-WebGPU runtime (int4 weights, GPU-resident KV cache), with runtime
 // LoRA adapter hot-swap (no base reload). BYO model: served under /model/.
-import { AutoTokenizer, env } from '@huggingface/transformers';
 import { QwenWGPU } from './qwgpu/runtime.js';
 import { QWEN25_3B } from './config.js';
 import { loadLoraAdapterGPU } from './lora_gpu.js';
+import { urlReader, hfReader } from './readers.js';
 
 const $ = id => document.getElementById(id);
 const log = (m) => { const s = $('status'); if (s) s.textContent = m; console.log('[harness]', m); };
@@ -24,20 +24,22 @@ async function initDevice() {
   log(`WebGPU ready. maxBuffer=${(Number(adapter.limits.maxBufferSize) / 1e9).toFixed(2)}GB`);
 }
 
-async function loadEverything(baseUrl) {
+async function buildTokenizer(reader) {
+  const tj = JSON.parse(await reader.text('tokenizer.json'));
+  const tc = JSON.parse(await reader.text('tokenizer_config.json'));
+  const { PreTrainedTokenizer } = await import('@huggingface/transformers');
+  return new PreTrainedTokenizer(tj, tc);
+}
+
+// load from any reader (same-origin URL, Hugging Face, or BYO files)
+async function loadWith(reader, label) {
   await initDevice();
-  log('loading tokenizer…');
-  env.allowRemoteModels = false; env.allowLocalModels = true;
-  tokenizer = await AutoTokenizer.from_pretrained('model', { local_files_only: true }).catch(async () => {
-    const tj = await (await fetch(baseUrl + '/tokenizer.json')).json();
-    const tc = await (await fetch(baseUrl + '/tokenizer_config.json')).json();
-    const { PreTrainedTokenizer } = await import('@huggingface/transformers');
-    return new PreTrainedTokenizer(tj, tc);
-  });
-  log('tokenizer loaded. loading + quantizing weights (int4)…');
+  log(`loading tokenizer from ${label}…`);
+  tokenizer = await buildTokenizer(reader);
+  log(`tokenizer loaded. streaming + quantizing weights (int4) from ${label}…`);
   const t0 = performance.now();
   rt = new QwenWGPU(dev, QWEN25_3B);
-  await rt.build(baseUrl, (msg, frac) => log(`weights: ${msg} ${(frac * 100).toFixed(0)}%`));
+  await rt.build(reader, (msg, frac) => log(`weights: ${msg} ${(frac * 100).toFixed(0)}%`));
   window.__rt = rt; window.__tokenizer = tokenizer;
   log(`READY in ${((performance.now() - t0) / 1000).toFixed(1)}s — base loaded once; adapters hot-swap live.`);
   $('go').disabled = false; $('loraFile').disabled = false;
@@ -110,7 +112,14 @@ async function runTriage() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  $('load').onclick = () => loadEverything($('modelUrl').value.trim()).catch(e => { log('ERROR: ' + e.message); console.error(e); });
+  $('load').onclick = () => loadWith(urlReader($('modelUrl').value.trim()), $('modelUrl').value.trim())
+    .catch(e => { log('ERROR: ' + e.message); console.error(e); });
+  const hfBtn = $('loadHF');
+  if (hfBtn) hfBtn.onclick = () => {
+    const repo = $('hfRepo').value.trim(); const token = ($('hfToken')?.value || '').trim();
+    if (!repo) return log('enter a Hugging Face repo id, e.g. WeiboAI/VibeThinker-3B');
+    loadWith(hfReader(repo, token), 'HF: ' + repo).catch(e => { log('ERROR: ' + e.message + ' (private/gated repo? add a token)'); console.error(e); });
+  };
   $('go').onclick = () => runTriage().catch(e => { log('ERROR: ' + e.message); console.error(e); });
   $('loraFile').onchange = async (ev) => {
     const files = [...ev.target.files];

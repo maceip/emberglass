@@ -5,7 +5,7 @@
 // Correctness is validated against the tf.js forward (which == HuggingFace).
 import { GEMV, GEMV4, LORA_A, RMSNORM, ROPE, ATTN_PARTIAL, ATTN_COMBINE, ADD, SILUMUL, EMBED, EMBED_BUF, ARGMAX } from './kernels.js';
 import { quantizeInt8RowMajor, quantizeInt4Group } from './quantize.js';
-import { loadModelWeights, urlReader } from '../weights.js';
+import { urlReader } from '../readers.js';
 
 const STORAGE = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
 const UNIFORM = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
@@ -31,13 +31,13 @@ export class QwenWGPU {
     return this.dev.createComputePipeline({ layout: 'auto', compute: { module: m, entryPoint: 'main' } });
   }
 
-  async build(baseUrl, onProgress = () => {}) {
+  // `source` is a base URL string OR a reader { range, text } (e.g. hfReader/fileReader).
+  async build(source, onProgress = () => {}) {
     const dev = this.dev, c = this.cfg;
     this.CHUNK = 128; this.MAXBATCH = 16;
     this.pipes = { gemv: this._pipe(GEMV), loraA: this._pipe(LORA_A), rms: this._pipe(RMSNORM), rope: this._pipe(ROPE), attnP: this._pipe(ATTN_PARTIAL), attnC: this._pipe(ATTN_COMBINE), add: this._pipe(ADD), silu: this._pipe(SILUMUL), embed: this._pipe(EMBED), embedBuf: this._pipe(EMBED_BUF), argmax: this._pipe(ARGMAX), gemv4: this._pipe(GEMV4) };
     onProgress('loading f32 weights', 0);
-    // Load f32 weights via tf.js-free path: reuse weights.js but on CPU arrays.
-    const W = await this._loadRaw(baseUrl, onProgress);
+    const W = await this._loadRaw(source, onProgress);
     onProgress('quantizing to int8 + uploading', 0.5);
     this.q = {}; this.q4 = {};
     const quant4 = (name) => { const t = W[name]; const { packed, scale, groupsPerRow } = quantizeInt4Group(t.data, t.shape[0], t.shape[1], 128); this.q4[name] = { w: this._u32(packed), scale: this._f32(scale), N: t.shape[0], K: t.shape[1], gpr: groupsPerRow }; };
@@ -76,10 +76,9 @@ export class QwenWGPU {
     return this;
   }
 
-  async _loadRaw(baseUrl, onProgress) {
-    // Reuse weights.js but capture raw Float32Array (no tf). Monkey: weights.js
-    // returns tf tensors; instead we re-parse here for plain arrays.
-    const reader = urlReader(baseUrl);
+  async _loadRaw(source, onProgress) {
+    // Parse safetensors to plain Float32Array (no tf). `source` may be a URL or a reader.
+    const reader = (typeof source === 'string') ? urlReader(source) : source;
     const out = {};
     const idx = JSON.parse(await reader.text('model.safetensors.index.json'));
     const shards = [...new Set(Object.values(idx.weight_map))];

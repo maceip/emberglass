@@ -43,14 +43,21 @@
 <p>Emberglass runs a fine-tuned <b>Qwen2.5-3B</b> reasoning model entirely on your own GPU, from a single static page, in hand-written WebGPU compute shaders. It thinks for thousands of tokens and streams a verdict — and nothing ever leaves your device. You can swap the model's specialization <b>live</b> by hot-swapping a LoRA adapter: the base loads once and never moves. Code: <a href="https://github.com/maceip/qwen-webgpu-lora">github.com/maceip/qwen-webgpu-lora</a>.</p>
 
 <div class="banner">
-  <b>Bring your own model.</b> This page is the engine — it hosts no multi-GB weights. To run it: serve a Qwen2.5-3B checkpoint from the <i>same origin</i> as this page (clone the repo, drop the model in <code>./model</code>, <code>npx http-server</code>), then set the model URL below and press <b>Load</b>. Needs a browser exposing WebGPU with the <code>subgroups</code> feature (Chrome 128+ / Canary). Drag in a PEFT/MLX LoRA adapter to hot-swap a specialization.
+  <b>Bring your own model — streamed straight to your GPU.</b> This page hosts no weights. Point it at a
+  <b>Hugging Face</b> repo and it streams the Qwen2.5-3B checkpoint directly from HF into your browser (range
+  requests, quantized to int4 on the way to the GPU) — nothing ever leaves your device. Needs a browser exposing
+  WebGPU with the <code>subgroups</code> feature (Chrome 128+ / Canary). Drag in a PEFT/MLX LoRA adapter to hot-swap a
+  specialization. Project page: <a href="https://huggingface.co/macmacmacmac/qwen-webgpu-lora">huggingface.co/macmacmacmac/qwen-webgpu-lora</a>.
 </div>
 
+<h3>Load a model</h3>
 <div class="row">
-  <input id="modelUrl" type="text" value="/model">
-  <button id="load">Load model</button>
+  <input id="hfRepo" type="text" value="WeiboAI/VibeThinker-3B" placeholder="Hugging Face repo id (e.g. WeiboAI/VibeThinker-3B)">
+  <input id="hfToken" type="password" placeholder="HF token (only for gated/private)" style="flex:0 0 220px; min-width:0">
+  <button id="loadHF">Load from Hugging Face</button>
 </div>
-<div id="status">idle — supply a same-origin Qwen2.5-3B and press Load.</div>
+<div class="row" style="font-size:12px; color:#9aa4b2">…or same-origin:&nbsp; <input id="modelUrl" type="text" value="/model" style="max-width:150px; min-width:0"> <button id="load" style="padding:5px 10px">Load</button></div>
+<div id="status">idle — pick a model and load. The first load streams several GB from Hugging Face.</div>
 
 <h3>LoRA adapter (optional)</h3>
 <div class="row">

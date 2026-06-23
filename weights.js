@@ -64,34 +64,5 @@ export async function loadModelWeights(reader, onProgress = () => {}) {
   return weights;
 }
 
-/** Range reader over a base URL (server must support HTTP Range). */
-export function urlReader(baseUrl) {
-  const base = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
-  return {
-    async range(path, start, end) {
-      const r = await fetch(base + path, { headers: { Range: `bytes=${start}-${end - 1}` } });
-      if (!r.ok && r.status !== 206) throw new Error(`range ${path} ${start}-${end}: ${r.status}`);
-      return await r.arrayBuffer();
-    },
-    async text(path) {
-      const r = await fetch(base + path);
-      if (!r.ok) throw new Error(`fetch ${path}: ${r.status}`);
-      return await r.text();
-    },
-  };
-}
-
-/** Range reader over BYO File objects (drag/drop). */
-export function fileReader(fileMap) {
-  const pick = (path) => fileMap[path] || fileMap[path.split('/').pop()];
-  return {
-    async range(path, start, end) {
-      const f = pick(path); if (!f) throw new Error(`file not provided: ${path}`);
-      return await f.slice(start, end).arrayBuffer();
-    },
-    async text(path) {
-      const f = pick(path); if (!f) throw new Error(`file not provided: ${path}`);
-      return await f.text();
-    },
-  };
-}
+// Readers live in readers.js (tf-free) so the app/runtime bundles don't pull tf.
+export { urlReader, hfReader, fileReader } from './readers.js';
