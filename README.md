@@ -1,98 +1,125 @@
 <h1 align="center">🜂 EMBERGLASS</h1>
-<p align="center"><em>A 3-billion-parameter model running inside a browser tab. No server, install, or upload.</em></p>
+<p align="center"><em>Optimized WebGPU inference for VibeThinker-3B — in your browser tab. No server, no upload.</em></p>
 
 <p align="center">
-<b>~35 tokens/sec decode · live LoRA hot-swap · bit-exact reference checks · 100% client-side WebGPU</b>
+<b>≥20 tok/s decode floor · live LoRA hot-swap · bit-exact reference checks · 100% client-side WebGPU</b>
 </p>
 
-<p align="center"><a href="https://maceip.github.io/qwen-webgpu-lora/"><b>▶ Live demo</b></a> (bring your own model) · <a href="https://huggingface.co/macmacmacmac/qwen-webgpu-lora">model card</a></p>
+<p align="center"><a href="https://maceip.github.io/qwen-webgpu-lora/"><b>▶ Live demo</b></a> · <a href="https://github.com/maceip/emberglass-tune">Training docs</a> · <a href="https://github.com/maceip/vibebounty">VibeBounty demo</a></p>
 
 ---
 
-## What this is
+## Three repos
 
-Emberglass is a hand-built inference engine for a fine-tuned **Qwen2.5-3B**
-reasoning model that runs entirely on your own GPU from a static web page. The
-browser streams model shards with range requests, quantizes weights to int4 on
-upload, keeps the KV cache GPU-resident, and emits tokens without sending data
-off-device.
+| Repo | Role | Train? | Run inference? |
+|---|---|---|---|
+| **[emberglass](https://github.com/maceip/qwen-webgpu-lora)** (this) | Custom **WebGPU** runtime — int4, fused kernels, LoRA hot-swap | **No** | **Yes** (browser) |
+| **[emberglass-tune](https://github.com/maceip/emberglass-tune)** | LoRA **training** — MLX + CUDA, Anthropic trace pipeline | **Yes** | No |
+| **[vibebounty](https://github.com/maceip/vibebounty)** | Bug-bounty **demo** — tuned adapter, HackerOne UI, CPU/GPU serve | Uses emberglass-tune | Yes (server) |
 
-Runtime LoRA hot-swap is built into the kernels: load the base once, parse a
-PEFT/MLX adapter into GPU buffers, switch adapters live, and clear back to the
-base without reloading or re-quantizing.
+**How the weights are made:** labeled reports → Anthropic teacher traces → LoRA SFT → `adapter_model.safetensors`. Full pipeline: **[emberglass-tune README](https://github.com/maceip/emberglass-tune)**.
 
-## Why it is fast
+**How to run them here:** load base weights + optional adapter into WebGPU; forward pass only. No backward pass, no optimizer, no dataset code in this repo.
 
-- **Custom WGSL kernels** for GEMV/GEMM, attention, RoPE, RMSNorm, SwiGLU,
-  argmax, and top-k sampling.
-- **int4 group-128 layer weights** plus int8 embeddings for compact GPU memory
-  use while preserving reference-generation checks.
-- **Split-K decode attention** and GPU-resident greedy decode batching to avoid
-  one CPU/GPU synchronization per generated token.
-- **Batched prefill** via tiled GEMM and flash-style causal attention for much
-  faster time-to-first-token on medium and long prompts.
-- **Static uniform / bind-group caching** and reusable readback buffers to reduce
-  JavaScript/WebGPU object churn in hot paths.
-- **GPU top-k sampling** so non-greedy generation reads back only `k` ids/logits
-  instead of the full vocabulary every token.
+---
 
-## Current result
+## What this repo is
 
-Measured runs show ~35 tok/s sustained app decode, exact base argmax/generation
-checks against the HuggingFace reference, live LoRA swap/clear behavior, and
-structured benchmark rows for load, prefill, decode, sampling, LoRA, and profile
-regression tracking.
+Emberglass is an **inference-only** engine for Qwen2.5-class models (VibeThinker-3B):
+
+- Custom **WGSL kernels** (GEMV/GEMM, attention, RoPE, sampling)
+- **int4** layer weights on GPU, GPU-resident KV cache
+- **Runtime LoRA hot-swap** — load PEFT/MLX `adapter_model.safetensors` without re-quantizing base (`src/lora_gpu.js`)
+- Playwright correctness and throughput harnesses (`npm run test:*`)
+
+| In emberglass | Elsewhere |
+|---|---|
+| WebGPU forward pass | Training → **emberglass-tune** |
+| LoRA apply / swap / clear | Data + Anthropic traces → **emberglass-tune** + **vibebounty** |
+| int4 load from `./model` or HF | HackerOne demo UI → **vibebounty** |
+| | CPU/GPU serve for demos → **vibebounty** |
+
+---
 
 ## Run it
 
 ```bash
+cd ~/emberglass
 npm install
 npm run build
-npx http-server . -p 8013 -c-1 --cors
-# open http://localhost:8013 in a browser exposing WebGPU + the subgroups feature
+npm run serve    # http://localhost:8013
 ```
 
-Load weights from a Hugging Face repo id, same-origin `/model`, or a local
-directory picker. Optional HF tokens are supported for gated/private repos.
+Open in Chrome/Edge with **WebGPU + `subgroups`**. Load base weights from `./model`, Hugging Face, or a directory picker. Optional LoRA adapter URL for hot-swap.
 
-## Verification and benchmarks
+**Base model:** [WeiboAI/VibeThinker-3B](https://huggingface.co/WeiboAI/VibeThinker-3B)  
+**Example adapter:** [macmacmacmac/vibebounty](https://huggingface.co/macmacmacmac/vibebounty) (train with emberglass-tune)
 
-The Playwright harnesses expect the app to be served on port `8013` and a browser
-with WebGPU `subgroups`. Set `CHROME_PATH` if Playwright should launch a specific
-Chrome/Canary binary.
+---
+
+## Using a trained adapter
+
+1. Train (or download) a PEFT adapter — see [emberglass-tune](https://github.com/maceip/emberglass-tune).
+2. Serve adapter files same-origin (e.g. under `/adapters/my-run/`).
+3. Load in the Emberglass UI or via VibeBounty's Emberglass bridge.
+
+Tests: `npm run test:lora`, `npm run test:lora-path`.
+
+---
+
+## Verification
 
 ```bash
-npm run test:correctness  # base argmax/generation + batched decode/prefill
-npm run test:prefill      # sequential-vs-batched prefill differentials + long smoke
-npm run test:lora         # adapter parse, hot-swap, restore, LoRA prefill, speed
-npm run test:sampling     # GPU top-k sampler correctness + sampled decode smoke
-npm run test:app          # full UI generation path
-npm run bench:wgpu        # structured VWG_BENCH JSON rows for perf regression tracking
+npm run test:correctness   # argmax / generation vs reference
+npm run test:lora          # adapter parse, hot-swap, restore
+npm run test:app           # full streaming UI path
+npm run bench:wgpu         # structured throughput JSON
 ```
 
-`bench:wgpu` reports time-to-ready, prefill by length, greedy decode by context,
-batch candidate timings, sampling throughput, timestamp categories when available,
-LoRA-on throughput when fixtures exist, and KV/prefill scratch estimates.
+Requires port **8013**, WebGPU **`subgroups`**, and weights in `./model` (not bundled in repo).
+
+---
+
+## Performance
+
+Throughput is hardware-dependent. Target: **≥20 tok/s** greedy decode on Intel Arc class; **~35 tok/s** on Apple M5 Max (Metal).
+
+| Platform | Greedy decode (typical) |
+|---|---:|
+| Apple M5 Max + Metal | ~33–35 tok/s @ long ctx |
+| Intel Arc 140V + D3D11 | ~22–24 tok/s @ short ctx |
+| LoRA active (180 modules) | ~23 tok/s (M5 reference) |
+
+Fused decode path: `fuseQKV` / `fuseRoPE` / `fuseMLP` / `fuseResidual`.
+
+---
 
 ## Requirements
 
-- Browser WebGPU with the **`subgroups`** device feature. The current fast kernels
-  require subgroups and no fallback kernel set is bundled.
-- Enough GPU memory for the selected context window. KV cache grows linearly with
-  `maxCtx`; prefill scratch grows with prompt length.
-- Bring your own Qwen2.5-compatible weights. This repository and the demo page do
-  not host model weights.
+- Browser WebGPU with **`subgroups`** (no fallback kernel set)
+- GPU memory for chosen context window
+- Bring your own weights — repo does not ship model files
 
-## Project layout
+---
 
-- `src/qwgpu/` — WGSL kernels, runtime, quantization, schema/dispatch metadata,
-  streaming safetensors loader, and model uploader.
-- `src/services/` — app-facing model session, device, generation, prompt, and
-  adapter registry services.
-- `src/lora_gpu.js` — PEFT/MLX LoRA parser/uploader.
-- `test/` — browser correctness, profiling, sampling, prefill, LoRA, and benchmark
-  harnesses.
-- `docs/` — GitHub Pages static demo bundle.
+## Layout
+
+```
+src/qwgpu/           WGSL kernels, runtime, int4 quantize
+src/lora_gpu.js      PEFT/MLX adapter → GPU buffers
+src/services/        App session, generation, adapter registry
+test/                Browser harnesses
+docs/                GitHub Pages demo + architecture notes
+model/               BYO base weights (gitignored)
+```
+
+---
+
+## Related docs
+
+- **Training (MLX, CUDA, Anthropic traces):** [emberglass-tune README](https://github.com/maceip/emberglass-tune)
+- **Bug-bounty demo:** [vibebounty](https://github.com/maceip/vibebounty)
+- **Architecture map:** [`docs/REPO_ARCHITECTURE.md`](docs/REPO_ARCHITECTURE.md)
 
 ---
 
