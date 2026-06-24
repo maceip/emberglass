@@ -217,7 +217,7 @@ export class QwenWGPU {
       ropeQKF16: hasF16 ? this._pipe(ROPE_QK_F16, 'ropeQKF16') : null,
       ropeT: this._pipe(ROPE_T, 'ropeT'),
       ropeTF16: hasF16 ? this._pipe(ROPE_T_F16, 'ropeTF16') : null,
-      attnP: this._pipe(ATTN_PARTIAL, 'attnP'),
+      attnP: this._pipe(ATTN_PARTIAL, 'attnP', { WG: 128 }),
       attnC: this._pipe(ATTN_COMBINE, 'attnC', { WG: 128 }),
       attnCF16: hasF16 ? this._pipe(ATTN_COMBINE_F16, 'attnCF16', { WG: 128 }) : null,
       add: this._pipe(ADD, 'add', { WG: this.workgroupSize || 256 }),

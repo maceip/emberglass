@@ -314,6 +314,12 @@ Next linear: real numeric f16-vs-f32 harness execution + tolerance logging (usin
 
 Ready for: run the harness on real hardware for numbers; next could be ATTN_PARTIAL_F16 exploration or Phase 4 workgroup microbench.
 
+**This slice also (Phase 4 hygiene):**
+- ATTN_PARTIAL now declares `override WG` (pipe creation passes it). (Workgroup arrays still sized for the 128 default; full dynamic sizing is future.)
+- Consistent override usage across more hot kernels.
+
 ---
+
+*This document is the single source of truth for the optimization effort.*
 
 *This document is the single source of truth for the optimization effort.*

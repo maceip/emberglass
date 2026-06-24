@@ -273,6 +273,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 export const ATTN_PARTIAL = `
 requires immediate_address_space;
 enable subgroups;
+override WG: u32 = 128u;
 struct AttnP { nHeads: u32, nKV: u32, ctx: u32, hd: u32, nsplit: u32, chunk: u32 };
 @group(0) @binding(0) var<storage,read> q: array<f32>;
 @group(0) @binding(1) var<storage,read> kc: array<f32>;
@@ -283,7 +284,7 @@ struct AttnP { nHeads: u32, nKV: u32, ctx: u32, hd: u32, nsplit: u32, chunk: u32
 var<immediate> m: AttnP;
 var<workgroup> sc: array<f32,128>;
 var<workgroup> red: array<f32,32>;
-@compute @workgroup_size(128)
+@compute @workgroup_size(WG)
 fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
         @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
   let h = wid.x; let s = wid.y; let tid = lid.x;
