@@ -214,18 +214,21 @@ Items:
 
 Full pass through all 5 phases has been started and representative implementation + plan updates pushed. Further systematic conversion + dedicated eval commits to follow the checklist.
 
-**Latest continuation (commit 2501199):**
-- Phase 1 major completion:
-  - Converted qkvGemv4, qkvGemv4W4A8, gateUpSiluGemv4*, gemv4Add*, all W4A8 GEMV variants, embedRow, dynQuant*, argmax to immediates.
-  - _dispatch enhanced to accept array of imm payloads for kernels that had 2 metas (gate/up).
-  - Removed uniform meta buffers from corresponding bind groups.
-  - Many per-token decode paths (QKV, gate/up, o_proj, down, etc.) now bypass uniform allocation/write + bind for metadata.
-- Phase 2: Extended device init to detect + log `subgroup_id`, `linear_indexing`, f16. Added requires + linear_indexing usage in ADD; subgroup_id in GEMV.
-- Phase 3: More f16 logging/observability; hasF16Compute available.
-- Phase 4: Extended `_pipe(..., overrides)` to pass WGSL `constants` (for `override`). Used on add/silu pipes as example. ADD kernel uses `override WG`.
-- Phase 5: GPU argmax switched to immediate; prior onSubmittedWorkDone polish kept.
+**Latest continuation (linear, latest commit ~00f94b5 + ff6c5cf + this round):**
+- Phase 1 continued aggressively:
+  - Converted LORA_B_ADD / LORA_B_ADD_T (decode + batch), TOPK_SELECT, EMBED_BUF, RMSNORM_T, ROPE_T, EMBED_T, GEMM4, GEMM4_ADD_T, GEMM4_W4A8*, GEMM4_ADD_T_W4A8 + their call sites to use `var<immediate>` + requires.
+  - Updated _loraBAdd, lora batch B, topk loop, rmsT/ropeT, gemm4*, embedFromBuf to pass imm and drop uniform from bind groups.
+  - _dispatch now widely used for metadata in prefill + decode + sampling.
+- Phase 2: More kernels now declare linear_indexing/subgroup_id where applicable; device logs the features.
+- Phase 4: GEMM etc. benefit from immediate + future override for tile sizes.
+- Phase 5: topKLogits now uses immediates (per-iteration selectedCount) – reduces uniform traffic in sampling path.
 
-**Current uniform usage (rough):** Still some in GEMM paths, prefill attn, lora meta in some paths, EMBED_T/BUF variants, topk, writeKv etc. Next pass can target them + GEMM4.
+**Current counts (after this linear pass):**
+- var<uniform> left in kernels.js: down further (from ~19 toward single digits for hot paths).
+- _uni/_staticUni sites in runtime.js: ~30 or lower.
+- Major decode (QKV, MLP, LoRA, norm, rope, add, silu, embed, argmax, topk) and many prefill GEMM paths now on immediates.
+
+This is systematic linear progress through the checklist in the plan. Remaining attention prefill block/paged, some writeKv, final embed variants, and attn partials can be next slices.
 
 **Evaluation:** Bundle validated cleanly. Full matrix per doc (test:correctness, bench, profToken, dispatchCount, cross-GPU) recommended on hardware with Chrome 149+.
 

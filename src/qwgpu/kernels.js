@@ -92,11 +92,12 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 }`;
 
 export const LORA_B_ADD_T = `
+requires immediate_address_space;
 struct Meta { T:u32, N:u32, rank:u32, gx:u32, scale:f32, p1:f32, p2:f32, p3:f32 };
 @group(0) @binding(0) var<storage,read> d: array<f32>;        // [T][rank]
 @group(0) @binding(1) var<storage,read> B: array<f32>;        // [rank][N]
 @group(0) @binding(2) var<storage,read_write> Y: array<f32>;  // [T][N]
-@group(0) @binding(3) var<uniform> m: Meta;
+var<immediate> m: Meta;
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.y * (m.gx * 256u) + gid.x;
@@ -109,11 +110,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 // Add decode LoRA second matmul into an existing vector:
 // y[n] += scale * sum_r d[r] * B[r,n].
 export const LORA_B_ADD = `
+requires immediate_address_space;
 struct Meta { N:u32, rank:u32, p0:u32, p1:u32, scale:f32, f0:f32, f1:f32, f2:f32 };
 @group(0) @binding(0) var<storage,read> d: array<f32>;       // [rank]
 @group(0) @binding(1) var<storage,read> B: array<f32>;       // [rank][N]
 @group(0) @binding(2) var<storage,read_write> y: array<f32>; // [N]
-@group(0) @binding(3) var<uniform> m: Meta;
+var<immediate> m: Meta;
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let n = gid.x;
@@ -263,13 +265,14 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 // in shared memory so activations are reused across the BN columns (the naive
 // per-column kernel re-reads activations N times and is slower than sequential decode).
 export const GEMM4 = `
+requires immediate_address_space;
 struct Meta { K:u32, N:u32, T:u32, gpr:u32, hasBias:u32, p0:u32, p1:u32, p2:u32 };
 @group(0) @binding(0) var<storage,read> A: array<f32>;       // [T][K]
 @group(0) @binding(1) var<storage,read> W: array<u32>;       // [N][K/8] int4
 @group(0) @binding(2) var<storage,read> scale: array<f32>;   // [N][gpr]
 @group(0) @binding(3) var<storage,read> bias: array<f32>;    // [N] or dummy
 @group(0) @binding(4) var<storage,read_write> Y: array<f32>; // [T][N]
-@group(0) @binding(5) var<uniform> m: Meta;
+var<immediate> m: Meta;
 const BM = 16u; const BN = 64u;
 var<workgroup> As: array<f32, 128>;   // BM*8 — A staged for one 8-wide K chunk
 @compute @workgroup_size(64)
@@ -306,13 +309,14 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 // Batched int4 GEMM that adds directly into an existing residual buffer:
 // Y[T][N] += A[T][K] @ dequant(W[N][K])^T (+bias).
 export const GEMM4_ADD_T = `
+requires immediate_address_space;
 struct Meta { K:u32, N:u32, T:u32, gpr:u32, hasBias:u32, p0:u32, p1:u32, p2:u32 };
 @group(0) @binding(0) var<storage,read> A: array<f32>;
 @group(0) @binding(1) var<storage,read> W: array<u32>;
 @group(0) @binding(2) var<storage,read> scale: array<f32>;
 @group(0) @binding(3) var<storage,read> bias: array<f32>;
 @group(0) @binding(4) var<storage,read_write> Y: array<f32>;
-@group(0) @binding(5) var<uniform> m: Meta;
+var<immediate> m: Meta;
 const BM = 16u; const BN = 64u;
 var<workgroup> As: array<f32, 128>;
 @compute @workgroup_size(64)
@@ -394,11 +398,12 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
 // embed lookup but token id comes from a GPU buffer (the argmax output) — lets the
 // decode loop chain argmax -> embed on the GPU with no per-token CPU readback.
 export const EMBED_BUF = `
+requires immediate_address_space;
 @group(0) @binding(0) var<storage,read> w: array<u32>;
 @group(0) @binding(1) var<storage,read> scale: array<f32>;
 @group(0) @binding(2) var<storage,read_write> out: array<f32>;
 @group(0) @binding(3) var<storage,read> idbuf: array<u32>;   // idbuf[0] = token id
-@group(0) @binding(4) var<uniform> H: u32;
+var<immediate> H: u32;
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) g: vec3<u32>) {
   let k = g.x; let id = idbuf[0]; if (k >= H) { return; }
@@ -411,10 +416,11 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
 
 // RMSNorm over T rows (one workgroup per row).
 export const RMSNORM_T = `
+requires immediate_address_space;
 @group(0) @binding(0) var<storage,read> x: array<f32>;
 @group(0) @binding(1) var<storage,read> g: array<f32>;
 @group(0) @binding(2) var<storage,read_write> y: array<f32>;
-@group(0) @binding(3) var<uniform> m: vec2<f32>;   // K, eps
+var<immediate> m: vec2<f32>;   // K, eps
 var<workgroup> part: array<f32,256>;
 @compute @workgroup_size(256)
 fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
@@ -428,10 +434,11 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 
 // RoPE over T rows [T][nHeads*headDim]; row r is at absolute position pos0+r. Pair-wise (no race).
 export const ROPE_T = `
+requires immediate_address_space;
 @group(0) @binding(0) var<storage,read_write> x: array<f32>;
 @group(0) @binding(1) var<storage,read> cosT: array<f32>;
 @group(0) @binding(2) var<storage,read> sinT: array<f32>;
-@group(0) @binding(3) var<uniform> m: vec4<u32>;   // nHeads, headDim, T, pos0
+var<immediate> m: vec4<u32>;   // nHeads, headDim, T, pos0
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let g = gid.x; let H = m.x; let D = m.y; let T = m.z; let pos0 = m.w; let half = D/2u;
@@ -444,11 +451,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 // Embed T tokens: out[t][k] = dequant(embed[ids[idOffset+t]])[k].
 export const EMBED_T = `
+requires immediate_address_space;
 @group(0) @binding(0) var<storage,read> w: array<u32>;
 @group(0) @binding(1) var<storage,read> scale: array<f32>;
 @group(0) @binding(2) var<storage,read_write> out: array<f32>;
 @group(0) @binding(3) var<storage,read> ids: array<u32>;
-@group(0) @binding(4) var<uniform> m: vec4<u32>;   // T, H, idOffset, _
+var<immediate> m: vec4<u32>;   // T, H, idOffset, _
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
   let T = m.x; let H = m.y; let N = T*H; let stride = nwg.x * 256u;
@@ -626,10 +634,11 @@ fn main(@builtin(local_invocation_id) lid: vec3<u32>) {
 // present in ids[0..selectedCount). This keeps sampling readback to O(k) tokens
 // instead of copying the full vocab-sized logits buffer every generated token.
 export const TOPK_SELECT = `
+requires immediate_address_space;
 @group(0) @binding(0) var<storage,read> logits: array<f32>;
 @group(0) @binding(1) var<storage,read_write> ids: array<u32>;
 @group(0) @binding(2) var<storage,read_write> vals: array<f32>;
-@group(0) @binding(3) var<uniform> m: vec2<u32>; // vocabSize, selectedCount
+var<immediate> m: vec2<u32>; // vocabSize, selectedCount
 var<workgroup> bv: array<f32,256>; var<workgroup> bi: array<u32,256>;
 fn alreadySelected(id: u32, n: u32) -> bool {
   for (var j = 0u; j < n; j = j + 1u) { if (ids[j] == id) { return true; } }
@@ -1226,6 +1235,7 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 export const GEMM4_W4A8 = (hasDP4a) => `
 enable subgroups;
 ${hasDP4a ? 'enable packed_4x8_integer_dot_product;' : ''}
+requires immediate_address_space;
 struct Meta { K:u32, N:u32, T:u32, gpr:u32, hasBias:u32, p0:u32, p1:u32, p2:u32 };
 @group(0) @binding(0) var<storage,read> A_q: array<u32>;
 @group(0) @binding(1) var<storage,read> scale_x: array<f32>;
@@ -1298,6 +1308,7 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 export const GEMM4_ADD_T_W4A8 = (hasDP4a) => `
 enable subgroups;
 ${hasDP4a ? 'enable packed_4x8_integer_dot_product;' : ''}
+requires immediate_address_space;
 struct Meta { K:u32, N:u32, T:u32, gpr:u32, hasBias:u32, p0:u32, p1:u32, p2:u32 };
 @group(0) @binding(0) var<storage,read> A_q: array<u32>;
 @group(0) @binding(1) var<storage,read> scale_x: array<f32>;
