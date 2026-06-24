@@ -368,6 +368,34 @@ fn main(@builtin(global_invocation_index) gid: u32, @builtin(num_workgroups) nwg
   for (var i = gid; i < n; i = i + stride) { y[i] = y[i] + a[i]; }
 }`;
 
+// f16 math variant (storage remains f32 for compatibility; demonstrates shader-f16 path).
+export const ADD_F16 = `
+requires immediate_address_space;
+requires linear_indexing;
+enable f16;
+override WG: u32 = 256u;
+@group(0) @binding(0) var<storage,read> a: array<f32>;
+@group(0) @binding(1) var<storage,read_write> y: array<f32>;
+var<immediate> n: u32;
+@compute @workgroup_size(WG)
+fn main(@builtin(global_invocation_index) gid: u32, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * WG;
+  for (var i = gid; i < n; i = i + stride) { y[i] = f32(f16(y[i]) + f16(a[i])); }
+}`;
+
+// gate = silu(gate) * up  (in place). f16 math variant.
+export const SILUMUL_F16 = `
+requires immediate_address_space;
+enable f16;
+@group(0) @binding(0) var<storage,read_write> gate: array<f32>;
+@group(0) @binding(1) var<storage,read> up: array<f32>;
+var<immediate> n: u32;
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * 256u;
+  for (var i = g.x; i < n; i = i + stride) { let v = f16(gate[i]); gate[i] = f32( (v/(1.0h+exp(-v))) * f16(up[i]) ); }
+}`;
+
 // gate = silu(gate) * up  (in place). Grid-stride (n reaches T*I ~ 90M during prefill).
 export const SILUMUL = `
 requires immediate_address_space;

@@ -19,7 +19,9 @@ import {
   ATTN_PARTIAL,
   ATTN_COMBINE,
   ADD,
+  ADD_F16,
   SILUMUL,
+  SILUMUL_F16,
   EMBED,
   EMBED_BUF,
   ARGMAX,
@@ -104,7 +106,7 @@ export class QwenWGPU {
   // storage/compute for bandwidth wins. Stub for now; real kernel variants + selection
   // will be added. Evaluation: compare f16 vs f32 logits within tolerance + bench speedup.
   hasF16Compute() {
-    return !!this.dev.features.has('shader-f16');
+    return !!this.hasF16;
   }
 
   setUseF16(v) {
@@ -182,6 +184,9 @@ export class QwenWGPU {
     }
     this.hasDP4a = hasDP4a;
 
+    const hasF16 = this.dev.features.has('shader-f16');
+    this.hasF16 = hasF16;
+
     this.pam = new PagedAttentionManager(this.maxCtx);
 
     this.pipes = {
@@ -197,6 +202,8 @@ export class QwenWGPU {
       attnC: this._pipe(ATTN_COMBINE, 'attnC'),
       add: this._pipe(ADD, 'add', { WG: this.workgroupSize || 256 }),
       silu: this._pipe(SILUMUL, 'silu', { WG: this.workgroupSize || 256 }),
+      addF16: hasF16 ? this._pipe(ADD_F16, 'addF16', { WG: this.workgroupSize || 256 }) : null,
+      siluF16: hasF16 ? this._pipe(SILUMUL_F16, 'siluF16', { WG: this.workgroupSize || 256 }) : null,
       embed: this._pipe(EMBED, 'embed'),
       embedBuf: this._pipe(EMBED_BUF, 'embedBuf'),
       argmax: this._pipe(ARGMAX, 'argmax'),
@@ -227,6 +234,12 @@ export class QwenWGPU {
       attnPrefillPaged: this._pipe(ATTN_PREFILL_PAGED, 'attnPrefillPaged'),
       attnPrefillBlockPaged: this._pipe(ATTN_PREFILL_BLOCK_PAGED, 'attnPrefillBlockPaged'),
     };
+
+    if (hasF16) {
+      this.setUseF16(true);
+      onProgress('f16 compute enabled (add/silu paths)', 0);
+    }
+
     onProgress('streaming + quantizing weights', 0);
     this.schema = createQwenSchema(c);
     this.plan = createDispatchPlan(this.schema);
@@ -458,8 +471,8 @@ export class QwenWGPU {
 
   _gemvMeta(q, biasBuf, mod) {
     const gx = Math.min(q.N, 65535);
-    const meta = new ArrayBuffer(32);
-    const dv = new DataView(meta);
+    const bytes = new Uint8Array(32);
+    const dv = new DataView(bytes.buffer);
     dv.setUint32(0, q.K, true);
     dv.setUint32(4, q.N, true);
     dv.setUint32(8, mod ? mod.rank : 0, true);
@@ -470,17 +483,14 @@ export class QwenWGPU {
     return {
       gx,
       gy: Math.ceil(q.N / gx),
-      buf: this._staticUni(
-        `gemv:${q.K}:${q.N}:${biasBuf ? 1 : 0}:${mod ? `${this._loraEpoch}:${mod.rank}:${mod.scale}` : 'base'}`,
-        new Uint8Array(meta),
-      ),
+      bytes,
     };
   }
 
   _gemv4Meta(q, biasBuf, mod) {
     const gx = Math.min(q.N, 65535);
-    const meta = new ArrayBuffer(32);
-    const dv = new DataView(meta);
+    const bytes = new Uint8Array(32);
+    const dv = new DataView(bytes.buffer);
     dv.setUint32(0, q.K, true);
     dv.setUint32(4, q.N, true);
     dv.setUint32(8, mod ? mod.rank : 0, true);
@@ -492,10 +502,7 @@ export class QwenWGPU {
     return {
       gx,
       gy: Math.ceil(q.N / gx),
-      buf: this._staticUni(
-        `gemv4:${q.K}:${q.N}:${q.gpr}:${biasBuf ? 1 : 0}:${mod ? `${this._loraEpoch}:${mod.rank}:${mod.scale}` : 'base'}`,
-        new Uint8Array(meta),
-      ),
+      bytes,
     };
   }
 
@@ -711,7 +718,7 @@ export class QwenWGPU {
       key,
       { sensitive: !!mod },
     );
-    this._dispatch(enc, this.pipes.gemv, bg, meta.gx, meta.gy, `gemv:${q.N}x${q.K}`, new Uint8Array(meta.buf.buffer, meta.buf.byteOffset, 32));
+    this._dispatch(enc, this.pipes.gemv, bg, meta.gx, meta.gy, `gemv:${q.N}x${q.K}`, meta.bytes);
   }
 
   gemv4(enc, xBuf, q, yBuf, biasBuf, moduleKey) {
@@ -742,7 +749,7 @@ export class QwenWGPU {
       key,
       { sensitive: !!mod },
     );
-    this._dispatch(enc, this.pipes.gemv4, bg, meta.gx, meta.gy, `g4:${q.N}x${q.K}`, new Uint8Array(meta.buf.buffer, meta.buf.byteOffset, 32));
+    this._dispatch(enc, this.pipes.gemv4, bg, meta.gx, meta.gy, `g4:${q.N}x${q.K}`, meta.bytes);
     if (mod) {
       if (this.debugCapture && moduleKey === 'layers.0.self_attn.q_proj' && this.debugStep < this.debugT) {
         enc.copyBufferToBuffer(yBuf, 0, this.debugBufs.ySeq, this.debugStep * q.N * 4, q.N * 4);
@@ -800,7 +807,7 @@ export class QwenWGPU {
       key,
       { sensitive: !!mod },
     );
-    this._dispatch(enc, this.pipes.gemv4Add, bg, meta.gx, meta.gy, `g4add:${q.N}x${q.K}`, new Uint8Array(meta.buf.buffer, meta.buf.byteOffset, 32));
+    this._dispatch(enc, this.pipes.gemv4Add, bg, meta.gx, meta.gy, `g4add:${q.N}x${q.K}`, meta.bytes);
   }
 
   dynQuant(enc, xBuf, x_qBuf, scale_xBuf, K) {
@@ -849,7 +856,7 @@ export class QwenWGPU {
       key,
       { sensitive: !!mod },
     );
-    this._dispatch(enc, this.pipes.gemv4W4A8, bg, meta.gx, meta.gy, `g4w4a8:${q.N}x${q.K}`, new Uint8Array(meta.buf.buffer, meta.buf.byteOffset, 32));
+    this._dispatch(enc, this.pipes.gemv4W4A8, bg, meta.gx, meta.gy, `g4w4a8:${q.N}x${q.K}`, meta.bytes);
   }
 
   gemv4AddW4A8(enc, xBuf, x_qBuf, scale_xBuf, q, yBuf, biasBuf, moduleKey) {
@@ -872,7 +879,7 @@ export class QwenWGPU {
       key,
       { sensitive: !!mod },
     );
-    this._dispatch(enc, this.pipes.gemv4AddW4A8, bg, meta.gx, meta.gy, `g4addw4a8:${q.N}x${q.K}`, new Uint8Array(meta.buf.buffer, meta.buf.byteOffset, 32));
+    this._dispatch(enc, this.pipes.gemv4AddW4A8, bg, meta.gx, meta.gy, `g4addw4a8:${q.N}x${q.K}`, meta.bytes);
   }
 
   qkvGemv4W4A8(enc, xBuf, x_qBuf, scale_xBuf, packed, qBuf, kBuf, vBuf, L) {
@@ -1359,13 +1366,17 @@ export class QwenWGPU {
 
   _addInto(enc, yBuf, aBuf, n) {
     const imm = new Uint32Array([n]);
-    const bg = this._bgCached(this.pipes.add, [aBuf, yBuf], `add:${n}`);
-    this._dispatch(enc, this.pipes.add, bg, Math.min(Math.ceil(n / 256), 65535), 1, 'add', imm);
+    const useF16 = this.usingF16() && this.pipes.addF16;
+    const pipe = useF16 ? this.pipes.addF16 : this.pipes.add;
+    const bg = this._bgCached(pipe, [aBuf, yBuf], `add:${n}${useF16 ? ':f16' : ''}`);
+    this._dispatch(enc, pipe, bg, Math.min(Math.ceil(n / 256), 65535), 1, useF16 ? 'addF16' : 'add', imm);
   }
   _siluMul(enc, gateBuf, upBuf, n) {
     const imm = new Uint32Array([n]);
-    const bg = this._bgCached(this.pipes.silu, [gateBuf, upBuf], `silu:${n}`);
-    this._dispatch(enc, this.pipes.silu, bg, Math.min(Math.ceil(n / 256), 65535), 1, 'silu', imm);
+    const useF16 = this.usingF16() && this.pipes.siluF16;
+    const pipe = useF16 ? this.pipes.siluF16 : this.pipes.silu;
+    const bg = this._bgCached(pipe, [gateBuf, upBuf], `silu:${n}${useF16 ? ':f16' : ''}`);
+    this._dispatch(enc, pipe, bg, Math.min(Math.ceil(n / 256), 65535), 1, useF16 ? 'siluF16' : 'silu', imm);
   }
   embedRow(enc, id) {
     const e = this.q[this.plan.embed.name];

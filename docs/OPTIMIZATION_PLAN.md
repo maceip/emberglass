@@ -244,6 +244,18 @@ This is systematic linear progress through the checklist in the plan. Remaining 
 
 Continue deeper cleanup (remaining GEMM/W4A8 prefill, lora uniforms, more fusion candidates), implement selectable f16 compute kernels, autotune workgroup + more overrides, GPU top-k/temp sampling, and write PHASE*_EVAL notes. Run user-specified eval commands on real hardware to verify per-item criteria in this plan.
 
+**Latest linear continuation (post Phase 1 milestone):**
+- Vestigial cleanup: _gemvMeta / _gemv4Meta no longer allocate GPU uniform buffers for per-token metadata (return plain bytes for immediate). Several _staticUni calls removed from hot path.
+- Phase 3 concrete implementation started:
+  - ADD_F16 + SILUMUL_F16 WGSL (enable f16; f16 math on f32 storage for compatibility).
+  - f16 pipelines created when shader-f16 feature present.
+  - Runtime selection in _addInto / _siluMul based on usingF16() + pipe availability.
+  - Auto-enable + setUseF16 / usingF16 / hasF16Compute.
+- var<uniform> kernels: 0 (confirmed).
+- Build validated after changes.
+
+Continuing linearly into deeper f16 kernels + accuracy harness + Phase 4 overrides.
+
 ---
 
 *This document is the single source of truth for the optimization effort.*
