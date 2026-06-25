@@ -379,6 +379,21 @@ Next linear (pick one on next continue):
 - paged / prefill attention f16 variants if desired.
 - More overrides.
 
+**Latest linear step (continue):**
+- Autotune improvements (timestamp queries + persist + auto-apply):
+  - device_service now requests 'timestamp-query' when the adapter exposes it (logged at init).
+  - `QwenWGPU` now has `this.hasTimestampQuery`.
+  - `autotuneWorkgroups` now uses dedicated QuerySet + timestampWrites for accurate GPU elapsed time per candidate WG (when supported). Falls back cleanly to wall time.
+  - Results include `source: 'gpu-ts' | 'wall'`.
+  - `this.bestWorkgroupSizes` is populated with the winners (simple persist for the session / "per adapter" observation).
+  - At the end of `build()`, a cheap (iters=2) autotune + `apply:true` is kicked off for the hot kernels (add/rms/silu) so later dispatches benefit automatically without caller intervention.
+  - When `enableProf()` is active the general dispatch path already captures precise ts; autotune is now consistent with that.
+- Build clean. Plan updated.
+
+This completes the "Autotune improvements..." item from the prior next-list.
+
+Ready for: run harness on hardware (to capture real f16 + sampling deltas), more Phase 5, or additional overrides.
+
 ---
 
 *This document is the single source of truth for the optimization effort.*

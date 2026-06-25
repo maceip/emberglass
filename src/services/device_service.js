@@ -11,8 +11,10 @@ export async function initWebGPUDevice({ log = () => {} } = {}) {
   const hasSubgroupId = !!navigator.gpu.wgslLanguageFeatures?.has('subgroup_id');
   const hasLinearIndexing = !!navigator.gpu.wgslLanguageFeatures?.has('linear_indexing');
   const hasF16 = adapter.features.has('shader-f16');
+  const hasTimestamp = adapter.features.has('timestamp-query');
   const reqFeatures = ['subgroups'];
   if (adapter.features.has('shader-f16')) reqFeatures.push('shader-f16');
+  if (hasTimestamp) reqFeatures.push('timestamp-query');
   const dev = await adapter.requestDevice({
     requiredFeatures: reqFeatures,
     requiredLimits: {
@@ -23,6 +25,6 @@ export async function initWebGPUDevice({ log = () => {} } = {}) {
   });
   dev.addEventListener?.('uncapturederror', (e) => console.error('GPUERR', e.error.message));
   log(`WebGPU ready. maxBuffer=${(Number(adapter.limits.maxBufferSize) / 1e9).toFixed(2)}GB` +
-      ` subgroupId=${hasSubgroupId} linearIdx=${hasLinearIndexing} f16=${hasF16}`);
+      ` subgroupId=${hasSubgroupId} linearIdx=${hasLinearIndexing} f16=${hasF16} tsQuery=${hasTimestamp}`);
   return dev;
 }

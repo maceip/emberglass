@@ -138,12 +138,64 @@ export class QwenWGPU {
     const iters = opts.iters || 6;
     const cands = opts.candidates || [32, 64, 128, 256];
     const results = {};
+    const useTS = this.hasTimestampQuery;
 
+    // Precise GPU time helper (uses its own tiny query set when possible).
     const timeKernel = async (pipe, n, label) => {
-      // tiny synthetic work: n elements
       const a = this._buf(n * 4);
       const y = this._buf(n * 4);
 
+      let gpuMs = 0;
+      let usedGPU = false;
+
+      if (useTS) {
+        // dedicated tiny query set for this bench (2 slots per iter is overkill; use 2 total and loop carefully)
+        const qs = this.dev.createQuerySet({ type: 'timestamp', count: 2 });
+        const resolveBuf = this._buf(16, GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC);
+        const readBuf = this._buf(16, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ);
+
+        const tWall0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        for (let i = 0; i < iters; i++) {
+          const enc = this.dev.createCommandEncoder();
+          const bg = this._bg(pipe, [a, y]);
+          const imm = new Uint32Array([n]);
+
+          // manual pass with ts
+          const p = enc.beginComputePass({
+            timestampWrites: {
+              querySet: qs,
+              beginningOfPassWriteIndex: 0,
+              endOfPassWriteIndex: 1,
+            },
+          });
+          p.setPipeline(pipe);
+          if (bg) p.setBindGroup(0, bg);
+          if (imm) p.setImmediates(0, imm);
+          p.dispatchWorkgroups(Math.ceil(n / (pipe.__wg || 256)), 1);
+          p.end();
+
+          enc.resolveQuerySet(qs, 0, 2, resolveBuf, 0);
+          enc.copyBufferToBuffer(resolveBuf, 0, readBuf, 0, 16);
+          this.dev.queue.submit([enc.finish()]);
+          if (this.dev.queue.onSubmittedWorkDone) await this.dev.queue.onSubmittedWorkDone();
+
+          await readBuf.mapAsync(GPUMapMode.READ);
+          const t = new BigInt64Array(readBuf.getMappedRange());
+          const us = Number(t[1] - t[0]) / 1000;
+          gpuMs += us;
+          readBuf.unmap();
+        }
+        const wallMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - tWall0;
+        resolveBuf.destroy?.();
+        readBuf.destroy?.();
+        qs.destroy?.();
+        usedGPU = true;
+        // cleanup buffers
+        a.destroy?.(); y.destroy?.();
+        return (gpuMs / iters) / 1000;  // ms
+      }
+
+      // Fallback: wall time (broad compatibility)
       const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       for (let i = 0; i < iters; i++) {
         const enc = this.dev.createCommandEncoder();
@@ -154,7 +206,6 @@ export class QwenWGPU {
         if (this.dev.queue.onSubmittedWorkDone) await this.dev.queue.onSubmittedWorkDone();
       }
       const ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
-      // cleanup
       a.destroy?.(); y.destroy?.();
       return ms / iters;
     };
@@ -162,7 +213,7 @@ export class QwenWGPU {
     // Autotune a few hot, override-friendly kernels (add, rms, silu).
     const kernels = [
       { name: 'add', src: ADD, n: 8192 },
-      { name: 'rms', src: RMSNORM, n: 4096 },   // K=4096 typical
+      { name: 'rms', src: RMSNORM, n: 4096 },
       { name: 'silu', src: SILUMUL, n: 8192 },
     ];
 
@@ -186,7 +237,15 @@ export class QwenWGPU {
       }
     }
 
-    console.log('[autotune] WG microbench results (ms/iter):', results);
+    // Persist for observability / "per adapter" bests (simple in-memory for this run)
+    this.bestWorkgroupSizes = {
+      add: results.bestAdd?.wg,
+      rms: results.bestRms?.wg,
+      silu: results.bestSilu?.wg,
+      source: useTS ? 'gpu-ts' : 'wall',
+    };
+
+    console.log('[autotune] WG microbench results (ms/iter, source=' + (useTS ? 'gpu-ts' : 'wall') + '):', results);
     return results;
   }
 
@@ -262,6 +321,7 @@ export class QwenWGPU {
 
     const hasF16 = this.dev.features.has('shader-f16');
     this.hasF16 = hasF16;
+    this.hasTimestampQuery = this.dev.features.has('timestamp-query');
 
     this.pam = new PagedAttentionManager(this.maxCtx);
 
@@ -322,6 +382,9 @@ export class QwenWGPU {
     if (hasF16) {
       this.setUseF16(true);
       onProgress('f16 compute enabled (add/silu/rms/rope/attn-partial/combine paths)', 0);
+    }
+    if (this.hasTimestampQuery) {
+      onProgress('timestamp-query available (precise GPU timing + autotune)', 0);
     }
 
     onProgress('streaming + quantizing weights', 0);
@@ -413,6 +476,16 @@ export class QwenWGPU {
       await this.autotuneDecodeBatch();
     }
     onProgress('ready', 1);
+
+    // Phase 4: optional light autotune of workgroup sizes for hot kernels (uses GPU timestamps when available).
+    // Callers can also invoke manually: rt.autotuneWorkgroups({apply: true}).
+    // We run a very cheap pass and apply winners so subsequent runs benefit immediately.
+    if (!this._didAutoWG) {
+      this._didAutoWG = true;
+      // fire-and-forget a tiny one; does not block "ready"
+      this.autotuneWorkgroups({ iters: 2, apply: true }).catch(() => {});
+    }
+
     return this;
   }
 
