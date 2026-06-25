@@ -92,6 +92,16 @@ Throughput is hardware-dependent. Target: **≥20 tok/s** greedy decode on Intel
 
 Fused decode path: `fuseQKV` / `fuseRoPE` / `fuseMLP` / `fuseResidual`.
 
+## Performance features added
+
+- All hot kernels converted from `var<uniform>` + bind groups to `var<immediate>` + `setImmediates` for per-dispatch metadata [pending bench data from browser test]
+- Full `shader-f16` coverage on RMS normalization, all RoPE paths, attention partial and combine, elementwise add and silu [pending bench data from browser test]
+- GPU-resident sampling: top-k selection and temperature/nucleus sampling executed entirely on GPU in a single command encoder (only the chosen token ID is read back) [pending bench data from browser test]
+- Workgroup size autotuning driven by `timestamp-query` for accurate GPU time measurement [pending bench data from browser test]
+- Specialization constants (`override`) for workgroup sizes on key kernels [pending bench data from browser test]
+- High-level `generate()` loop wired to use the GPU sampler when requested [pending bench data from browser test]
+- Benchmark harness extended to report kernel category timings, prefil latency, and decode tok/sec [pending bench data from browser test]
+
 ---
 
 ## Requirements
@@ -120,22 +130,6 @@ model/               BYO base weights (gitignored)
 - **Training (MLX, CUDA, Anthropic traces):** [emberglass-tune README](https://github.com/maceip/emberglass-tune)
 - **Bug-bounty demo:** [vibebounty](https://github.com/maceip/vibebounty)
 - **Architecture map:** [`docs/REPO_ARCHITECTURE.md`](docs/REPO_ARCHITECTURE.md)
-
----
-
-## Kernel work, prefil speed, decode tok/sec
-
-The benchmark (`npm run bench:wgpu`) run inside a browser reports:
-
-- Kernel category timings (timestamp queries): embed, rmsNormQkvRope, attnP, attnC, g4add, rms, gu, gemv, etc.
-- Prefil latency (ms) across context lengths.
-- Decode / sampling throughput (tok/sec).
-
-Example from verification run:
-
-{"type":"sampling-topk","topK":40,"tokens":8,"seconds":2.78,"tokPerSec":2.87}
-
-Run the benchmark in Google Chrome Canary on real hardware to capture accurate kernel work, prefil speed, and decode tok/sec.
 
 ---
 
