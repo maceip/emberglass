@@ -14,6 +14,10 @@
  */
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 
 // src/config.js
 var QWEN25_3B = {
@@ -2132,6 +2136,12 @@ function createQwenSchema(cfg) {
   };
 }
 __name(createQwenSchema, "createQwenSchema");
+function moduleKeyFromTensorName(name) {
+  const m = name.match(/layers\.(\d+)\.(self_attn|mlp)\.([a-z_]+?)(_proj)?\.(lora_[ABab])/i);
+  if (!m) return null;
+  return `layers.${m[1]}.${m[2]}.${m[3].replace(/_proj$/, "")}_proj`;
+}
+__name(moduleKeyFromTensorName, "moduleKeyFromTensorName");
 
 // src/qwgpu/dispatch_plan.js
 function createDispatchPlan(schema) {
@@ -2270,21 +2280,21 @@ async function streamSafetensors(source, { names = null, onTensor, onProgress = 
 __name(streamSafetensors, "streamSafetensors");
 
 // src/qwgpu/quantize.js
-function quantizeInt8RowMajor(f32, outDim, inDim) {
+function quantizeInt8RowMajor(f322, outDim, inDim) {
   const scale = new Float32Array(outDim);
   const q = new Int8Array(outDim * inDim);
   for (let o = 0; o < outDim; o++) {
     const base = o * inDim;
     let amax = 0;
     for (let i = 0; i < inDim; i++) {
-      const a = Math.abs(f32[base + i]);
+      const a = Math.abs(f322[base + i]);
       if (a > amax) amax = a;
     }
     const s = amax > 0 ? amax / 127 : 1;
     scale[o] = s;
     const inv = 1 / s;
     for (let i = 0; i < inDim; i++) {
-      let v = Math.round(f32[base + i] * inv);
+      let v = Math.round(f322[base + i] * inv);
       if (v > 127) v = 127;
       else if (v < -128) v = -128;
       q[base + i] = v;
@@ -2298,7 +2308,7 @@ function quantizeInt8RowMajor(f32, outDim, inDim) {
   return { packed, scale, outDim, inDim };
 }
 __name(quantizeInt8RowMajor, "quantizeInt8RowMajor");
-function quantizeInt4Group(f32, outDim, inDim, group = 128) {
+function quantizeInt4Group(f322, outDim, inDim, group = 128) {
   const groupsPerRow = inDim / group;
   const scale = new Float32Array(outDim * groupsPerRow);
   const q = new Int8Array(outDim * inDim);
@@ -2307,14 +2317,14 @@ function quantizeInt4Group(f32, outDim, inDim, group = 128) {
       const base = o * inDim + g * group;
       let amax = 0;
       for (let i = 0; i < group; i++) {
-        const a = Math.abs(f32[base + i]);
+        const a = Math.abs(f322[base + i]);
         if (a > amax) amax = a;
       }
       const s = amax > 0 ? amax / 7 : 1;
       scale[o * groupsPerRow + g] = s;
       const inv = 1 / s;
       for (let i = 0; i < group; i++) {
-        let v = Math.round(f32[base + i] * inv);
+        let v = Math.round(f322[base + i] * inv);
         if (v > 7) v = 7;
         else if (v < -8) v = -8;
         q[base + i] = v;
@@ -3444,9 +3454,9 @@ var QwenWGPU = class {
       gateMod ? 1 : 0,
       upMod ? 1 : 0
     ]);
-    const f32 = new Float32Array(imm.buffer);
-    f32[8] = gateMod ? gateMod.scale : 0;
-    f32[9] = upMod ? upMod.scale : 0;
+    const f322 = new Float32Array(imm.buffer);
+    f322[8] = gateMod ? gateMod.scale : 0;
+    f322[9] = upMod ? upMod.scale : 0;
     return imm;
   }
   gateUpSiluGemv4W4A8(enc, xBuf, x_qBuf, scale_xBuf, packed, yBuf, L) {
@@ -4010,9 +4020,9 @@ var QwenWGPU = class {
       ]);
       const imm = new Uint32Array(4);
       imm[0] = k;
-      const f32 = new Float32Array(imm.buffer);
-      f32[2] = temp > 0 ? temp : 1;
-      f32[3] = Math.max(0, Math.min(1, r));
+      const f322 = new Float32Array(imm.buffer);
+      f322[2] = temp > 0 ? temp : 1;
+      f322[3] = Math.max(0, Math.min(1, r));
       this._dispatch(enc, this.pipes.sampleTopK, bg, 1, 1, "sampleTopK", imm);
       enc.copyBufferToBuffer(this.s.sampled, 0, this.sampledRead, 0, 4);
       this.dev.queue.submit([enc.finish()]);
@@ -6329,6 +6339,279 @@ function triggerDownload(blob, filename) {
 }
 __name(triggerDownload, "triggerDownload");
 
+// src/lora_gpu.js
+function parseSt(buf) {
+  const dv = new DataView(buf);
+  const hl = Number(dv.getBigUint64(0, true));
+  const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, hl)));
+  return { header, dataStart: 8 + hl, u8: new Uint8Array(buf) };
+}
+__name(parseSt, "parseSt");
+function bf16f32(u8, off, n) {
+  const u16 = new Uint16Array(u8.buffer, u8.byteOffset + off, n);
+  const o = new Float32Array(n);
+  const o32 = new Uint32Array(o.buffer);
+  for (let i = 0; i < n; i++) o32[i] = u16[i] << 16;
+  return o;
+}
+__name(bf16f32, "bf16f32");
+function f32(u8, off, n) {
+  return new Float32Array(u8.buffer.slice(u8.byteOffset + off, u8.byteOffset + off + n * 4));
+}
+__name(f32, "f32");
+function readTensor(st, name) {
+  const t = st.header[name];
+  const n = t.shape.reduce((a, b) => a * b, 1);
+  const dt = t.dtype.toUpperCase();
+  const arr = dt === "BF16" ? bf16f32(st.u8, st.dataStart + t.data_offsets[0], n) : f32(st.u8, st.dataStart + t.data_offsets[0], n);
+  return { arr, shape: t.shape };
+}
+__name(readTensor, "readTensor");
+var isA = /* @__PURE__ */ __name((name) => /lora_a/i.test(name), "isA");
+function transpose2d2(arr, rows, cols) {
+  const o = new Float32Array(arr.length);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) o[c * rows + r] = arr[r * cols + c];
+  return o;
+}
+__name(transpose2d2, "transpose2d");
+async function loadLoraAdapterGPU(dev, files, cfg) {
+  const stFile = files.find((f) => f.name.endsWith(".safetensors"));
+  if (!stFile) throw new Error("no .safetensors in adapter files");
+  const cfgFile = files.find((f) => /adapter_config\.json|config\.json/.test(f.name));
+  let rankCfg = 16, scaleCfg = null;
+  if (cfgFile) {
+    const c = JSON.parse(await cfgFile.text());
+    const lp = c.lora_parameters || {};
+    rankCfg = c.r ?? c.rank ?? c.lora_rank ?? lp.rank ?? rankCfg;
+    if (lp.scale != null)
+      scaleCfg = lp.scale;
+    else if (c.lora_alpha != null)
+      scaleCfg = c.lora_alpha / rankCfg;
+    else if (c.alpha != null) scaleCfg = c.alpha / rankCfg;
+  }
+  const st = parseSt(await stFile.arrayBuffer());
+  const names = Object.keys(st.header).filter((k) => k !== "__metadata__" && /lora_[abAB]/.test(k));
+  const groups = {};
+  for (const nm of names) {
+    const key = moduleKeyFromTensorName(nm);
+    if (!key) continue;
+    (groups[key] ||= {})[isA(nm) ? "A" : "B"] = readTensor(st, nm);
+  }
+  const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+  const mk = /* @__PURE__ */ __name((arr) => {
+    const b = dev.createBuffer({ size: arr.byteLength, usage: S });
+    dev.queue.writeBuffer(b, 0, arr);
+    return b;
+  }, "mk");
+  const modules = {};
+  for (const key of Object.keys(groups)) {
+    const g = groups[key];
+    if (!g.A || !g.B) continue;
+    const r = Math.min(...g.A.shape, ...g.B.shape);
+    let Aarr = g.A.arr;
+    if (g.A.shape[0] !== r) Aarr = transpose2d2(g.A.arr, g.A.shape[0], g.A.shape[1]);
+    let Barr = g.B.arr;
+    if (g.B.shape[0] !== r) Barr = transpose2d2(g.B.arr, g.B.shape[0], g.B.shape[1]);
+    const scale = scaleCfg != null ? scaleCfg : 2;
+    modules[key] = { A: mk(Aarr), B: mk(Barr), rawA: Aarr, rawB: Barr, rank: r, scale };
+  }
+  if (!Object.keys(modules).length) throw new Error("no LoRA modules matched layers.*.{self_attn,mlp}.*_proj");
+  const name = stFile.name.replace(/\.safetensors$/, "");
+  return { name, modules };
+}
+__name(loadLoraAdapterGPU, "loadLoraAdapterGPU");
+
+// src/services/store.js
+var store_exports = {};
+__export(store_exports, {
+  connectDirectory: () => connectDirectory,
+  deleteRun: () => deleteRun,
+  ensurePermission: () => ensurePermission,
+  forgetDirectory: () => forgetDirectory,
+  fsSupported: () => fsSupported,
+  getRun: () => getRun,
+  getRunBlobs: () => getRunBlobs,
+  listRuns: () => listRuns,
+  loadRunFiles: () => loadRunFiles,
+  newId: () => newId,
+  readDirText: () => readDirText,
+  saveRun: () => saveRun,
+  savedDirectory: () => savedDirectory,
+  writeFileToDir: () => writeFileToDir
+});
+var LS_KEY = "emberglass.history.v2";
+var DB_NAME = "emberglass";
+var DB_VERSION = 1;
+var BLOB_STORE = "adapters";
+var HANDLE_STORE = "handles";
+var _dbp = null;
+function db() {
+  if (_dbp) return _dbp;
+  _dbp = new Promise((resolve, reject) => {
+    const r = indexedDB.open(DB_NAME, DB_VERSION);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains(BLOB_STORE)) d.createObjectStore(BLOB_STORE);
+      if (!d.objectStoreNames.contains(HANDLE_STORE)) d.createObjectStore(HANDLE_STORE);
+    };
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  return _dbp;
+}
+__name(db, "db");
+async function idbPut(store, key, val) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const tx = d.transaction(store, "readwrite");
+    tx.objectStore(store).put(val, key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+__name(idbPut, "idbPut");
+async function idbGet(store, key) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const tx = d.transaction(store, "readonly");
+    const rq = tx.objectStore(store).get(key);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+__name(idbGet, "idbGet");
+async function idbDel(store, key) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const tx = d.transaction(store, "readwrite");
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+__name(idbDel, "idbDel");
+function listRuns() {
+  try {
+    const a = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
+}
+__name(listRuns, "listRuns");
+function writeIndex(arr) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(arr));
+  } catch (e) {
+    console.warn("[store] localStorage write failed", e);
+  }
+}
+__name(writeIndex, "writeIndex");
+function getRun(id) {
+  return listRuns().find((r) => r.id === id) || null;
+}
+__name(getRun, "getRun");
+function newId() {
+  return "run_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
+}
+__name(newId, "newId");
+async function saveRun(meta, files) {
+  const stBytes = files.safetensors instanceof Uint8Array ? files.safetensors : new Uint8Array(files.safetensors);
+  await idbPut(BLOB_STORE, meta.id, {
+    safetensors: new Blob([stBytes], { type: "application/octet-stream" }),
+    configJson: files.configJson || "{}"
+  });
+  const idx = listRuns().filter((r) => r.id !== meta.id);
+  idx.unshift(meta);
+  writeIndex(idx);
+  return meta;
+}
+__name(saveRun, "saveRun");
+async function deleteRun(id) {
+  writeIndex(listRuns().filter((r) => r.id !== id));
+  try {
+    await idbDel(BLOB_STORE, id);
+  } catch {
+  }
+}
+__name(deleteRun, "deleteRun");
+async function loadRunFiles(id) {
+  const rec = await idbGet(BLOB_STORE, id);
+  if (!rec) throw new Error("adapter blob missing for " + id);
+  const meta = getRun(id);
+  const stem = (meta?.name || id).replace(/[^\w.-]+/g, "_");
+  return [
+    new File([rec.safetensors], `${stem}.safetensors`, { type: "application/octet-stream" }),
+    new File([rec.configJson], "adapter_config.json", { type: "application/json" })
+  ];
+}
+__name(loadRunFiles, "loadRunFiles");
+async function getRunBlobs(id) {
+  const rec = await idbGet(BLOB_STORE, id);
+  if (!rec) throw new Error("adapter blob missing for " + id);
+  return { safetensors: rec.safetensors, configJson: rec.configJson };
+}
+__name(getRunBlobs, "getRunBlobs");
+var fsSupported = typeof window !== "undefined" && "showDirectoryPicker" in window;
+async function connectDirectory() {
+  if (!fsSupported) throw new Error("File System Access API not available in this browser");
+  const handle = await window.showDirectoryPicker({ id: "emberglass", mode: "readwrite" });
+  await idbPut(HANDLE_STORE, "dir", handle);
+  return handle;
+}
+__name(connectDirectory, "connectDirectory");
+async function savedDirectory() {
+  if (!fsSupported) return null;
+  try {
+    return await idbGet(HANDLE_STORE, "dir") || null;
+  } catch {
+    return null;
+  }
+}
+__name(savedDirectory, "savedDirectory");
+async function forgetDirectory() {
+  try {
+    await idbDel(HANDLE_STORE, "dir");
+  } catch {
+  }
+}
+__name(forgetDirectory, "forgetDirectory");
+async function ensurePermission(handle, mode2 = "readwrite") {
+  if (!handle) return false;
+  const opts = { mode: mode2 };
+  if (await handle.queryPermission(opts) === "granted") return true;
+  return await handle.requestPermission(opts) === "granted";
+}
+__name(ensurePermission, "ensurePermission");
+async function readDirText(handle, { exts = ["txt", "md", "json", "csv"], maxChars = 2e5 } = {}) {
+  let out = "";
+  const names = [];
+  for await (const [name, h] of handle.entries()) {
+    if (h.kind !== "file") continue;
+    const ext = name.split(".").pop().toLowerCase();
+    if (!exts.includes(ext)) continue;
+    try {
+      const f = await h.getFile();
+      out += `
+
+# ${name}
+` + await f.text();
+      names.push(name);
+      if (out.length > maxChars) break;
+    } catch {
+    }
+  }
+  return { text: out.slice(0, maxChars), names };
+}
+__name(readDirText, "readDirText");
+async function writeFileToDir(handle, name, data) {
+  const fh = await handle.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  await w.write(data);
+  await w.close();
+}
+__name(writeFileToDir, "writeFileToDir");
+
 // src/main.js
 var $ = /* @__PURE__ */ __name((id) => document.getElementById(id), "$");
 var log = /* @__PURE__ */ __name((m) => {
@@ -6382,8 +6665,12 @@ var state = {
   loaded: false,
   busy: false,
   err: null,
-  tuned: null
+  tuned: null,
   // { name, kind:'guided'|'own', build(userText)->messages[], suggest }
+  activeRunId: null,
+  // history run currently applied
+  dirHandle: null
+  // File System Access workspace folder
 };
 var DEFAULT_SYS = "You are VibeThinker-3B, a concise, helpful reasoning assistant.";
 var EMBER_SYS = "You are the Emberglass OS help desk. Answer in one short factual sentence.";
@@ -6528,19 +6815,22 @@ async function runInference() {
   }
 }
 __name(runInference, "runInference");
-async function runTraining({ examples, lr, epochs, accum, name, kind, build, suggest }) {
+async function runTraining({ examples, lr, epochs, accum, base, kind, system, build, suggest }) {
   if (!state.loaded) {
     log("load the model first (INFERENCE pane).");
     switchTab("infer");
     return;
   }
   if (state.busy) return;
+  const name = uniqueName(base);
+  const runId = newId();
   state.busy = "train";
   lockInference(true);
   gateButtons();
   $("trainWidget").style.display = "";
   const windows = Math.max(1, Math.ceil(examples.length / accum));
   const total = windows * epochs;
+  let lastLoss = null;
   const ctrl = new TrainingController({
     session,
     adapters,
@@ -6564,6 +6854,7 @@ async function runTraining({ examples, lr, epochs, accum, name, kind, build, sug
     await ctrl.train(examples, {
       epochs,
       onStep: /* @__PURE__ */ __name(({ step, loss }) => {
+        lastLoss = loss;
         trainProgress(step, total, loss, `teaching \xB7 step ${step}/${total} \xB7 loss ${loss.toFixed(3)}`);
         cap.textContent = `Step ${step}/${total} \u2014 forward \u2192 backward \u2192 AdamW \xB7 loss ${loss.toFixed(3)}`;
       }, "onStep")
@@ -6575,6 +6866,7 @@ async function runTraining({ examples, lr, epochs, accum, name, kind, build, sug
     st.done("opt");
     st.active("swap");
     state.tuned = { name, kind, build, suggest, ctrl };
+    state.activeRunId = runId;
     addAdapterOption(name);
     $("adapterSel").value = name;
     st.done("swap");
@@ -6582,7 +6874,31 @@ async function runTraining({ examples, lr, epochs, accum, name, kind, build, sug
     cap.textContent = `Adapter "${name}" hot-swapped into inference \u2014 live. Trained in ${dt}s.`;
     $("downloadAdapter").style.display = "";
     showTryIt(suggest);
-    log(`Trained "${name}" in ${dt}s. Switch to INFERENCE \u2014 the tuned adapter is selected.`);
+    try {
+      const files = await exportLoraAdapter(ctrl.trainer, { name });
+      await saveRun(
+        {
+          id: runId,
+          name,
+          base,
+          kind,
+          system: system || null,
+          suggest: suggest || "",
+          createdAt: Date.now(),
+          steps: total,
+          epochs,
+          durationSec: +dt,
+          finalLoss: lastLoss,
+          rank: 16,
+          alpha: 32
+        },
+        { safetensors: files.safetensors, configJson: files.configJson }
+      );
+      renderHistory();
+    } catch (e) {
+      console.warn("[history] save failed", e);
+    }
+    log(`Trained "${name}" in ${dt}s. Saved to your fine-tunes \u2014 switch to Inference to compare.`);
   } catch (e) {
     st.loop(["fwd", "bwd", "opt"], false);
     trainProgress(0, total, null, "training error: " + e.message);
@@ -6665,6 +6981,200 @@ function showTryIt(suggest) {
   };
 }
 __name(showTryIt, "showTryIt");
+function uniqueName(base) {
+  const taken = new Set(listRuns().map((r) => r.name));
+  if (!taken.has(base)) return base;
+  let i = 2;
+  while (taken.has(`${base} #${i}`)) i++;
+  return `${base} #${i}`;
+}
+__name(uniqueName, "uniqueName");
+function buildFromMeta(meta) {
+  return meta.system ? (u) => [{ role: "system", content: meta.system }, { role: "user", content: u }] : (u) => [{ role: "user", content: u }];
+}
+__name(buildFromMeta, "buildFromMeta");
+function fmtRunMeta(m) {
+  const parts = [];
+  if (m.finalLoss != null) parts.push("loss " + Number(m.finalLoss).toFixed(3));
+  if (m.steps) parts.push(m.steps + " steps");
+  if (m.durationSec != null) parts.push(Math.round(m.durationSec) + "s");
+  try {
+    parts.push(new Date(m.createdAt).toLocaleDateString(void 0, { month: "short", day: "numeric" }));
+  } catch {
+  }
+  return parts.join(" \xB7 ");
+}
+__name(fmtRunMeta, "fmtRunMeta");
+function renderHistory() {
+  const runs = listRuns();
+  $("historyCount").textContent = String(runs.length);
+  $("historyEmpty").style.display = runs.length ? "none" : "";
+  const ul = $("historyList");
+  ul.innerHTML = "";
+  for (const m of runs) {
+    const li = document.createElement("li");
+    li.className = "hrun" + (m.id === state.activeRunId ? " active" : "");
+    li.dataset.id = m.id;
+    li.dataset.kind = m.kind || "own";
+    li.innerHTML = `<span class="hrun__led"></span><div class="hrun__name" title="${esc(m.name)}">${esc(m.name)}</div><div class="hrun__meta">${esc(fmtRunMeta(m))}</div><div class="hrun__acts"><button data-act="apply" class="tiny primary">\u25B6 Use</button><button data-act="export" class="tiny" title="Export adapter">\u2B07</button><button data-act="del" class="tiny ghost" title="Delete">\u2715</button></div>`;
+    li.querySelector("[data-act=apply]").onclick = (e) => {
+      e.stopPropagation();
+      applyRun(m.id);
+    };
+    li.querySelector("[data-act=export]").onclick = (e) => {
+      e.stopPropagation();
+      exportRun(m.id);
+    };
+    li.querySelector("[data-act=del]").onclick = (e) => {
+      e.stopPropagation();
+      delRun(m.id);
+    };
+    li.onclick = () => applyRun(m.id);
+    ul.appendChild(li);
+  }
+}
+__name(renderHistory, "renderHistory");
+async function applyRun(id) {
+  const meta = getRun(id);
+  if (!meta) return;
+  if (!state.loaded) {
+    log("Load VibeThinker-3B first (Step 1), then tap a fine-tune to use it.");
+    switchTab("infer");
+    return;
+  }
+  if (state.busy) return;
+  state.busy = "apply";
+  gateButtons();
+  try {
+    log(`Applying "${meta.name}"\u2026`);
+    let adapter = adapters.get(meta.name);
+    if (!adapter) {
+      const files = await loadRunFiles(id);
+      adapter = await loadLoraAdapterGPU(session.rt.dev, files, QWEN25_3B);
+      adapter.name = meta.name;
+      adapters.adapters[meta.name] = adapter;
+    }
+    addAdapterOption(meta.name);
+    state.tuned = { name: meta.name, kind: meta.kind, build: buildFromMeta(meta), suggest: meta.suggest };
+    state.activeRunId = id;
+    $("adapterSel").value = meta.name;
+    setBadge();
+    renderHistory();
+    switchTab("infer");
+    if (meta.suggest) $("prompt").value = meta.suggest;
+    log(`Now serving fine-tune "${meta.name}". Ask away.`);
+  } catch (e) {
+    log("Could not apply: " + e.message);
+    console.error(e);
+  } finally {
+    state.busy = false;
+    gateButtons();
+  }
+}
+__name(applyRun, "applyRun");
+async function exportRun(id) {
+  const meta = getRun(id);
+  if (!meta) return;
+  try {
+    const { safetensors, configJson } = await getRunBlobs(id);
+    const stem = (meta.name || "adapter").replace(/[^\w.-]+/g, "_");
+    if (state.dirHandle && await ensurePermission(state.dirHandle)) {
+      await writeFileToDir(state.dirHandle, stem + ".safetensors", safetensors);
+      await writeFileToDir(state.dirHandle, stem + ".adapter_config.json", configJson);
+      log(`Saved "${meta.name}" to your connected folder.`);
+    } else {
+      triggerBlob(safetensors, stem + ".safetensors");
+      triggerBlob(new Blob([configJson], { type: "application/json" }), stem + ".adapter_config.json");
+      log(`Exported "${meta.name}".`);
+    }
+  } catch (e) {
+    log("Export failed: " + e.message);
+  }
+}
+__name(exportRun, "exportRun");
+async function delRun(id) {
+  await deleteRun(id);
+  if (state.activeRunId === id) state.activeRunId = null;
+  renderHistory();
+}
+__name(delRun, "delRun");
+function triggerBlob(data, filename) {
+  const blob = data instanceof Blob ? data : new Blob([data]);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1e3);
+}
+__name(triggerBlob, "triggerBlob");
+function applyLayout() {
+  const mq = /* @__PURE__ */ __name((q) => {
+    try {
+      return window.matchMedia(q).matches;
+    } catch {
+      return false;
+    }
+  }, "mq");
+  const fold = mq("(horizontal-viewport-segments: 2)") || mq("(spanning: single-fold-vertical)");
+  const mobile = mq("(max-width: 700px)");
+  document.body.dataset.layout = fold ? "foldable" : mobile ? "mobile" : "desktop";
+}
+__name(applyLayout, "applyLayout");
+async function initFs() {
+  if (!fsSupported) {
+    $("fsBlock").hidden = true;
+    return;
+  }
+  $("fsBlock").hidden = false;
+  const setDir = /* @__PURE__ */ __name((h) => {
+    state.dirHandle = h;
+    $("fsForget").hidden = false;
+    $("ownImportDir").hidden = false;
+    $("fsStatus").textContent = `connected: ${h.name || "folder"} \u2014 adapters can save here; import text below.`;
+  }, "setDir");
+  try {
+    const saved = await savedDirectory();
+    if (saved) setDir(saved);
+  } catch {
+  }
+  $("fsConnect").onclick = async () => {
+    try {
+      setDir(await connectDirectory());
+    } catch (e) {
+      if (e.name !== "AbortError") log("folder: " + e.message);
+    }
+  };
+  $("fsForget").onclick = async () => {
+    await forgetDirectory();
+    state.dirHandle = null;
+    $("fsForget").hidden = true;
+    $("ownImportDir").hidden = true;
+    $("fsStatus").textContent = "not connected \u2014 import training text & save adapters straight to a folder you pick.";
+  };
+  $("ownImportDir").onclick = async () => {
+    if (!state.dirHandle) return;
+    if (!await ensurePermission(state.dirHandle, "read")) {
+      log("permission denied for folder");
+      return;
+    }
+    try {
+      const { text, names } = await readDirText(state.dirHandle);
+      if (!text.trim()) {
+        $("ownStats").textContent = "no .txt/.md/.json/.csv files found in that folder";
+        return;
+      }
+      $("ownText").value = (text + "\n" + $("ownText").value).slice(0, MAX_CHARS);
+      refreshOwn();
+      $("ownStats").textContent = `imported ${names.length} file(s) \xB7 ` + $("ownStats").textContent;
+    } catch (e) {
+      log("import failed: " + e.message);
+    }
+  };
+}
+__name(initFs, "initFs");
 window.addEventListener("DOMContentLoaded", () => {
   $("guidedList").innerHTML = GUIDED.map(([q, a]) => `<li><b>Q:</b> ${esc(q)}<br><b>A:</b> ${esc(a)}</li>`).join("");
   $("tabInfer").onclick = () => switchTab("infer");
@@ -6698,8 +7208,9 @@ window.addEventListener("DOMContentLoaded", () => {
     lr: 3e-4,
     epochs: 12,
     accum: 2,
-    name: "emberglass-os",
+    base: "emberglass-os",
     kind: "guided",
+    system: EMBER_SYS,
     build: /* @__PURE__ */ __name((u) => [{ role: "system", content: EMBER_SYS }, { role: "user", content: u }], "build"),
     suggest: GUIDED_SUGGEST
   });
@@ -6739,8 +7250,9 @@ window.addEventListener("DOMContentLoaded", () => {
       lr: 3e-4,
       accum: 2,
       epochs: Math.max(3, Math.min(8, Math.round(50 / windows))),
-      name: "my-notes",
+      base: "my-notes",
       kind: "own",
+      system: null,
       build: /* @__PURE__ */ __name((u) => [{ role: "user", content: u }], "build"),
       suggest: _ownChunks[0]?.head || ""
     });
@@ -6748,6 +7260,19 @@ window.addEventListener("DOMContentLoaded", () => {
   $("downloadAdapter").onclick = () => {
     if (state.tuned?.ctrl?.trainer) downloadLoraAdapter(state.tuned.ctrl.trainer, { name: state.tuned.name });
   };
+  applyLayout();
+  for (const q of ["(max-width: 700px)", "(horizontal-viewport-segments: 2)", "(spanning: single-fold-vertical)"]) {
+    try {
+      window.matchMedia(q).addEventListener("change", applyLayout);
+    } catch {
+    }
+  }
+  window.__layout = (m) => {
+    document.body.dataset.layout = m;
+  };
+  window.__eg = { store: store_exports, renderHistory, applyRun, exportRun, delRun, state };
+  initFs();
+  renderHistory();
   switchTab("infer");
   setBadge();
   refreshOwn();

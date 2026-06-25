@@ -11,7 +11,9 @@ import { urlReader, hfReader, fileReader } from './readers.js';
 import { AdapterRegistry } from './services/adapter_registry.js';
 import { ModelSession } from './services/model_session.js';
 import { TrainingController } from './services/training_controller.js';
-import { downloadLoraAdapter } from './lora_export.js';
+import { downloadLoraAdapter, exportLoraAdapter } from './lora_export.js';
+import { loadLoraAdapterGPU } from './lora_gpu.js';
+import * as store from './services/store.js';
 
 const $ = (id) => document.getElementById(id);
 const log = (m) => { const s = $('railMsg'); if (s) s.textContent = m; console.log('[emberglass]', m); };
@@ -46,6 +48,8 @@ const state = {
   busy: false,
   err: null,
   tuned: null, // { name, kind:'guided'|'own', build(userText)->messages[], suggest }
+  activeRunId: null, // history run currently applied
+  dirHandle: null, // File System Access workspace folder
 };
 
 const DEFAULT_SYS = 'You are VibeThinker-3B, a concise, helpful reasoning assistant.';
@@ -153,14 +157,17 @@ async function runInference() {
 }
 
 // ── training: shared runner ───────────────────────────────────────────────────
-async function runTraining({ examples, lr, epochs, accum, name, kind, build, suggest }) {
+async function runTraining({ examples, lr, epochs, accum, base, kind, system, build, suggest }) {
   if (!state.loaded) { log('load the model first (INFERENCE pane).'); switchTab('infer'); return; }
   if (state.busy) return;
+  const name = uniqueName(base);
+  const runId = store.newId();
   state.busy = 'train';
   lockInference(true); gateButtons();
   $('trainWidget').style.display = '';
   const windows = Math.max(1, Math.ceil(examples.length / accum));
   const total = windows * epochs;
+  let lastLoss = null;
   const ctrl = new TrainingController({
     session, adapters, log: () => {},
     trainerOptions: { lr, maxTrainSeq: 384, lmHeadBlock: 128, maxGradNorm: 1.0, weightDecay: 0.0, warmupSteps: Math.min(4, total), totalSteps: total, gradAccumSteps: accum },
@@ -178,6 +185,7 @@ async function runTraining({ examples, lr, epochs, accum, name, kind, build, sug
     await ctrl.train(examples, {
       epochs,
       onStep: ({ step, loss }) => {
+        lastLoss = loss;
         trainProgress(step, total, loss, `teaching · step ${step}/${total} · loss ${loss.toFixed(3)}`);
         cap.textContent = `Step ${step}/${total} — forward → backward → AdamW · loss ${loss.toFixed(3)}`;
       },
@@ -186,6 +194,7 @@ async function runTraining({ examples, lr, epochs, accum, name, kind, build, sug
     st.loop(['fwd', 'bwd', 'opt'], false); st.done('fwd'); st.done('bwd'); st.done('opt');
     st.active('swap');
     state.tuned = { name, kind, build, suggest, ctrl };
+    state.activeRunId = runId;
     addAdapterOption(name);
     $('adapterSel').value = name;
     st.done('swap');
@@ -193,7 +202,17 @@ async function runTraining({ examples, lr, epochs, accum, name, kind, build, sug
     cap.textContent = `Adapter "${name}" hot-swapped into inference — live. Trained in ${dt}s.`;
     $('downloadAdapter').style.display = '';
     showTryIt(suggest);
-    log(`Trained "${name}" in ${dt}s. Switch to INFERENCE — the tuned adapter is selected.`);
+    // persist this attempt so it survives reloads and shows in the history rail
+    try {
+      const files = await exportLoraAdapter(ctrl.trainer, { name });
+      await store.saveRun(
+        { id: runId, name, base, kind, system: system || null, suggest: suggest || '',
+          createdAt: Date.now(), steps: total, epochs, durationSec: +dt, finalLoss: lastLoss, rank: 16, alpha: 32 },
+        { safetensors: files.safetensors, configJson: files.configJson },
+      );
+      renderHistory();
+    } catch (e) { console.warn('[history] save failed', e); }
+    log(`Trained "${name}" in ${dt}s. Saved to your fine-tunes — switch to Inference to compare.`);
   } catch (e) {
     st.loop(['fwd', 'bwd', 'opt'], false);
     trainProgress(0, total, null, 'training error: ' + e.message);
@@ -269,6 +288,155 @@ function showTryIt(suggest) {
   };
 }
 
+// ── history rail: every saved fine-tune, persisted across reloads ─────────────
+function uniqueName(base) {
+  const taken = new Set(store.listRuns().map((r) => r.name));
+  if (!taken.has(base)) return base;
+  let i = 2;
+  while (taken.has(`${base} #${i}`)) i++;
+  return `${base} #${i}`;
+}
+function buildFromMeta(meta) {
+  return meta.system
+    ? (u) => [{ role: 'system', content: meta.system }, { role: 'user', content: u }]
+    : (u) => [{ role: 'user', content: u }];
+}
+function fmtRunMeta(m) {
+  const parts = [];
+  if (m.finalLoss != null) parts.push('loss ' + Number(m.finalLoss).toFixed(3));
+  if (m.steps) parts.push(m.steps + ' steps');
+  if (m.durationSec != null) parts.push(Math.round(m.durationSec) + 's');
+  try { parts.push(new Date(m.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })); } catch {}
+  return parts.join(' · ');
+}
+function renderHistory() {
+  const runs = store.listRuns();
+  $('historyCount').textContent = String(runs.length);
+  $('historyEmpty').style.display = runs.length ? 'none' : '';
+  const ul = $('historyList');
+  ul.innerHTML = '';
+  for (const m of runs) {
+    const li = document.createElement('li');
+    li.className = 'hrun' + (m.id === state.activeRunId ? ' active' : '');
+    li.dataset.id = m.id;
+    li.dataset.kind = m.kind || 'own';
+    li.innerHTML =
+      `<span class="hrun__led"></span>` +
+      `<div class="hrun__name" title="${esc(m.name)}">${esc(m.name)}</div>` +
+      `<div class="hrun__meta">${esc(fmtRunMeta(m))}</div>` +
+      `<div class="hrun__acts">` +
+      `<button data-act="apply" class="tiny primary">▶ Use</button>` +
+      `<button data-act="export" class="tiny" title="Export adapter">⬇</button>` +
+      `<button data-act="del" class="tiny ghost" title="Delete">✕</button>` +
+      `</div>`;
+    li.querySelector('[data-act=apply]').onclick = (e) => { e.stopPropagation(); applyRun(m.id); };
+    li.querySelector('[data-act=export]').onclick = (e) => { e.stopPropagation(); exportRun(m.id); };
+    li.querySelector('[data-act=del]').onclick = (e) => { e.stopPropagation(); delRun(m.id); };
+    li.onclick = () => applyRun(m.id);
+    ul.appendChild(li);
+  }
+}
+async function applyRun(id) {
+  const meta = store.getRun(id);
+  if (!meta) return;
+  if (!state.loaded) { log('Load VibeThinker-3B first (Step 1), then tap a fine-tune to use it.'); switchTab('infer'); return; }
+  if (state.busy) return;
+  state.busy = 'apply'; gateButtons();
+  try {
+    log(`Applying "${meta.name}"…`);
+    let adapter = adapters.get(meta.name);
+    if (!adapter) {
+      const files = await store.loadRunFiles(id);
+      adapter = await loadLoraAdapterGPU(session.rt.dev, files, QWEN25_3B);
+      adapter.name = meta.name;
+      adapters.adapters[meta.name] = adapter;
+    }
+    addAdapterOption(meta.name);
+    state.tuned = { name: meta.name, kind: meta.kind, build: buildFromMeta(meta), suggest: meta.suggest };
+    state.activeRunId = id;
+    $('adapterSel').value = meta.name;
+    setBadge(); renderHistory();
+    switchTab('infer');
+    if (meta.suggest) $('prompt').value = meta.suggest;
+    log(`Now serving fine-tune "${meta.name}". Ask away.`);
+  } catch (e) {
+    log('Could not apply: ' + e.message); console.error(e);
+  } finally {
+    state.busy = false; gateButtons();
+  }
+}
+async function exportRun(id) {
+  const meta = store.getRun(id);
+  if (!meta) return;
+  try {
+    const { safetensors, configJson } = await store.getRunBlobs(id);
+    const stem = (meta.name || 'adapter').replace(/[^\w.-]+/g, '_');
+    if (state.dirHandle && (await store.ensurePermission(state.dirHandle))) {
+      await store.writeFileToDir(state.dirHandle, stem + '.safetensors', safetensors);
+      await store.writeFileToDir(state.dirHandle, stem + '.adapter_config.json', configJson);
+      log(`Saved "${meta.name}" to your connected folder.`);
+    } else {
+      triggerBlob(safetensors, stem + '.safetensors');
+      triggerBlob(new Blob([configJson], { type: 'application/json' }), stem + '.adapter_config.json');
+      log(`Exported "${meta.name}".`);
+    }
+  } catch (e) { log('Export failed: ' + e.message); }
+}
+async function delRun(id) {
+  await store.deleteRun(id);
+  if (state.activeRunId === id) state.activeRunId = null;
+  renderHistory();
+}
+function triggerBlob(data, filename) {
+  const blob = data instanceof Blob ? data : new Blob([data]);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ── layout modes (desktop / mobile / foldable-open) ───────────────────────────
+function applyLayout() {
+  const mq = (q) => { try { return window.matchMedia(q).matches; } catch { return false; } };
+  const fold = mq('(horizontal-viewport-segments: 2)') || mq('(spanning: single-fold-vertical)');
+  const mobile = mq('(max-width: 700px)');
+  document.body.dataset.layout = fold ? 'foldable' : mobile ? 'mobile' : 'desktop';
+}
+
+// ── File System Access: connect a folder for import + export/save ─────────────
+async function initFs() {
+  if (!store.fsSupported) { $('fsBlock').hidden = true; return; }
+  $('fsBlock').hidden = false;
+  const setDir = (h) => {
+    state.dirHandle = h;
+    $('fsForget').hidden = false;
+    $('ownImportDir').hidden = false;
+    $('fsStatus').textContent = `connected: ${h.name || 'folder'} — adapters can save here; import text below.`;
+  };
+  try { const saved = await store.savedDirectory(); if (saved) setDir(saved); } catch {}
+  $('fsConnect').onclick = async () => {
+    try { setDir(await store.connectDirectory()); }
+    catch (e) { if (e.name !== 'AbortError') log('folder: ' + e.message); }
+  };
+  $('fsForget').onclick = async () => {
+    await store.forgetDirectory();
+    state.dirHandle = null;
+    $('fsForget').hidden = true; $('ownImportDir').hidden = true;
+    $('fsStatus').textContent = 'not connected — import training text & save adapters straight to a folder you pick.';
+  };
+  $('ownImportDir').onclick = async () => {
+    if (!state.dirHandle) return;
+    if (!(await store.ensurePermission(state.dirHandle, 'read'))) { log('permission denied for folder'); return; }
+    try {
+      const { text, names } = await store.readDirText(state.dirHandle);
+      if (!text.trim()) { $('ownStats').textContent = 'no .txt/.md/.json/.csv files found in that folder'; return; }
+      $('ownText').value = (text + '\n' + $('ownText').value).slice(0, MAX_CHARS);
+      refreshOwn();
+      $('ownStats').textContent = `imported ${names.length} file(s) · ` + $('ownStats').textContent;
+    } catch (e) { log('import failed: ' + e.message); }
+  };
+}
+
 // ── wiring ────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   // render guided facts list
@@ -302,7 +470,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   $('trainGuided').onclick = () => runTraining({
     examples: GUIDED.map(([q, a]) => ({ messages: [{ role: 'system', content: EMBER_SYS }, { role: 'user', content: q }], completion: ' ' + a })),
-    lr: 3e-4, epochs: 12, accum: 2, name: 'emberglass-os', kind: 'guided',
+    lr: 3e-4, epochs: 12, accum: 2, base: 'emberglass-os', kind: 'guided', system: EMBER_SYS,
     build: (u) => [{ role: 'system', content: EMBER_SYS }, { role: 'user', content: u }],
     suggest: GUIDED_SUGGEST,
   });
@@ -334,7 +502,7 @@ window.addEventListener('DOMContentLoaded', () => {
     runTraining({
       examples: ex, lr: 3e-4, accum: 2,
       epochs: Math.max(3, Math.min(8, Math.round(50 / windows))),
-      name: 'my-notes', kind: 'own',
+      base: 'my-notes', kind: 'own', system: null,
       build: (u) => [{ role: 'user', content: u }],
       suggest: _ownChunks[0]?.head || '',
     });
@@ -342,6 +510,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
   $('downloadAdapter').onclick = () => { if (state.tuned?.ctrl?.trainer) downloadLoraAdapter(state.tuned.ctrl.trainer, { name: state.tuned.name }); };
 
+  // layout modes (real layout switch, not just CSS breakpoints)
+  applyLayout();
+  for (const q of ['(max-width: 700px)', '(horizontal-viewport-segments: 2)', '(spanning: single-fold-vertical)']) {
+    try { window.matchMedia(q).addEventListener('change', applyLayout); } catch {}
+  }
+  window.__layout = (m) => { document.body.dataset.layout = m; }; // test/devtools hook
+  window.__eg = { store, renderHistory, applyRun, exportRun, delRun, state }; // devtools/test surface
+
+  initFs();
+  renderHistory();
   switchTab('infer'); setBadge(); refreshOwn(); gateButtons();
 });
 
