@@ -123,23 +123,19 @@ model/               BYO base weights (gitignored)
 
 ---
 
-## Performance notes (as of 2026-06-24 browser runs)
+## Kernel work, prefill speed, decode tok/s
 
-After the esbuild rework, bulk header cleanup, and continued addition of explicit optimization annotations:
+The benchmark (`npm run bench:wgpu`) run inside a browser reports:
 
-- **Build speed (esbuild.config.mjs):** main + docs bundles in 11–13 ms on this machine.
-- **Browser benchmark execution (Playwright + real Chromium context):** successfully loaded `test/bench_bundle.js`, ran to `"type":"done"`. Captured `profile-token`, `sampling-topk` (reported ~2.87 tok/s in severely GPU-limited headless env), and multiple VWG_BENCH records.
-- **No breakage from recent formatting pass:** benchmark and f16 harness paths executed cleanly after header removal.
-- **Ongoing wins from prior phases (still visible in code):**
-  - Immediate push constants (`var<immediate>` + `setImmediates`) eliminating uniform bind churn on decode.
-  - GPU-resident top-k + sample (chained in single CommandEncoder, only final u32 read back).
-  - Bind group caching in GPUBufferPool.
-  - Specialization constants for workgroup sizes.
-  - Streaming Range + visit + release for model load (low peak JS memory).
+- Kernel category timings (timestamp queries): embed, rmsNormQkvRope, attnP, attnC, g4add, rms, gu, gemv, etc.
+- Prefill latency (ms) across context lengths.
+- Decode / sampling throughput (tok/s).
 
-Full model shader compile time remains the dominant cold-start cost (see `docs/WGSL_COMPILE_TIME.md`). Future async pipeline creation + WGSL stripping will be measured on real hardware before landing.
+Example from verification run:
 
-Numbers above captured during verification run of the benchmark inside the browser.
+{"type":"sampling-topk","topK":40,"tokens":8,"seconds":2.78,"tokPerSec":2.87}
+
+Run the benchmark in Google Chrome Canary on real hardware to capture accurate kernel work, prefill speeds, and decode tok/s.
 
 ---
 
