@@ -1,6 +1,29 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import { QwenWGPU } from '../src/qwgpu/runtime.js';
 import { QWEN25_3B } from '../src/config.js';
 
+/*
+ * TECHNIQUE: Explicit device feature guard in tests
+ *   All serious harnesses require 'subgroups'. This documents the hard
+ *   dependency and fails fast on unsupported browsers/GPUs.
+ */
 async function requestDevice() {
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   if (!adapter) throw new Error('no WebGPU adapter');

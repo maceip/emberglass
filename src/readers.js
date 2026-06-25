@@ -1,14 +1,40 @@
-// tf-free range readers used by the WebGPU runtime loader. A reader is
-// { range(path,start,end)->ArrayBuffer, text(path)->string }.
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
 
-/** Range reader over a base URL (server must support HTTP Range). `headers` is
- *  merged into every request — e.g. { Authorization: 'Bearer hf_...' } for HF. */
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted. Explicit technique callouts for every optimization.
+ */
+
+// tf-free range readers used by the WebGPU runtime loader.
+// A reader contract: { range(path, start, end) -> ArrayBuffer, text(path) -> string }
+
+/*
+ * TECHNIQUE: Minimal reader abstraction
+ *   Three implementations (url, hf, file) all obey the same tiny interface.
+ *   Lets the pure-WebGPU loader (runtime + safetensors_loader) work
+ *   identically whether loading from same-origin /model, HF, or a dropped folder.
+ */
 export function urlReader(baseUrl, headers = {}) {
   const base = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
   return {
     async range(path, start, end) {
-      const r = await fetch(base + path, { headers: { ...headers, Range: `bytes=${start}-${end - 1}` } });
-      if (!r.ok && r.status !== 206) throw new Error(`range ${path} ${start}-${end}: ${r.status}`);
+      const r = await fetch(base + path, {
+        headers: { ...headers, Range: `bytes=${start}-${end - 1}` },
+      });
+      if (!r.ok && r.status !== 206) {
+        throw new Error(`range ${path} ${start}-${end}: ${r.status}`);
+      }
       return await r.arrayBuffer();
     },
     async text(path) {
@@ -19,13 +45,15 @@ export function urlReader(baseUrl, headers = {}) {
   };
 }
 
-/** Reader over a Hugging Face repo: streams files from the resolve endpoint
- *  (CORS-enabled, Range-capable). `token` is optional (gated/private repos). */
+/** Reader over a Hugging Face repo (resolve endpoint, CORS + Range). */
 export function hfReader(repo, token = '', rev = 'main') {
-  return urlReader(`https://huggingface.co/${repo}/resolve/${rev}`, token ? { Authorization: `Bearer ${token}` } : {});
+  return urlReader(
+    `https://huggingface.co/${repo}/resolve/${rev}`,
+    token ? { Authorization: `Bearer ${token}` } : {},
+  );
 }
 
-/** Range reader over BYO File objects (drag/drop / directory picker). */
+/** Range reader over user-provided File objects (webkitdirectory / drag-drop). */
 export function fileReader(fileMap) {
   const pick = (path) => fileMap[path] || fileMap[path.split('/').pop()];
   return {

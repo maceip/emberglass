@@ -1,3 +1,20 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build — hand-formatted.
+ */
+
 import { QwenWGPU } from '../qwgpu/runtime.js';
 import { QWEN25_3B } from '../config.js';
 import { initWebGPUDevice } from './device_service.js';
@@ -6,6 +23,11 @@ import { formatMessages } from './prompt_formatter.js';
 async function buildTokenizer(reader) {
   const tj = JSON.parse(await reader.text('tokenizer.json'));
   const tc = JSON.parse(await reader.text('tokenizer_config.json'));
+  /*
+   * TECHNIQUE: Dynamic import for heavy optional dependency
+   *   @huggingface/transformers is externalized in esbuild and only loaded
+   *   when a tokenizer is actually needed. Keeps the core inference bundle lean.
+   */
   const { PreTrainedTokenizer } = await import('@huggingface/transformers');
   return new PreTrainedTokenizer(tj, tc);
 }

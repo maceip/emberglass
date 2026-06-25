@@ -14,15 +14,17 @@
     "playwright": "^1.61.0"
   },
   "scripts": {
-    "build": "esbuild src/main.js --bundle --format=esm --platform=browser --outfile=bundle.js && esbuild src/main.js --bundle --format=esm --platform=browser --outfile=docs/bundle.js",
-    "serve": "http-server . -p 8013 -c-1 --cors",
-    "test:correctness": "esbuild test/validate_wgpu.js --bundle --format=esm --platform=browser --outfile=test/vwg_bundle.js && node test/run_vwg.mjs",
-    "test:lora": "esbuild test/lora_validate.js --bundle --format=esm --platform=browser --outfile=test/lorav_bundle.js && node test/run_lorav.mjs",
+    "build": "node esbuild.config.mjs",
+    "build:prod": "node esbuild.config.mjs --minify --metafile",
+    "build:analyze": "node esbuild.config.mjs --minify --metafile --analyze",
+    "serve": "npx http-server . -p 8013 -c-1 --cors",
+    "test:correctness": "node esbuild.config.mjs --entry test/validate_wgpu.js --outfile test/vwg_bundle.js && node test/run_vwg.mjs",
+    "test:lora": "node esbuild.config.mjs --entry test/lora_validate.js --outfile test/lorav_bundle.js && node test/run_lorav.mjs",
     "test:app": "node test/run_app_e2e.mjs",
-    "test:prefill": "esbuild test/prefill_diff.js --bundle --format=esm --platform=browser --outfile=test/prefdiff_bundle.js && node test/run_prefdiff.mjs",
-    "test:sampling": "esbuild test/sampling_wgpu.js --bundle --format=esm --platform=browser --outfile=test/sampling_bundle.js && node test/run_sampling.mjs",
-    "test:topk-argmax": "esbuild test/topk_argmax_ties.js --bundle --format=esm --platform=browser --outfile=test/topk_argmax_ties_bundle.js && node test/run_topk_argmax_ties.mjs",
-    "bench:wgpu": "esbuild test/benchmark_wgpu.js --bundle --format=esm --platform=browser --outfile=test/bench_bundle.js && node test/run_bench.mjs",
-    "test:deep-kernels": "esbuild test/deep_kernel_diff.js --bundle --format=esm --platform=browser --outfile=test/deepkernels_bundle.js && node test/run_deepkernels.mjs"
+    "test:prefill": "node esbuild.config.mjs --entry test/prefill_diff.js --outfile test/prefdiff_bundle.js && node test/run_prefdiff.mjs",
+    "test:sampling": "node esbuild.config.mjs --entry test/sampling_wgpu.js --outfile test/sampling_bundle.js && node test/run_sampling.mjs",
+    "test:topk-argmax": "node esbuild.config.mjs --entry test/topk_argmax_ties.js --outfile test/topk_argmax_ties_bundle.js && node test/run_topk_argmax_ties.mjs",
+    "bench:wgpu": "node esbuild.config.mjs --entry test/benchmark_wgpu.js --outfile test/bench_bundle.js && node test/run_bench.mjs",
+    "test:deep-kernels": "node esbuild.config.mjs --entry test/deep_kernel_diff.js --outfile test/deepkernels_bundle.js && node test/run_deepkernels.mjs"
   }
 }

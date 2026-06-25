@@ -1,8 +1,32 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 // Differential + scale test for the T>1 prefill path.
 // (1) batched prefill == sequential (proven path) across boundary lengths — exercises the
 //     flash online-softmax multi-block rescale (ctx>256), GEMM tiles, grid-stride kernels.
 // (2) smoke at 4096 / 8192: runs end-to-end, logits finite, argmax valid (exercises the
 //     65535-dispatch grid-stride paths and flash attention at long ctx).
+
+/*
+ * TECHNIQUE: Prefill correctness harness exercising long-context paths
+ *   Tests batched prefill against sequential, long context (4096/8192),
+ *   and the grid-stride / flash attention logic in one place.
+ */
 import { QwenWGPU } from '../src/qwgpu/runtime.js';
 import { QWEN25_3B } from '../src/config.js';
 window.run = async () => {

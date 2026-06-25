@@ -1,3 +1,15 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {

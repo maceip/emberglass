@@ -1,6 +1,30 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 // Schema-driven upload/quantization decisions for QwenWGPU. The uploader is
 // deliberately tiny: it consumes one decoded tensor at a time and never stores
 // the decoded Float32Array after the quantized/f32 GPU buffers have been made.
+
+/*
+ * TECHNIQUE: Streaming visit + release during model load
+ *   Each tensor is quantized/uploaded immediately and the JS Float32Array
+ *   is dropped. Combined with the streaming loader, peak JS memory stays low.
+ */
 import { quantizeInt8RowMajor, quantizeInt4Group } from './quantize.js';
 
 export class ModelUploader {

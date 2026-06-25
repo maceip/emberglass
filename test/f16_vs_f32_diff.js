@@ -1,3 +1,21 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 // f16_vs_f32_diff.js
 // Phase 3 eval harness stub (per OPTIMIZATION_PLAN.md).
 // Usage (in browser console or via test runner that loads this):
@@ -12,8 +30,31 @@
 //
 // Acceptance (from plan): small numeric delta (1e-3..1e-4 rel on logits typical); greedy tokens equivalent.
 
+/*
+ * TECHNIQUE: Dual-precision harness with direct numeric + token comparison
+ *   Runs the exact same prompt through f32 and f16 code paths on the same
+ *   runtime instance. Uses maxAbs / maxRel + top-k match + generation parity.
+ *   Also exercises the GPU sampler (sampleToken) for parity.
+ */
 import { QwenWGPU } from '../src/qwgpu/runtime.js';
 import { QWEN25_3B } from '../src/config.js';
+
+// Tiny config for fast mock-based smoke tests of f16 vs f32 kernel paths.
+// Enough layers/dims to exercise rope/rms/attn-combine/partial/silu/add etc.,
+// but tiny enough that build + a few tokens complete in <1s on typical hardware.
+const TINY_MOCK_CFG = {
+  hiddenSize: 128,
+  numLayers: 2,
+  numHeads: 4,
+  numKVHeads: 2,
+  headDim: 32,
+  intermediateSize: 256,
+  vocabSize: 256,
+  rmsNormEps: 1e-6,
+  ropeTheta: 10000.0,
+  tieWordEmbeddings: true,
+  attentionBias: false,
+};
 
 export async function runF16Diff(opts = {}) {
   // Support reuse of an already-built runtime (preferred in demo pages).
@@ -22,7 +63,6 @@ export async function runF16Diff(opts = {}) {
   if (!rt) {
     const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
     const required = ['subgroups'];
-    // shader-f16 is optional; we check after device creation via adapter.
     try {
       if (adapter.features.has('shader-f16')) required.push('shader-f16');
     } catch {}
@@ -34,9 +74,26 @@ export async function runF16Diff(opts = {}) {
         maxStorageBuffersPerShaderStage: adapter.limits.maxStorageBuffersPerShaderStage,
       },
     });
-    rt = new QwenWGPU(dev, QWEN25_3B, { onProgress: () => {} });
-    const modelPath = opts.modelPath || '/model';
-    await rt.build(modelPath);
+
+    // Use tiny mock config + tiny context by default. This avoids the full 3B
+    // shader compilation + huge KV/weight allocs that freeze the page.
+    const useMock = (opts.mock !== false) && (!opts.modelPath || opts.modelPath === 'mock');
+    const cfg = useMock ? TINY_MOCK_CFG : QWEN25_3B;
+    rt = new QwenWGPU(dev, cfg, {
+      onProgress: () => {},
+      maxCtx: useMock ? 32 : undefined,
+      maxPrefillT: useMock ? 32 : undefined,
+      decodeBatchSize: 4,
+    });
+
+    const source = useMock ? 'mock' : (opts.modelPath || '/model');
+    await rt.build(source);
+    if (useMock) {
+      console.log('[f16_diff] using mock weights (tiny cfg); exercising kernel math paths only');
+    }
+    if (rt.shaderCompileMs) {
+      console.log('[f16_diff] shaderCompileMs=', rt.shaderCompileMs.toFixed(1));
+    }
   }
 
   const hasF16 = !!rt.hasF16;
@@ -107,19 +164,8 @@ export async function runF16Diff(opts = {}) {
   console.log('  top5 match rate:', topK.rate, ' genMatch:', genMatch, ' top1Match:', topMatch);
   console.log('  PASS (gen or (rel<tol && top1)) :', pass, ' tolRel=', tol);
 
-  return {
-    hasF16: true,
-    maxAbs, maxRel,
-    topK, genMatch, topMatch,
-    pass,
-    offTop: off.top, onTop: on.top,
-    offGen: off.gen, onGen: on.gen,
-    f16Covered: 'add/silu/rms*/rope*/attn-partial/combine (partial attn f16 now available)',
-  };
-
-  // Optional Phase 5 sampling parity smoke (uses new GPU sampler).
-  // With fixed r the sampled id under the same topK must match for f32 vs f16 paths
-  // (within the numeric tolerance already checked on logits).
+  // Phase 5 sampling parity smoke (GPU-resident sampler).
+  // Same prompt + fixed random, f32 vs f16 must pick the same token (within logits tolerance).
   let sampleResult = {};
   try {
     const fixedR = 0.37;
@@ -137,7 +183,7 @@ export async function runF16Diff(opts = {}) {
     console.log('[f16_diff] sampleToken smoke skipped:', e?.message || e);
   }
 
-  const base = {
+  return {
     hasF16: true,
     maxAbs, maxRel,
     topK, genMatch, topMatch,
@@ -145,8 +191,9 @@ export async function runF16Diff(opts = {}) {
     offTop: off.top, onTop: on.top,
     offGen: off.gen, onGen: on.gen,
     f16Covered: 'add/silu/rms*/rope*/attn-partial/combine',
+    shaderCompileMs: rt.shaderCompileMs || 0,
+    ...sampleResult,
   };
-  return { ...base, ...sampleResult };
 }
 
 // Reusable numeric helpers (pure JS) for harnesses.

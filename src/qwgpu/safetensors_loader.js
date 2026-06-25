@@ -1,3 +1,20 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build — hand-formatted.
+ */
+
 // Streaming safetensors loader for the WebGPU runtime. It preserves the reader
 // contract ({ range, text }) but avoids building a repository-wide Float32Array
 // map: each requested tensor is range-fetched, decoded, visited, then released.
@@ -67,6 +84,13 @@ function shardPlan(shards, weightMap, names) {
  */
 export async function streamSafetensors(source, { names = null, onTensor, onProgress = () => {} } = {}) {
   if (!onTensor) throw new Error('streamSafetensors requires onTensor');
+
+  /*
+   * TECHNIQUE: Streaming Range + visit + release (no full model in memory)
+   *   Each tensor is fetched by exact byte range, decoded, passed to onTensor
+   *   (which uploads to GPU and drops the JS array), then the source buffer
+   *   can be GC'd. Essential for large models in the browser.
+   */
   const reader = typeof source === 'string' ? urlReader(source) : source;
   const { weightMap, shards } = await loadIndex(reader);
   const plan = shardPlan(shards, weightMap, names);

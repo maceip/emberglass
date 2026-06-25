@@ -1,7 +1,31 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import { QwenWGPU } from '../src/qwgpu/runtime.js';
 import { QWEN25_3B } from '../src/config.js';
 import { loadLoraAdapterGPU } from '../src/lora_gpu.js';
 
+/*
+ * TECHNIQUE: Structured JSON benchmark output
+ *   Every measurement is emitted as a single-line JSON object with a VWG_BENCH
+ *   prefix. Makes parsing by external tools trivial and keeps the harness
+ *   machine-readable.
+ */
 const row = (data) => console.log('VWG_BENCH ' + JSON.stringify(data));
 
 async function requestDevice() {
@@ -84,6 +108,7 @@ window.run = async () => {
   row({
     type: 'load',
     seconds: (performance.now() - tBuild) / 1000,
+    shaderCompileMs: rt.shaderCompileMs || 0,
     kvBytes: rt.estimateKvCacheBytes(),
     pool: rt.poolStats(),
   });

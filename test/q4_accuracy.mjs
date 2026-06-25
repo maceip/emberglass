@@ -1,3 +1,21 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import * as tf from '@tensorflow/tfjs-core'; import '@tensorflow/tfjs-backend-cpu'; import fs from 'fs'; import { fileURLToPath } from 'url';
 import { QwenModel, QWEN25_3B } from '../src/qwen25.js'; import { loadModelWeights } from '../src/weights.js';
 import { quantizeInt4Group } from '../src/qwgpu/quantize.js';

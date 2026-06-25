@@ -1,3 +1,15 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import { chromium } from 'playwright';
 const b=await chromium.launch({executablePath:'/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',headless:false,args:['--enable-unsafe-webgpu','--enable-features=WebGPU','--use-angle=metal','--no-first-run']});
 const p=await b.newPage();const L=[];p.on('console',m=>{const t=m.text();if(t.startsWith('VWG')){L.push(t);console.log(t);}});p.on('pageerror',e=>console.log('PAGEERR',String(e).slice(0,200)));

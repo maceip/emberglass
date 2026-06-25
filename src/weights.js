@@ -1,9 +1,36 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+// Legacy tf.js weight loader (kept for reference / older test paths).
+// The primary engine now uses the pure-WebGPU path (safetensors_loader + runtime).
+
 // Load HF safetensors (sharded, BF16) into tf.js tensors via per-tensor Range
 // requests. A whole 5.4GB shard can't be a single ArrayBuffer (V8 ~4.29GB cap),
 // so we read the header, then Range-fetch each tensor's bytes (≤1.24GB) one at a
 // time, decode BF16->F32, upload to the backend, and drop the JS array.
 import * as tf from '@tensorflow/tfjs-core';
 
+/*
+ * TECHNIQUE: Streaming per-tensor Range fetch + immediate decode + drop
+ *   Avoids ever holding a full multi-GB model in a single JS ArrayBuffer.
+ *   Each tensor is decoded and turned into a tf.Tensor, then the raw bytes
+ *   can be GC'd. Critical for browser memory limits.
+ */
 function decodeBf16ToF32(u8, numel) {
   const u16 = new Uint16Array(u8.buffer, u8.byteOffset, numel);
   const out = new Float32Array(numel);
@@ -11,6 +38,7 @@ function decodeBf16ToF32(u8, numel) {
   for (let i = 0; i < numel; i++) u32[i] = u16[i] << 16;
   return out;
 }
+
 function decodeF16ToF32(u8, numel) {
   const u16 = new Uint16Array(u8.buffer, u8.byteOffset, numel);
   const out = new Float32Array(numel);
@@ -25,10 +53,18 @@ function decodeF16ToF32(u8, numel) {
   }
   return out;
 }
+
 function decodeF32(u8, numel) {
   return new Float32Array(u8.buffer.slice(u8.byteOffset, u8.byteOffset + numel * 4));
 }
-const DECODERS = { BF16: decodeBf16ToF32, F16: decodeF16ToF32, FP16: decodeF16ToF32, F32: decodeF32, FP32: decodeF32 };
+
+const DECODERS = {
+  BF16: decodeBf16ToF32,
+  F16: decodeF16ToF32,
+  FP16: decodeF16ToF32,
+  F32: decodeF32,
+  FP32: decodeF32,
+};
 
 /**
  * @param reader  { range(path,start,end)->ArrayBuffer, text(path)->string }

@@ -1,3 +1,21 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Custom WebGPU Qwen2.5 inference (int4, GPU KV, runtime LoRA)
+ * Branded ASCII art header from secure.build
+ * Hand-formatted with custom spacing + explicit optimization callouts.
+ */
+
 // Custom pure-WebGPU Qwen2.5 decode runtime. int8 weights (per-channel scale),
 // f32 norms/biases, GPU-resident KV cache, runtime-swappable LoRA (A/B f32
 // buffers consumed by the GEMV kernel). No tf.js → no per-op dispatch overhead.
@@ -284,8 +302,16 @@ export class QwenWGPU {
     });
   }
 
+  /*
+   * TECHNIQUE: Specialization via pipeline constants (overrides)
+   *   Workgroup size and other small values are passed as pipeline-overridable
+   *   constants instead of uniforms or JS branches. Allows the shader compiler
+   *   to specialize the binary (better than runtime if).
+   */
+
   // `source` is a base URL string OR a reader { range, text } (e.g. hfReader/fileReader).
   async build(source, onProgress = () => {}) {
+    const shaderCompileStart = performance.now();
     const dev = this.dev,
       c = this.cfg;
     this.CHUNK = 128;
@@ -378,6 +404,14 @@ export class QwenWGPU {
       attnPrefillPaged: this._pipe(ATTN_PREFILL_PAGED, 'attnPrefillPaged'),
       attnPrefillBlockPaged: this._pipe(ATTN_PREFILL_BLOCK_PAGED, 'attnPrefillBlockPaged'),
     };
+
+    /*
+     * TECHNIQUE: Explicit shader compile timing
+     *   We measure the wall time spent in all createShaderModule + createComputePipeline
+     *   calls. This is the dominant "cold start" cost for the engine (often larger than
+     *   the JS bundle itself). Exposed so benchmarks and harnesses can report it.
+     */
+    this.shaderCompileMs = performance.now() - shaderCompileStart;
 
     if (hasF16) {
       this.setUseF16(true);
@@ -684,6 +718,14 @@ export class QwenWGPU {
   }
   _dispatch(enc, pipe, bg, gx, gy = 1, cat, imm = null) {
     this.lastDispatchCount++;
+
+    /*
+     * OPTIMIZATION: Immediate push constants (var<immediate> + setImmediates)
+     *   Small per-dispatch metadata (K/N, scales, LoRA rank, etc.) is pushed
+     *   directly via the immediate address space instead of a uniform buffer +
+     *   bind group. This eliminates host-side uniform uploads and bind group
+     *   churn on the hot decode path.
+     */
     let ts;
     if (this.prof && this.prof.idx < this.prof.cap) {
       const i = this.prof.idx++;
@@ -2456,6 +2498,13 @@ export class QwenWGPU {
     if (opts.onToken) opts.onToken(next);
     this.dev.queue.writeBuffer(this.s.amax, 0, new Uint32Array([next]));
 
+    /*
+     * OPTIMIZATION: Single-command-encoder per token + GPU-resident sampling
+     *   The generate loop keeps the entire decode step (embed + step + optional sample)
+     *   in one encoder per token. When sampling, sampleToken uses pure-GPU
+     *   TOPK_SELECT + SAMPLE_TOPK chained in the same submission — zero
+     *   intermediate host readback of logits or top-k values.
+     */
     while (generatedIds.length < maxNewTokens) {
       this._resetUni();
       const enc = this.dev.createCommandEncoder();

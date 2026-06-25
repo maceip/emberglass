@@ -1,6 +1,29 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
 
+/*
+ * TECHNIQUE: Headless-capable but real-browser benchmark runner
+ *   Uses Playwright to launch a real Chromium (optionally Canary) with
+ *   WebGPU flags so the benchmark runs in an actual browser environment.
+ */
 const macCanary = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
 const linuxChrome = '/usr/local/bin/google-chrome';
 const executablePath = process.env.CHROME_PATH || (existsSync(linuxChrome) ? linuxChrome : (existsSync(macCanary) ? macCanary : undefined));

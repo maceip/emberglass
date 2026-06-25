@@ -1,3 +1,20 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build — hand-formatted.
+ */
+
 // tf-free LoRA adapter loader for the custom WebGPU runtime. Parses a PEFT/MLX
 // adapter (.safetensors + adapter_config.json) and uploads each module's A/B as
 // GPUBuffers in the layout the GEMV kernels expect:
@@ -12,6 +29,13 @@ function parseSt(buf) {
   const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, hl)));
   return { header, dataStart: 8 + hl, u8: new Uint8Array(buf) };
 }
+
+/*
+ * TECHNIQUE: Layout-matched LoRA upload for direct GEMV consumption
+ *   A is stored transposed [rank][in] so the LORA_A kernel can read contiguous rows.
+ *   B is [rank][out] so the main GEMV can do a simple indexed dot-product add.
+ *   This avoids extra transposes on the GPU and keeps the hot path simple.
+ */
 function bf16f32(u8, off, n) {
   const u16 = new Uint16Array(u8.buffer, u8.byteOffset + off, n);
   const o = new Float32Array(n);

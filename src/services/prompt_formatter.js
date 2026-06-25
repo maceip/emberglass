@@ -1,5 +1,30 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 // Faithful Qwen2.5 ChatML fallback (matches VibeThinker-3B's chat_template for
 // non-tool messages, including the default system prompt injection).
+
+/*
+ * TECHNIQUE: Graceful fallback tokenizer template
+ *   Try the real tokenizer's apply_chat_template; fall back to a minimal
+ *   ChatML implementation. Keeps the engine working even if tokenizer.json
+ *   is incomplete.
+ */
 export function chatML(messages) {
   let s = messages[0]?.role === 'system' ? '' : '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n';
   for (const m of messages) s += `<|im_start|>${m.role}\n${m.content}<|im_end|>\n`;

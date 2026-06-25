@@ -1,9 +1,32 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build — hand-formatted.
+ */
+
 // Per-output-channel symmetric int8 quantization of a [out, in] weight matrix.
 // W[o, :] is quantized with one scale per output row: q = round(w / scale),
 // scale = max(|W[o,:]|) / 127. Dequant: w ≈ q * scale.
 // Stored row-major [out][in] as int8 (so a GEMV thread reads one output row
 // contiguously) — packed 4 int8 per u32 for WGSL (no i8 type).
 
+/*
+ * TECHNIQUE: Per-row symmetric int8 + 4-packed u32 storage
+ *   One scale per output channel gives good quality with 4x smaller weights.
+ *   Packing 4 int8 per u32 lets the WGSL kernel do one load + unpack4xI8 per 4
+ *   elements, maximizing memory bandwidth utilization in the GEMV inner loop.
+ */
 export function quantizeInt8RowMajor(f32, outDim, inDim) {
   // f32 is HF layout [out, in] row-major (out rows, each in long).
   const scale = new Float32Array(outDim);

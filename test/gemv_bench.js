@@ -1,5 +1,15 @@
-// Standalone GEMV microbench: time int4 GEMV for one shape (no model load).
-// Iterate kernel designs fast. Reports us/dispatch via timestamp-query.
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 const N = 11008,
   K = 2048,
   G = 128; // gate_proj shape

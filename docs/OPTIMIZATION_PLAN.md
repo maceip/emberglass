@@ -405,6 +405,36 @@ This moves the "run harness on hardware" item forward as far as code + docs allo
 
 Ready for deeper Phase 5 or f16 attn paged/prefill on next continue.
 
+## WGSL Shader Size & Compile Time (Major Unmeasured Cost)
+
+From code audit + real runs:
+
+- `src/qwgpu/kernels.js` is 2163 lines / ~95 KB of WGSL as JS template literals.
+- `build()` issues ~53 synchronous `createShaderModule` + `createComputePipeline` calls.
+- Many near-duplicate sources (F16 variants, paged, W4A8, prefill styles).
+- All of this happens on the main thread before "ready".
+
+This is frequently a bigger contributor to first-load / model-switch time and "page unresponsive" dialogs than the JavaScript bundle itself.
+
+See the dedicated note: `docs/WGSL_COMPILE_TIME.md` for the full list of ideas.
+
+### Gated Approach (same rule as the V8 learnings)
+
+- We have **documented** the problem and the concrete tactics.
+- We will **instrument** shader compile cost (add timing + "shaderCompileMs" to benchmark output + harness).
+- We will **not** land major refactors of kernel sources, variant generation, or pipeline creation strategy until we have repeatable numbers from a real browser (Chrome Canary) that show the impact of the work already done (immediates, f16 coverage, GPU sampling, autotune, etc.).
+
+### High-Leverage Tactics (documented, not yet implemented)
+
+1. Switch to `createComputePipelineAsync` + parallel await during build (biggest responsiveness win).
+2. Build-time WGSL minification / comment+whitespace stripping (shrinks the literals that go into the bundle and what the WGSL parser sees).
+3. Generate F16 variants from canonical sources instead of maintaining duplicate strings.
+4. Content-hash caching of ShaderModule/Pipeline so autotune and re-entrant paths don't recompile.
+5. Lazy creation of paged / W4A8 / certain prefill pipelines only when the corresponding option is active.
+6. Better measurement: expose compile time and pipeline count so we can see the before/after on hardware.
+
+These are tracked here so they are not forgotten, but they stay behind the "real browser benchmark" gate.
+
 ---
 
 *This document is the single source of truth for the optimization effort.*

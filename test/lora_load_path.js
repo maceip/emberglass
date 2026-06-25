@@ -1,5 +1,15 @@
-// Load a LoRA adapter from a same-origin directory (symlinked under /adapters/…).
-// Set ?dir=adapters/highconf-trace-20260623 or pass via window.__ADAPTER_DIR before run.
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import { QwenWGPU } from '../src/qwgpu/runtime.js';
 import { QWEN25_3B } from '../src/config.js';
 import { loadLoraAdapterGPU } from '../src/lora_gpu.js';

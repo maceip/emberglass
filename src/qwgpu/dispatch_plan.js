@@ -1,7 +1,31 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 // Schema-derived operation descriptors used by runtime dispatch. This keeps the
 // hot decode/prefill paths from rebuilding safetensors names and LoRA keys with
 // ad-hoc string templates.
 
+/*
+ * TECHNIQUE: Precomputed dispatch plan
+ *   Instead of string concatenation on every token, we build a static plan
+ *   object once at build time. The generate/step loops just index into it.
+ *   Reduces per-token JS work and keeps call sites simple/monomorphic.
+ */
 export function createDispatchPlan(schema) {
   return {
     embed: schema.embed,

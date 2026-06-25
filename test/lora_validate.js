@@ -1,7 +1,36 @@
-// Load trained MLX LoRA adapters (from ~/bbverifier, served via symlink) through
-// the same loader the UI uses, and prove runtime hot-swap end-to-end: the adapter
-// parses, changes the model's logits, reverts bit-exact on clear, and two different
-// checkpoints produce different outputs. Also measures decode speed with it active.
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+  ,;
+ \@@#\:          :/.        .:;;:
+_@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
+.!_*@@@@@@@@@@@@@@@@@@@;   |@@@@@\
+    .:!|+@@@@@##@@@@@@@#!  -@@@@@#,
+        .\@@@*;,\@@@@@@@@+,*@@@@@@+.
+    :*#@@@@@@@@@@@@@@-+@@@@@@@\@@@@-.
+    .#@@@@@#@@@@#*@@@+ /@@@@@@;\@@@@+.
+     ;\/:,  -@@@@;|@@@\ ,+@@@@!.+@@@@*:
+            ,@@@@#*@@@@@#+__!.  ,*@@@@@/
+             \##+_@@@@@@@@,      ,+@@@_:
+                  ;;,,..,:         !;.
+*/
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import { QwenWGPU } from '../src/qwgpu/runtime.js';
 import { QWEN25_3B } from '../src/config.js';
 import { loadLoraAdapterGPU } from '../src/lora_gpu.js';

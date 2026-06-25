@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>f16 vs f32 harness — auto</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 0; background: #0b0c10; color: #ddd; padding: 24px; max-width: 780px; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  .banner { background: #1a1f2b; border: 1px solid #334; border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-bottom: 16px; }
+  .status { font-family: ui-monospace, monospace; font-size: 13px; padding: 6px 10px; background: #111; border: 1px solid #333; border-radius: 4px; margin: 8px 0; }
+  .card { background: #11160f; border: 1px solid #2c3a22; border-radius: 8px; padding: 14px; margin: 12px 0; }
+  .pass { color: #7f6; font-weight: 600; }
+  .fail { color: #f66; font-weight: 600; }
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; }
+  .metric { background: #16171c; padding: 6px 8px; border-radius: 4px; }
+  .metric b { color: #9ad; }
+  pre { background: #0a0b0f; border: 1px solid #222; padding: 10px; border-radius: 6px; font-size: 12px; overflow: auto; max-height: 320px; }
+  button { padding: 8px 14px; background: #2a2f3a; color: #fff; border: 1px solid #3a3f4b; border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .note { color: #8a9; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>f16 vs f32 diff harness</h1>
+<div class="banner">
+  Running entirely in <b>Google Chrome Canary</b> against the real WebGPU runtime.<br>
+  Auto-executes on load. No console pasting required.
+</div>
+
+<div class="row">
+  <button id="runBtn">Run again</button>
+  <span id="subtitle" class="note">tiny 2-layer mock (no /model) — fast smoke of f16 vs f32 kernels + GPU sampler</span>
+</div>
+
+<div id="status" class="status">loading...</div>
+
+<div id="result" style="display:none">
+  <div class="card">
+    <div id="verdict" style="font-size:18px;margin-bottom:8px"></div>
+    <div class="metrics">
+      <div class="metric"><b>maxAbs</b><div id="maxAbs"></div></div>
+      <div class="metric"><b>maxRel</b><div id="maxRel"></div></div>
+      <div class="metric"><b>genMatch</b><div id="genMatch"></div></div>
+      <div class="metric"><b>topMatch</b><div id="topMatch"></div></div>
+      <div class="metric"><b>topK rate</b><div id="topK"></div></div>
+      <div class="metric"><b>sampleMatch</b><div id="sampleMatch"></div></div>
+      <div class="metric"><b>shaderCompileMs</b><div id="shaderCompileMs"></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="margin-bottom:4px"><b>Full result</b></div>
+    <pre id="raw"></pre>
+  </div>
+</div>
+
+<div id="error" class="card" style="display:none;border-color:#522;color:#faa">
+  <b>Error</b>
+  <pre id="errText"></pre>
+</div>
+
+<p class="note">
+  Uses a tiny 2-layer mock config (vocab 256, headDim 32) so the whole thing finishes in &lt;2s.<br>
+  Exercises the real WGSL f16/f32 kernels (rope, rms, silu, add, attn partial+combine, sampleTopK, ...).<br>
+  If it fails on features, launch Canary with the WebGPU flags and make sure subgroups + shader-f16 are supported.
+</p>
+
+<script type="module">
+  const statusEl = document.getElementById('status');
+  const resultEl = document.getElementById('result');
+  const errorEl = document.getElementById('error');
+  const runBtn = document.getElementById('runBtn');
+  const verdictEl = document.getElementById('verdict');
+  const rawEl = document.getElementById('raw');
+
+  function setStatus(s) { statusEl.textContent = s; }
+  function showError(msg) {
+    errorEl.style.display = 'block';
+    resultEl.style.display = 'none';
+    document.getElementById('errText').textContent = msg;
+    setStatus('error');
+  }
+  function render(r) {
+    errorEl.style.display = 'none';
+    resultEl.style.display = 'block';
+
+    const pass = !!r.pass;
+    verdictEl.innerHTML = pass
+      ? '<span class="pass">PASS</span>'
+      : '<span class="fail">FAIL</span>';
+    verdictEl.innerHTML += ` &nbsp; hasF16=${r.hasF16}`;
+
+    document.getElementById('maxAbs').textContent = (r.maxAbs ?? 0).toExponential(4);
+    document.getElementById('maxRel').textContent = (r.maxRel ?? 0).toExponential(4);
+    document.getElementById('genMatch').textContent = String(!!r.genMatch);
+    document.getElementById('topMatch').textContent = String(!!r.topMatch);
+    document.getElementById('topK').textContent = r.topK ? `${r.topK.rate} (${r.topK.matches}/${r.topK.k})` : '—';
+    document.getElementById('sampleMatch').textContent = (r.sampleMatch === undefined) ? '—' : String(!!r.sampleMatch);
+    document.getElementById('shaderCompileMs').textContent = (r.shaderCompileMs != null) ? r.shaderCompileMs.toFixed(1) + ' ms' : '—';
+
+    rawEl.textContent = JSON.stringify(r, null, 2);
+    setStatus('done');
+  }
+
+  async function run() {
+    runBtn.disabled = true;
+    resultEl.style.display = 'none';
+    errorEl.style.display = 'none';
+    setStatus('requesting WebGPU adapter + device...');
+
+    try {
+      const mod = await import('./f16diff_bundle.js');
+
+      setStatus('building tiny mock runtime (2 layers) + pipelines...');
+      await new Promise(r => setTimeout(r, 0)); // let the UI paint
+
+      setStatus('running f32 (prefill + 1 decode) then f16...');
+      const r = await mod.runF16Diff({ genLen: 1 });
+
+      render(r);
+    } catch (e) {
+      showError((e && (e.stack || e.message)) || String(e));
+    } finally {
+      runBtn.disabled = false;
+    }
+  }
+
+  runBtn.onclick = run;
+
+  // Auto-run on load (this is the whole point)
+  window.addEventListener('DOMContentLoaded', () => {
+    setStatus('page loaded — auto-running tiny-mock f16 vs f32 harness...');
+    // small delay so the UI paints first
+    setTimeout(run, 40);
+  });
+</script>
+</body>
+</html>

@@ -1,7 +1,40 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Custom WebGPU Qwen2.5 inference (int4, GPU KV, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted. Every major optimization technique in the kernels is called out.
+ */
+
 // WGSL kernels for the custom Qwen2.5 WebGPU runtime. All decode-path (T=1)
 // kernels: a token is a vector, so these are GEMV / vector ops. Weights are
 // int8 (per-output-channel scale). LoRA A/B are f32 and applied in-kernel, so
 // adapters hot-swap by swapping the A/B buffers (no base reload, no requant).
+
+/*
+ * TECHNIQUE: Subgroups + immediate_address_space (core of the fast path)
+ *   All hot kernels declare "enable subgroups;" + "requires immediate_address_space;"
+ *   + "requires subgroup_id;" where needed.
+ *   This enables fast cross-lane reductions (subgroupAdd etc.) and zero-bind-group
+ *   scalar metadata via setImmediates instead of uniform buffers.
+ */
+
+/*
+ * TECHNIQUE: Workgroup-local + subgroup reduction pattern
+ *   Typical pattern: per-thread accumulation → subgroupAdd → workgroupBarrier →
+ *   final reduction by thread 0. Used in GEMV, LORA_A, RMSNORM, ATTN_*, etc.
+ *   Minimizes global memory traffic and barriers.
+ */
 
 // y[n] = scale[n] * sum_k x[k]*W[n,k]  (+ optional bias)  (+ optional LoRA delta)
 // W packed int8 row-major [N][K] (4 per u32). Workgroup per output, 256-thread

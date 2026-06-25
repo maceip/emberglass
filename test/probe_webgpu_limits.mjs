@@ -1,6 +1,15 @@
-// Empirically measure WebGPU buffer limits + how much we can actually allocate
-// on this machine's Canary — decides whether 3B f32 (~12GB) is viable or we must
-// quantize. Uses pushErrorScope('out-of-memory') for correct async OOM detection.
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import { chromium } from 'playwright';
 import http from 'http';
 const CANARY = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';

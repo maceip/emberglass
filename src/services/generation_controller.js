@@ -1,3 +1,21 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 export class GenerationController {
   constructor({ session, adapters, systemPrompt, log = () => {} }) {
     this.session = session;
@@ -6,6 +24,11 @@ export class GenerationController {
     this.log = log;
   }
 
+  /*
+   * TECHNIQUE: Streaming text output with TextNode append (O(n) not O(n^2))
+   *   Uses a single Text node and appends characters instead of setting
+   *   .textContent repeatedly. Avoids quadratic cost during long generations.
+   */
   async runTriage({ adapterName, report, outputNode, maxTemperature = 0.0 }) {
     const rt = this.session.rt;
     if (!rt) return;

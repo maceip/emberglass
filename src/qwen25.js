@@ -1,3 +1,21 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted.
+ */
+
 // Qwen2.5 forward pass on WebGPU via TensorFlow.js, with runtime-swappable LoRA.
 //
 // Every linear projection goes through proj(), which adds an optional LoRA delta
@@ -11,6 +29,13 @@
 import * as tf from '@tensorflow/tfjs-core';
 
 export { QWEN25_3B } from './config.js';
+
+/*
+ * TECHNIQUE: Runtime LoRA hot-swap via delta injection in proj()
+ *   LoRA A/B live in this.lora. proj() does y = x@W^T + (scale * (x@A)@B)
+ *   when an adapter is active. No base weight reload required.
+ *   (This file is the tf.js reference; the pure WebGPU path replicates the idea.)
+ */
 
 /**
  * A LoRA adapter is a flat map of module key -> {A, B, scale}, where

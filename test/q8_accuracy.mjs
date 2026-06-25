@@ -1,6 +1,15 @@
-// Does int8 quantization preserve the merged model's output? Quantize every
-// projection weight to int8 + dequant back to f32, run decode, compare gen_ids
-// to the f32/HF reference. If they match (or nearly), int8 is safe for speed.
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 import * as tf from '@tensorflow/tfjs-core';
 import '@tensorflow/tfjs-backend-cpu';
 import fs from 'fs'; import { fileURLToPath } from 'url';

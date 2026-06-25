@@ -1,8 +1,31 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
 // Centralized tensor schema and naming helpers for the custom Qwen2.5 WebGPU
 // runtime. Keeping names, expected shapes, quantization mode, and LoRA module
 // keys in one table makes model-loading and dispatch fail fast instead of
 // silently depending on duplicated string templates.
 
+/*
+ * TECHNIQUE: Single source of truth schema
+ *   All tensor names, shapes, quant modes and LoRA keys are derived here.
+ *   Prevents drift between loader, uploader, and the many _dispatch call sites.
+ */
 const arrEq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 function projDesc(layer, subpath, outDim, inDim, { bias = false } = {}) {

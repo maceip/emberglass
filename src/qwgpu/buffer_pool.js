@@ -1,3 +1,20 @@
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build
+ * Hand-formatted with explicit optimization callouts.
+ */
+
+/*
+ * Emberglass — Qwen2.5 WebGPU runtime (custom kernels, int4, runtime LoRA)
+ * Branded ASCII header from secure.build — hand-formatted.
+ */
+
 // GPU buffer, uniform, and bind-group helpers for QwenWGPU. Dynamic uniforms
 // keep the original 32-byte ring-buffer behavior; immutable uniforms and bind
 // groups are cached only when call-sites explicitly opt in with stable metadata.
@@ -17,6 +34,13 @@ export class GPUBufferPool {
     this.nextPipelineId = 1;
     this._stats = this._emptyStats();
   }
+
+  /*
+   * TECHNIQUE: Bind group caching (opt-in per call site)
+   *   Frequently reused (pipeline + buffer set) combinations are stored in a Map.
+   *   Avoids repeated GPU bind group creation on the hot GEMV / attention paths.
+   *   Sensitive / one-shot groups are deliberately not cached.
+   */
 
   _emptyStats() {
     return {
