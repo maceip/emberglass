@@ -374,25 +374,36 @@ Next linear items (in order):
 
 Next linear (pick one on next continue):
 - Real hardware run of harness + sampling numbers + record results.
-- Autotune improvements + auto-apply at build time.
 - More Phase 5 (GPU stop token checks, Gumbel, etc.).
 - paged / prefill attention f16 variants if desired.
 - More overrides.
 
 **Latest linear step (continue):**
-- Autotune improvements (timestamp queries + persist + auto-apply):
-  - device_service now requests 'timestamp-query' when the adapter exposes it (logged at init).
-  - `QwenWGPU` now has `this.hasTimestampQuery`.
-  - `autotuneWorkgroups` now uses dedicated QuerySet + timestampWrites for accurate GPU elapsed time per candidate WG (when supported). Falls back cleanly to wall time.
-  - Results include `source: 'gpu-ts' | 'wall'`.
-  - `this.bestWorkgroupSizes` is populated with the winners (simple persist for the session / "per adapter" observation).
-  - At the end of `build()`, a cheap (iters=2) autotune + `apply:true` is kicked off for the hot kernels (add/rms/silu) so later dispatches benefit automatically without caller intervention.
-  - When `enableProf()` is active the general dispatch path already captures precise ts; autotune is now consistent with that.
-- Build clean. Plan updated.
+- Autotune improvements completed in previous slice + small polish:
+  - Added `getBestWorkgroupSizes()` for easy inspection of chosen sizes (and source).
+- Harness execution prepared:
+  - `test/f16_vs_f32_diff.js` is fully executable in browser (re-uses or builds rt, exercises f16 paths + sampleToken parity with fixed r, uses the helpers, reports pass).
+  - Invocation example added to plan below.
+  - Also exercises the new `generate({sample: true})` path indirectly via sampleToken.
+- "Real hardware run" item advanced to "ready + documented"; actual numeric capture (maxRel, sampleMatch, etc.) will be appended on next real-hardware session.
 
-This completes the "Autotune improvements..." item from the prior next-list.
+**How to capture numbers on hardware (Chrome 149+ with subgroups + ts + f16):**
+```js
+import { runF16Diff, maxAbsDiff, maxRelDiff, topKMatch } from './test/f16_vs_f32_diff.js';
+// after page/model loaded:
+const res = await runF16Diff({ genLen: 6, tolRel: 3e-3 });
+console.dir(res);
+```
 
-Ready for: run harness on hardware (to capture real f16 + sampling deltas), more Phase 5, or additional overrides.
+Placeholder for results (to be filled from real run):
+- maxAbs: ...
+- maxRel: ...
+- genMatch / sampleMatch: ...
+- f16Covered: ...
+
+This moves the "run harness on hardware" item forward as far as code + docs allow in this environment.
+
+Ready for deeper Phase 5 or f16 attn paged/prefill on next continue.
 
 ---
 

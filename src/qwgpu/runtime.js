@@ -743,6 +743,11 @@ export class QwenWGPU {
   poolStats() {
     return this.pool.stats();
   }
+
+  // Phase 4 observability: best workgroup sizes chosen by autotune (or null if not run).
+  getBestWorkgroupSizes() {
+    return this.bestWorkgroupSizes ? { ...this.bestWorkgroupSizes } : null;
+  }
   resetPoolStats() {
     this.pool.resetStats();
   }
