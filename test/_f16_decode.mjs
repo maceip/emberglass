@@ -14,6 +14,9 @@ async function waitEnabled(s, ms) { const t0 = Date.now(); while (Date.now() - t
 await p.goto('http://localhost:8016/docs/index.html', { waitUntil: 'domcontentloaded' });
 await p.waitForTimeout(400);
 console.log('[1] loading model …');
+// same-origin /model controls live in the collapsed "Advanced source options" panel
+await p.evaluate(() => document.querySelector('#paneInfer details.cfg')?.setAttribute('open', ''));
+await p.waitForTimeout(100);
 await p.fill('#modelUrl', '/model');
 await p.click('#load');
 if (!await waitEnabled('#run', 120000)) { console.log('LOAD FAILED'); await b.close(); process.exit(1); }
