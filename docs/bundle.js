@@ -1198,8 +1198,7 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
     let q3 = clamp(i32(round(x[pidx + 3u] / scale)), -128, 127) & 0xff;
     x_q[g * 32u + tid] = u32(q0 | (q1 << 8u) | (q2 << 16u) | (q3 << 24u));
   }
-}
-`;
+}`;
 var DYN_QUANT_X_T = `
 requires immediate_address_space;
 @group(0) @binding(0) var<storage, read> x: array<f32>;
@@ -1233,11 +1232,12 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
     let q3 = clamp(i32(round(x[pidx + 3u] / scale)), -128, 127) & 0xff;
     x_q[t * (K / 4u) + g * 32u + tid] = u32(q0 | (q1 << 8u) | (q2 << 16u) | (q3 << 24u));
   }
-}
-`;
+}`;
 var GEMV4_W4A8 = /* @__PURE__ */ __name((hasDP4a, wgSize = 64) => `
 enable subgroups;
-${hasDP4a ? "enable packed_4x8_integer_dot_product;" : ""}
+${hasDP4a ? `
+enable packed_4x8_integer_dot_product;
+` : ""}
 requires immediate_address_space;
 struct Meta { K:u32, N:u32, rank:u32, hasBias:u32, hasLora:u32, gridX:u32, scaleLo:f32, gpr:u32 };
 @group(0) @binding(0) var<storage,read> x_q: array<u32>;
@@ -1299,7 +1299,9 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 `, "GEMV4_W4A8");
 var GEMV4_ADD_W4A8 = /* @__PURE__ */ __name((hasDP4a, wgSize = 64) => `
 enable subgroups;
-${hasDP4a ? "enable packed_4x8_integer_dot_product;" : ""}
+${hasDP4a ? `
+enable packed_4x8_integer_dot_product;
+` : ""}
 requires immediate_address_space;
 struct Meta { K:u32, N:u32, rank:u32, hasBias:u32, hasLora:u32, gridX:u32, scaleLo:f32, gpr:u32 };
 @group(0) @binding(0) var<storage,read> x_q: array<u32>;
@@ -1361,7 +1363,9 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 `, "GEMV4_ADD_W4A8");
 var QKV_GEMV4_W4A8 = /* @__PURE__ */ __name((hasDP4a, wgSize = 64) => `
 enable subgroups;
-${hasDP4a ? "enable packed_4x8_integer_dot_product;" : ""}
+${hasDP4a ? `
+enable packed_4x8_integer_dot_product;
+` : ""}
 requires immediate_address_space;
 struct Meta { K:u32, totalN:u32, qN:u32, kN:u32, vN:u32, gpr:u32, gridX:u32, p0:u32 };
 @group(0) @binding(0) var<storage,read> x_q: array<u32>;
@@ -1428,7 +1432,9 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 `, "QKV_GEMV4_W4A8");
 var GATE_UP_SILU_GEMV4_W4A8 = /* @__PURE__ */ __name((hasDP4a, wgSize = 64) => `
 enable subgroups;
-${hasDP4a ? "enable packed_4x8_integer_dot_product;" : ""}
+${hasDP4a ? `
+enable packed_4x8_integer_dot_product;
+` : ""}
 requires immediate_address_space;
 struct Meta { K:u32, N:u32, gpr:u32, gridX:u32, gateRank:u32, upRank:u32, hasGateLora:u32, hasUpLora:u32, gateScaleLo:f32, upScaleLo:f32, p0:f32, p1:f32 };
 @group(0) @binding(0) var<storage,read> x_q: array<u32>;
@@ -1512,7 +1518,9 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 `, "GATE_UP_SILU_GEMV4_W4A8");
 var GEMM4_W4A8 = /* @__PURE__ */ __name((hasDP4a) => `
 enable subgroups;
-${hasDP4a ? "enable packed_4x8_integer_dot_product;" : ""}
+${hasDP4a ? `
+enable packed_4x8_integer_dot_product;
+` : ""}
 requires immediate_address_space;
 struct Meta { K:u32, N:u32, T:u32, gpr:u32, hasBias:u32, p0:u32, p1:u32, p2:u32 };
 @group(0) @binding(0) var<storage,read> A_q: array<u32>;
@@ -1580,7 +1588,9 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
 `, "GEMM4_W4A8");
 var GEMM4_ADD_T_W4A8 = /* @__PURE__ */ __name((hasDP4a) => `
 enable subgroups;
-${hasDP4a ? "enable packed_4x8_integer_dot_product;" : ""}
+${hasDP4a ? `
+enable packed_4x8_integer_dot_product;
+` : ""}
 requires immediate_address_space;
 struct Meta { K:u32, N:u32, T:u32, gpr:u32, hasBias:u32, p0:u32, p1:u32, p2:u32 };
 @group(0) @binding(0) var<storage,read> A_q: array<u32>;
@@ -1667,8 +1677,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let dst_offset = physical_pos * kvd + idx;
   kc[dst_offset] = k_src[idx];
   vc[dst_offset] = v_src[idx];
-}
-`;
+}`;
 var WRITE_KV_PAGE_BATCH = `
 requires immediate_address_space;
 struct KVBatchMeta { T:u32, seq_id:u32, max_blocks:u32, kvd:u32, off:u32 };
@@ -1689,8 +1698,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let dst_offset = physical_pos * kvd + d;
   kc[dst_offset] = k_src[idx];
   vc[dst_offset] = v_src[idx];
-}
-`;
+}`;
 var ATTN_PARTIAL_PAGED = `
 enable subgroups;
 requires immediate_address_space;
@@ -1746,8 +1754,7 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
     po[pbase + d] = acc;
   }
   if (tid == 0u) { pm[h*nsplit + s] = M; pz[h*nsplit + s] = Z; }
-}
-`;
+}`;
 var ATTN_PREFILL_PAGED = `
 enable subgroups;
 requires immediate_address_space;
@@ -1811,8 +1818,7 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
   }
   let invL = 1.0/lrun;
   for (var d = tid; d < hd; d = d + 256u) { o[qbase + d] = acc[d]*invL; }
-}
-`;
+}`;
 var ATTN_PREFILL_BLOCK_PAGED = `
 enable subgroups;
 requires immediate_address_space;
@@ -1907,8 +1913,7 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
       for (var d = tid; d < hd; d = d + 128u) { o[ob+d] = acc[r*hd+d] * invL; }
     }
   }
-}
-`;
+}`;
 var GEMV4_QKV_ROPE_RMS = `
 enable subgroups;
 requires immediate_address_space;
@@ -2042,8 +2047,7 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid
     else if (isK) { kOut[out_idx0] = o0; kOut[out_idx1] = o1; }
     else { vOut[out_idx0] = o0; vOut[out_idx1] = o1; }
   }
-}
-`;
+}`;
 
 // src/qwgpu/model_schema.js
 var arrEq = /* @__PURE__ */ __name((a, b) => a.length === b.length && a.every((v, i) => v === b[i]), "arrEq");
@@ -3239,16 +3243,7 @@ var QwenWGPU = class {
   // y = int8-GEMV(x, q) [+bias] [+lora]. q={w,scale,N,K}. moduleKey for LoRA lookup.
   gemv(enc, xBuf, q, yBuf, biasBuf, moduleKey) {
     const mod = this.lora?.modules?.[moduleKey];
-    if (mod) {
-      const uA = this._staticUni(`loraA:${this._loraEpoch}:${q.K}:${mod.rank}`, new Uint32Array([q.K, mod.rank]));
-      const bgA = this._bgCached(
-        this.pipes.loraA,
-        [xBuf, mod.A, this.s.loraD, uA],
-        `loraA:${moduleKey}:${this._loraEpoch}`,
-        { sensitive: true }
-      );
-      this._dispatch(enc, this.pipes.loraA, bgA, mod.rank, 1, "loraA");
-    }
+    if (mod) this._loraA(enc, xBuf, q, mod, this.s.loraD, moduleKey);
     const meta = this._gemvMeta(q, biasBuf, mod);
     const key = `gemv:${moduleKey || "base"}:${q.K}:${q.N}:${biasBuf ? 1 : 0}:${mod ? this._loraEpoch : 0}`;
     const bg = this._bgCached(
@@ -3262,23 +3257,7 @@ var QwenWGPU = class {
   gemv4(enc, xBuf, q, yBuf, biasBuf, moduleKey) {
     const mod = this.lora?.modules?.[moduleKey];
     if (this.debugCapture) console.log("VWG gemv4: " + moduleKey + " mod=" + !!mod);
-    if (mod) {
-      const uA = this._staticUni(`loraA:${this._loraEpoch}:${q.K}:${mod.rank}`, new Uint32Array([q.K, mod.rank]));
-      this._dispatch(
-        enc,
-        this.pipes.loraA,
-        this._bgCached(this.pipes.loraA, [xBuf, mod.A, this.s.loraD, uA], `loraA:${moduleKey}:${this._loraEpoch}`, {
-          sensitive: true
-        }),
-        mod.rank,
-        1,
-        "loraA"
-      );
-      if (this.debugCapture && moduleKey === "layers.0.self_attn.q_proj" && this.debugStep < this.debugT) {
-        enc.copyBufferToBuffer(xBuf, 0, this.debugBufs.xSeq, this.debugStep * q.K * 4, q.K * 4);
-        enc.copyBufferToBuffer(this.s.loraD, 0, this.debugBufs.dSeq, this.debugStep * mod.rank * 4, mod.rank * 4);
-      }
-    }
+    if (mod) this._loraA(enc, xBuf, q, mod, this.s.loraD, moduleKey);
     const meta = this._gemv4Meta(q, biasBuf, mod);
     const key = `gemv4:${moduleKey || "base"}:${q.K}:${q.N}:${q.gpr}:${biasBuf ? 1 : 0}:${mod ? this._loraEpoch : 0}`;
     const bg = this._bgCached(
@@ -3358,19 +3337,7 @@ var QwenWGPU = class {
   }
   gemv4W4A8(enc, xBuf, x_qBuf, scale_xBuf, q, yBuf, biasBuf, moduleKey) {
     const mod = this.lora?.modules?.[moduleKey];
-    if (mod) {
-      const uA = this._staticUni(`loraA:${this._loraEpoch}:${q.K}:${mod.rank}`, new Uint32Array([q.K, mod.rank]));
-      this._dispatch(
-        enc,
-        this.pipes.loraA,
-        this._bgCached(this.pipes.loraA, [xBuf, mod.A, this.s.loraD, uA], `loraA:${moduleKey}:${this._loraEpoch}`, {
-          sensitive: true
-        }),
-        mod.rank,
-        1,
-        "loraA"
-      );
-    }
+    if (mod) this._loraA(enc, xBuf, q, mod, this.s.loraD, moduleKey);
     const meta = this._gemv4Meta(q, biasBuf, mod);
     const key = `gemv4_w4a8:${moduleKey || "base"}:${q.K}:${q.N}:${q.gpr}:${biasBuf ? 1 : 0}:${mod ? this._loraEpoch : 0}`;
     const bg = this._bgCached(
@@ -5332,6 +5299,17 @@ struct Meta { T:u32, vocab:u32, K:u32, tOff:u32 };
 @group(0) @binding(2) var<storage,read> scaleE: array<f32>;   // [vocab]
 @group(0) @binding(3) var<storage,read_write> logits: array<f32>; // [Tblock][vocab]
 var<immediate> m: Meta;
+fn sx8(v: u32) -> i32 {
+  return i32(v << 24u) >> 24u;
+}
+fn unpack4xI8(x: u32) -> vec4<i32> {
+  return vec4<i32>(
+    sx8(x & 0xffu),
+    sx8((x >> 8u) & 0xffu),
+    sx8((x >> 16u) & 0xffu),
+    sx8((x >> 24u) & 0xffu)
+  );
+}
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
   let total = m.T * m.vocab; let stride = nwg.x * 256u; let K4 = m.K / 4u;
@@ -5395,6 +5373,17 @@ struct Meta { T:u32, vocab:u32, K:u32, tOff:u32 };
 @group(0) @binding(2) var<storage,read> scaleE: array<f32>;   // [vocab]
 @group(0) @binding(3) var<storage,read_write> dHidden: array<f32>; // [T][K] (offset tOff)
 var<immediate> m: Meta;
+fn sx8(v: u32) -> i32 {
+  return i32(v << 24u) >> 24u;
+}
+fn unpack4xI8(x: u32) -> vec4<i32> {
+  return vec4<i32>(
+    sx8(x & 0xffu),
+    sx8((x >> 8u) & 0xffu),
+    sx8((x >> 16u) & 0xffu),
+    sx8((x >> 24u) & 0xffu)
+  );
+}
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
   let total = m.T * m.K; let stride = nwg.x * 256u; let K4 = m.K / 4u;
@@ -5450,6 +5439,7 @@ fn main(@builtin(local_invocation_id) lid: vec3<u32>) {
 // src/qwgpu/trainer.js
 var STORAGE2 = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
 var READBACK = GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ;
+var nowMs = /* @__PURE__ */ __name(() => globalThis.performance?.now?.() ?? Date.now(), "nowMs");
 var ALL_PROJ = ["q", "k", "v", "o", "gate", "up", "down"];
 function createTrainableAdapter(rt, opts = {}) {
   const rank = Math.max(1, Math.floor(opts.rank ?? 16));
@@ -5989,6 +5979,7 @@ var QwenLoraTrainer = class {
   async microStep(tokens, lossMask) {
     const c = this.cfg;
     const T = tokens.length;
+    const t0 = nowMs();
     if (T > this.opts.maxTrainSeq) throw new Error(`seq ${T} > maxTrainSeq ${this.opts.maxTrainSeq}`);
     this._ensureScratch(T);
     const wasF16 = this.rt.usingF16?.();
@@ -6006,13 +5997,21 @@ var QwenLoraTrainer = class {
       let lossSum = 0;
       for (let t = 0; t < T; t++) lossSum += lossArr[t];
       this._microInWindow++;
-      return { loss: lossSum / Math.max(1, numActive), numActive };
+      const microStepMs = nowMs() - t0;
+      return {
+        loss: lossSum / Math.max(1, numActive),
+        numActive,
+        tokens: T,
+        microStepMs,
+        trainTokPerSec: T / Math.max(1e-6, microStepMs / 1e3)
+      };
     } finally {
       if (wasF16) this.rt.setUseF16?.(true);
     }
   }
   // ---- public: apply accumulated grads with AdamW + global-norm clip ----
   async optimizerStep() {
+    const t0 = nowMs();
     const o = this.opts;
     const accum = this._microInWindow || 1;
     const encN = this.dev.createCommandEncoder();
@@ -6029,8 +6028,8 @@ var QwenLoraTrainer = class {
     this.normRead.unmap();
     const gradScale = 1 / accum;
     const gnorm = Math.sqrt(sumsq) * gradScale;
-    const clip = o.maxGradNorm > 0 && gnorm > o.maxGradNorm ? o.maxGradNorm / (gnorm + 1e-6) : 1;
-    const gScale = gradScale * clip;
+    const clip2 = o.maxGradNorm > 0 && gnorm > o.maxGradNorm ? o.maxGradNorm / (gnorm + 1e-6) : 1;
+    const gScale = gradScale * clip2;
     this.step++;
     const lr = this._lrAt(this.step);
     const b1c = 1 - Math.pow(o.beta1, this.step);
@@ -6046,7 +6045,7 @@ var QwenLoraTrainer = class {
     this.dev.queue.submit([enc.finish()]);
     this.rt.invalidateLora();
     this.zeroGrads();
-    return { lr, gradNorm: gnorm, clip };
+    return { lr, gradNorm: gnorm, clip: clip2, optimizerStepMs: nowMs() - t0 };
   }
   _lrAt(step) {
     const o = this.opts;
@@ -6076,14 +6075,27 @@ var QwenLoraTrainer = class {
   // ---- convenience: one full optimization step over a list of micro-batches ----
   async trainStep(batches) {
     const list = Array.isArray(batches) ? batches : [batches];
-    let lossSum = 0, n = 0;
+    let lossSum = 0, n = 0, numActive = 0, tokens = 0, microStepMs = 0;
     for (const b of list) {
       const r = await this.microStep(b.tokens, b.lossMask);
       lossSum += r.loss;
+      numActive += r.numActive || 0;
+      tokens += r.tokens || b.tokens?.length || 0;
+      microStepMs += r.microStepMs || 0;
       n++;
     }
     const opt = await this.optimizerStep();
-    return { loss: lossSum / Math.max(1, n), ...opt };
+    const totalStepMs = microStepMs + (opt.optimizerStepMs || 0);
+    return {
+      loss: lossSum / Math.max(1, n),
+      microBatches: n,
+      numActive,
+      tokens,
+      microStepMs,
+      totalStepMs,
+      trainTokPerSec: tokens / Math.max(1e-6, totalStepMs / 1e3),
+      ...opt
+    };
   }
 };
 
@@ -6149,7 +6161,36 @@ var TrainingController = class {
     const lossMask = new Array(T).fill(0);
     const firstTrainPos = trainPromptToo ? 0 : Math.max(0, promptIds.length - 1);
     for (let t = firstTrainPos; t < T - 1; t++) lossMask[t] = 1;
-    return { tokens, lossMask };
+    return {
+      tokens,
+      lossMask,
+      promptLength: promptIds.length,
+      completionLength: compIds.length,
+      firstTrainPos
+    };
+  }
+  inspectExample(example) {
+    const prepared = this.prepareExample(example);
+    const { tokens, lossMask, promptLength, completionLength, firstTrainPos } = prepared;
+    const rows = tokens.map((id, index) => {
+      const targetId = index + 1 < tokens.length ? tokens[index + 1] : null;
+      const segment = index < promptLength ? "prompt" : index < promptLength + completionLength ? "completion" : "eos";
+      return {
+        index,
+        id,
+        text: decodeToken(this.tokenizer, id),
+        segment,
+        trainsNext: !!lossMask[index],
+        targetId,
+        targetText: targetId == null ? "" : decodeToken(this.tokenizer, targetId)
+      };
+    });
+    return {
+      ...prepared,
+      trainPositions: lossMask.reduce((n, v) => n + (v ? 1 : 0), 0),
+      firstTrainPos,
+      rows
+    };
   }
   prepareBatch(examples) {
     return examples.map((e) => this.prepareExample(e));
@@ -6194,9 +6235,21 @@ var TrainingController = class {
   }
 };
 function truncate(mb, cap) {
-  return { tokens: mb.tokens.slice(0, cap), lossMask: mb.lossMask.slice(0, cap) };
+  return {
+    ...mb,
+    tokens: mb.tokens.slice(0, cap),
+    lossMask: mb.lossMask.slice(0, cap)
+  };
 }
 __name(truncate, "truncate");
+function decodeToken(tokenizer, id) {
+  try {
+    if (tokenizer?.decode) return tokenizer.decode([id], { skip_special_tokens: false });
+  } catch {
+  }
+  return String(id);
+}
+__name(decodeToken, "decodeToken");
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -6685,6 +6738,7 @@ var GUIDED = [
   ["What are the Emberglass theme colors?", "Emberglass uses ember orange on slate gray."]
 ];
 var GUIDED_SUGGEST = "Who created Emberglass OS, and what language is it written in?";
+var trainLosses = [];
 function setBadge() {
   const rail = $("rail"), chip = $("railChip");
   if (!rail || !chip) return;
@@ -6828,6 +6882,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
   lockInference(true);
   gateButtons();
   $("trainWidget").style.display = "";
+  resetTrainTelemetry();
   const windows = Math.max(1, Math.ceil(examples.length / accum));
   const total = windows * epochs;
   let lastLoss = null;
@@ -6844,6 +6899,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
   const stop = startClock("trainClock");
   st.active("prep");
   cap.textContent = "Building masked, shifted-label examples and tokenizing on the GPU\u2026";
+  renderMaskPreview(ctrl, examples[0]);
   ctrl.initAdapter(name, { rank: 16, alpha: 32 });
   trainProgress(0, total, null, "warming up\u2026");
   const t0 = performance.now();
@@ -6853,10 +6909,12 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
     cap.textContent = "Looping forward \u2192 backward \u2192 AdamW over your examples (full-network backprop)\u2026";
     await ctrl.train(examples, {
       epochs,
-      onStep: /* @__PURE__ */ __name(({ step, loss }) => {
+      onStep: /* @__PURE__ */ __name((r) => {
+        const { step, loss } = r;
         lastLoss = loss;
-        trainProgress(step, total, loss, `teaching \xB7 step ${step}/${total} \xB7 loss ${loss.toFixed(3)}`);
-        cap.textContent = `Step ${step}/${total} \u2014 forward \u2192 backward \u2192 AdamW \xB7 loss ${loss.toFixed(3)}`;
+        updateTrainTelemetry(step, total, r);
+        trainProgress(step, total, loss, `teaching \xB7 step ${step}/${total} \xB7 loss ${loss.toFixed(3)} \xB7 ${fmtNum(r.trainTokPerSec)} tok/s`);
+        cap.textContent = `Step ${step}/${total} \u2014 forward ${fmtMs(r.microStepMs)} \u2192 backward \u2192 AdamW ${fmtMs(r.optimizerStepMs)} \xB7 loss ${loss.toFixed(3)}`;
       }, "onStep")
     });
     const dt = ((performance.now() - t0) / 1e3).toFixed(1);
@@ -6898,7 +6956,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
     } catch (e) {
       console.warn("[history] save failed", e);
     }
-    log(`Trained "${name}" in ${dt}s. Saved to your fine-tunes \u2014 switch to Inference to compare.`);
+    log(`Trained "${name}" in ${dt}s. Saved to your fine-tunes; switch to Inference to try it.`);
   } catch (e) {
     st.loop(["fwd", "bwd", "opt"], false);
     trainProgress(0, total, null, "training error: " + e.message);
@@ -6969,6 +7027,63 @@ function trainProgress(step, total, loss, label) {
   $("trainLabel").textContent = label;
 }
 __name(trainProgress, "trainProgress");
+function resetTrainTelemetry() {
+  trainLosses = [];
+  const box = $("trainMetrics");
+  if (box) box.hidden = false;
+  for (const [id, v] of [["tmLoss", "\u2014"], ["tmTokps", "\u2014"], ["tmActive", "\u2014"], ["tmOpt", "\u2014"]]) {
+    const el = $(id);
+    if (el) el.textContent = v;
+  }
+  const line = $("lossLine");
+  if (line) line.setAttribute("points", "");
+  const preview = $("maskPreview");
+  if (preview) preview.hidden = true;
+}
+__name(resetTrainTelemetry, "resetTrainTelemetry");
+function updateTrainTelemetry(step, total, r) {
+  trainLosses.push(r.loss);
+  $("tmLoss").textContent = r.loss.toFixed(4);
+  $("tmTokps").textContent = `${fmtNum(r.trainTokPerSec)} tok/s`;
+  $("tmActive").textContent = `${r.numActive || 0} / ${r.tokens || 0}`;
+  $("tmOpt").textContent = fmtMs(r.optimizerStepMs);
+  drawLossSpark();
+}
+__name(updateTrainTelemetry, "updateTrainTelemetry");
+function drawLossSpark() {
+  const line = $("lossLine");
+  if (!line || trainLosses.length < 2) return;
+  const min = Math.min(...trainLosses);
+  const max = Math.max(...trainLosses);
+  const span = Math.max(1e-6, max - min);
+  const points = trainLosses.map((v, i) => {
+    const x = i / Math.max(1, trainLosses.length - 1) * 300;
+    const y = 36 - (v - min) / span * 32;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  line.setAttribute("points", points);
+}
+__name(drawLossSpark, "drawLossSpark");
+function renderMaskPreview(ctrl, example) {
+  const box = $("maskPreview");
+  const rows = $("maskRows");
+  if (!box || !rows || !example) return;
+  try {
+    const preview = ctrl.inspectExample(example);
+    $("maskSummary").textContent = `${preview.tokens.length} tokens \xB7 ${preview.trainPositions} trained next-token labels`;
+    const shown = preview.rows.slice(0, 96);
+    rows.innerHTML = '<div class="hdr">pos</div><div class="hdr">segment</div><div class="hdr">token</div><div class="hdr target">trained target</div>' + shown.map((r) => {
+      const cls = `${r.trainsNext ? "train" : ""} ${r.segment}`;
+      const target = r.trainsNext ? `${r.targetId} ${clip(r.targetText, 24)}` : "";
+      return `<div class="${cls}">${r.index}</div><div class="${cls}">${esc(r.segment)}</div><div class="${cls}">${r.id} ${esc(clip(r.text, 28))}</div><div class="${cls} target">${esc(target)}</div>`;
+    }).join("") + (preview.rows.length > shown.length ? `<div class="prompt">\u2026</div><div class="prompt">truncated</div><div class="prompt">${preview.rows.length - shown.length} more rows</div><div class="prompt target"></div>` : "");
+    box.hidden = false;
+  } catch (e) {
+    rows.innerHTML = `<div class="prompt">preview</div><div class="prompt">error</div><div class="prompt">${esc(e.message)}</div><div class="prompt target"></div>`;
+    box.hidden = false;
+  }
+}
+__name(renderMaskPreview, "renderMaskPreview");
 function showTryIt(suggest) {
   const t = $("tryIt");
   t.style.display = "flex";
@@ -7016,7 +7131,7 @@ function renderHistory() {
     li.className = "hrun" + (m.id === state.activeRunId ? " active" : "");
     li.dataset.id = m.id;
     li.dataset.kind = m.kind || "own";
-    li.innerHTML = `<span class="hrun__led"></span><div class="hrun__name" title="${esc(m.name)}">${esc(m.name)}</div><div class="hrun__meta">${esc(fmtRunMeta(m))}</div><div class="hrun__acts"><button data-act="apply" class="tiny primary">\u25B6 Use</button><button data-act="export" class="tiny" title="Export adapter">\u2B07</button><button data-act="del" class="tiny ghost" title="Delete">\u2715</button></div>`;
+    li.innerHTML = `<span class="hrun__led"></span><div class="hrun__name" title="${esc(m.name)}">${esc(m.name)}</div><div class="hrun__meta">${esc(fmtRunMeta(m))}</div><div class="hrun__acts"><button data-act="apply" class="tiny primary">\u25B6 Use</button><button data-act="export" class="tiny secondary" title="Export adapter">\u2B07</button><button data-act="del" class="tiny danger" title="Delete">\u2715</button></div>`;
     li.querySelector("[data-act=apply]").onclick = (e) => {
       e.stopPropagation();
       applyRun(m.id);
@@ -7110,6 +7225,19 @@ function triggerBlob(data, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
 __name(triggerBlob, "triggerBlob");
+function fmtMs(ms) {
+  return Number.isFinite(ms) ? `${ms.toFixed(ms >= 100 ? 0 : 1)}ms` : "\u2014";
+}
+__name(fmtMs, "fmtMs");
+function fmtNum(n) {
+  return Number.isFinite(n) ? n >= 100 ? n.toFixed(0) : n.toFixed(1) : "\u2014";
+}
+__name(fmtNum, "fmtNum");
+function clip(s, n) {
+  s = String(s ?? "").replace(/\s+/g, " ");
+  return s.length > n ? s.slice(0, Math.max(0, n - 1)) + "\u2026" : s;
+}
+__name(clip, "clip");
 function applyLayout() {
   const mq = /* @__PURE__ */ __name((q) => {
     try {

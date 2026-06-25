@@ -37,6 +37,7 @@ import {
 
 const STORAGE = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
 const READBACK = GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ;
+const nowMs = () => globalThis.performance?.now?.() ?? Date.now();
 
 // Default training modules (PEFT/MLX-style loraKeys are matched against these suffixes).
 const ALL_PROJ = ['q', 'k', 'v', 'o', 'gate', 'up', 'down'];
@@ -660,6 +661,7 @@ export class QwenLoraTrainer {
   async microStep(tokens, lossMask) {
     const c = this.cfg;
     const T = tokens.length;
+    const t0 = nowMs();
     if (T > this.opts.maxTrainSeq) throw new Error(`seq ${T} > maxTrainSeq ${this.opts.maxTrainSeq}`);
     this._ensureScratch(T);
     const wasF16 = this.rt.usingF16?.();
@@ -678,7 +680,14 @@ export class QwenLoraTrainer {
       let lossSum = 0;
       for (let t = 0; t < T; t++) lossSum += lossArr[t];
       this._microInWindow++;
-      return { loss: lossSum / Math.max(1, numActive), numActive };
+      const microStepMs = nowMs() - t0;
+      return {
+        loss: lossSum / Math.max(1, numActive),
+        numActive,
+        tokens: T,
+        microStepMs,
+        trainTokPerSec: T / Math.max(1e-6, microStepMs / 1000),
+      };
     } finally {
       // Always restore the runtime's precision mode, even if a dispatch/readback
       // failed — otherwise inference would silently keep running in f32.
@@ -688,6 +697,7 @@ export class QwenLoraTrainer {
 
   // ---- public: apply accumulated grads with AdamW + global-norm clip ----
   async optimizerStep() {
+    const t0 = nowMs();
     const o = this.opts;
     const accum = this._microInWindow || 1;
     // global grad norm
@@ -726,7 +736,7 @@ export class QwenLoraTrainer {
     // mutated A/B in place: refresh inference bind groups against new contents.
     this.rt.invalidateLora();
     this.zeroGrads();
-    return { lr, gradNorm: gnorm, clip };
+    return { lr, gradNorm: gnorm, clip, optimizerStepMs: nowMs() - t0 };
   }
 
   _lrAt(step) {
@@ -760,13 +770,29 @@ export class QwenLoraTrainer {
   async trainStep(batches) {
     const list = Array.isArray(batches) ? batches : [batches];
     let lossSum = 0,
-      n = 0;
+      n = 0,
+      numActive = 0,
+      tokens = 0,
+      microStepMs = 0;
     for (const b of list) {
       const r = await this.microStep(b.tokens, b.lossMask);
       lossSum += r.loss;
+      numActive += r.numActive || 0;
+      tokens += r.tokens || b.tokens?.length || 0;
+      microStepMs += r.microStepMs || 0;
       n++;
     }
     const opt = await this.optimizerStep();
-    return { loss: lossSum / Math.max(1, n), ...opt };
+    const totalStepMs = microStepMs + (opt.optimizerStepMs || 0);
+    return {
+      loss: lossSum / Math.max(1, n),
+      microBatches: n,
+      numActive,
+      tokens,
+      microStepMs,
+      totalStepMs,
+      trainTokPerSec: tokens / Math.max(1e-6, totalStepMs / 1000),
+      ...opt,
+    };
   }
 }

@@ -1,0 +1,40 @@
+
+requires immediate_address_space;
+override WG: u32 = 256u;
+struct Meta { vocab:u32, tOff:u32, lossScale:f32, p:u32 };
+@group(0) @binding(0) var<storage,read_write> logits: array<f32>; // [bt][vocab] -> dLogits
+@group(0) @binding(1) var<storage,read> labels: array<u32>;       // [T] token id (global)
+@group(0) @binding(2) var<storage,read> mask: array<f32>;         // [T] 1 train / 0 skip (global)
+@group(0) @binding(3) var<storage,read_write> lossOut: array<f32>;// [T] (global)
+var<immediate> m: Meta;
+var<workgroup> red: array<f32, 256>;
+@compute @workgroup_size(WG)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let lt = wid.x; let tid = lid.x; let base = lt*m.vocab;
+  let gt = m.tOff + lt;            // global token index for target/mask/loss
+  let mk = mask[gt];
+  // max
+  var mx = -1e30;
+  for (var v = tid; v < m.vocab; v = v + WG) { mx = max(mx, logits[base+v]); }
+  red[tid] = mx; workgroupBarrier();
+  for (var s = WG/2u; s > 0u; s = s/2u) { if (tid < s) { red[tid] = max(red[tid], red[tid+s]); } workgroupBarrier(); }
+  let M = red[0]; workgroupBarrier();
+  // sum exp
+  var sm = 0.0;
+  for (var v = tid; v < m.vocab; v = v + WG) { sm = sm + exp(logits[base+v] - M); }
+  red[tid] = sm; workgroupBarrier();
+  for (var s = WG/2u; s > 0u; s = s/2u) { if (tid < s) { red[tid] = red[tid] + red[tid+s]; } workgroupBarrier(); }
+  let Z = red[0];
+  let tgt = labels[gt];
+  if (tid == 0u) {
+    let ltgt = logits[base + tgt];
+    lossOut[gt] = mk * (log(Z) - (ltgt - M));
+  }
+  // dLogits = mask*lossScale*(p - onehot)
+  let invZ = 1.0 / Z; let g = mk * m.lossScale;
+  for (var v = tid; v < m.vocab; v = v + WG) {
+    var p = exp(logits[base+v] - M) * invZ;
+    if (v == tgt) { p = p - 1.0; }
+    logits[base+v] = g * p;
+  }
+}

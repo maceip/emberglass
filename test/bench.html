@@ -12,5 +12,36 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
              \##+_@@@@@@@@,      ,+@@@_:
                   ;;,,..,:         !;.
 -->
-<!doctype html><html><head><meta charset="utf-8"><title>bench</title></head>
-<body><script type="module" src="./bench_bundle.js"></script><script>console.log("bench page loaded");</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Emberglass internal WebGPU benchmark</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:22px; background:#0e0f13; color:#e8e4d8; font:13px/1.45 system-ui,-apple-system,sans-serif; }
+  h1 { margin:0 0 6px; font-size:18px; }
+  p { margin:0 0 14px; color:#aaa18d; max-width:860px; }
+  .grid { display:grid; grid-template-columns:minmax(320px,1fr) minmax(320px,1fr); gap:14px; align-items:start; }
+  .panel { border:1px solid #3a3428; background:#15130f; border-radius:8px; padding:12px; min-width:0; }
+  ol { margin:0; padding-left:22px; max-height:68vh; overflow:auto; }
+  li { margin:0 0 7px; padding:7px 9px; border-radius:6px; background:#201b13; color:#f2dfc2; font:12px ui-monospace,monospace; overflow-wrap:anywhere; }
+  .row-device,.row-load { background:#172018; color:#b9f0c2; }
+  .row-prefill,.row-greedy-decode,.row-sampling-topk { background:#151b26; color:#c7dcff; }
+  .row-train-mask,.row-train-step { background:#251808; color:#ffd3a3; }
+  .row-error,.row-gpu-error { background:#2b1111; color:#ffb0a8; }
+  pre { margin:0; max-height:68vh; overflow:auto; white-space:pre-wrap; font:12px ui-monospace,monospace; }
+  @media (max-width:800px){ .grid{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<h1>Internal WebGPU Benchmark</h1>
+<p>Runs load, prefill, decode, LoRA overhead, and one real backward/optimizer step. Records are emitted as <code>VWG_BENCH</code> console JSON and mirrored below.</p>
+<div class="grid">
+  <section class="panel"><ol id="benchRows"></ol></section>
+  <section class="panel"><pre id="benchJson">{ "rows": [] }</pre></section>
+</div>
+<script type="module" src="./bench_bundle.js"></script>
+</body>
+</html>

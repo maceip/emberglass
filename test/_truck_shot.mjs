@@ -1,0 +1,13 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ headless: true });
+const p = await b.newPage({ viewport: { width: 760, height: 400 }, deviceScaleFactor: 4 });
+const errs = [];
+p.on('pageerror', (e) => errs.push(String(e)));
+await p.goto('http://localhost:8016/docs/index.html', { waitUntil: 'domcontentloaded' });
+await p.waitForTimeout(300);
+await p.evaluate(() => { document.getElementById('status').textContent = 'weights: model.layers.15.mlp 60%'; });
+await p.waitForTimeout(400);
+await p.locator('#whTruck').screenshot({ path: '/tmp/truck.png' });
+console.log('pageerrors:', errs.length, errs.slice(0, 2).join(' | '));
+await b.close();
+console.log('TRUCK_DONE');

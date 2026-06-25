@@ -74,7 +74,38 @@ export class TrainingController {
     const lossMask = new Array(T).fill(0);
     const firstTrainPos = trainPromptToo ? 0 : Math.max(0, promptIds.length - 1);
     for (let t = firstTrainPos; t < T - 1; t++) lossMask[t] = 1;
-    return { tokens, lossMask };
+    return {
+      tokens,
+      lossMask,
+      promptLength: promptIds.length,
+      completionLength: compIds.length,
+      firstTrainPos,
+    };
+  }
+
+  inspectExample(example) {
+    const prepared = this.prepareExample(example);
+    const { tokens, lossMask, promptLength, completionLength, firstTrainPos } = prepared;
+    const rows = tokens.map((id, index) => {
+      const targetId = index + 1 < tokens.length ? tokens[index + 1] : null;
+      const segment =
+        index < promptLength ? 'prompt' : index < promptLength + completionLength ? 'completion' : 'eos';
+      return {
+        index,
+        id,
+        text: decodeToken(this.tokenizer, id),
+        segment,
+        trainsNext: !!lossMask[index],
+        targetId,
+        targetText: targetId == null ? '' : decodeToken(this.tokenizer, targetId),
+      };
+    });
+    return {
+      ...prepared,
+      trainPositions: lossMask.reduce((n, v) => n + (v ? 1 : 0), 0),
+      firstTrainPos,
+      rows,
+    };
   }
 
   prepareBatch(examples) {
@@ -123,7 +154,18 @@ export class TrainingController {
 }
 
 function truncate(mb, cap) {
-  return { tokens: mb.tokens.slice(0, cap), lossMask: mb.lossMask.slice(0, cap) };
+  return {
+    ...mb,
+    tokens: mb.tokens.slice(0, cap),
+    lossMask: mb.lossMask.slice(0, cap),
+  };
+}
+
+function decodeToken(tokenizer, id) {
+  try {
+    if (tokenizer?.decode) return tokenizer.decode([id], { skip_special_tokens: false });
+  } catch {}
+  return String(id);
 }
 
 function shuffle(a) {

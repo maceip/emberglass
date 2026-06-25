@@ -32,6 +32,7 @@
 
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { generateKernelModules } from './scripts/generate_kernel_modules.mjs';
 
 const jsBanner = readFileSync(new URL(import.meta.url), 'utf8').match(/^\/\*[\s\S]*?\*\//)?.[0] ?? '';
 
@@ -96,6 +97,8 @@ async function go() {
     console.error('Missing --outfile when using custom --entry');
     process.exit(1);
   }
+
+  generateKernelModules();
 
   const res = await build({
     ...base,

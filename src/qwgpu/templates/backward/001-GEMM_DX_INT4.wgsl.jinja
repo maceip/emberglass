@@ -1,0 +1,25 @@
+
+requires immediate_address_space;
+struct Meta { T:u32, N:u32, K:u32, gpr:u32 };
+@group(0) @binding(0) var<storage,read> dY: array<f32>;       // [T][N]
+@group(0) @binding(1) var<storage,read> W: array<u32>;        // [N][K/8] int4
+@group(0) @binding(2) var<storage,read> scaleW: array<f32>;   // [N][gpr]
+@group(0) @binding(3) var<storage,read_write> dX: array<f32>; // [T][K]
+var<immediate> m: Meta;
+fn deq4(n: u32, k: u32, K8: u32) -> f32 {
+  let word = W[n*K8 + (k >> 3u)];
+  let shift = (k & 7u) * 4u;
+  let nib = i32(word << (28u - shift)) >> 28u;
+  return f32(nib) * scaleW[n*m.gpr + (k >> 7u)];
+}
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let total = m.T * m.K; let stride = nwg.x * 256u; let K8 = m.K / 8u;
+  for (var i = gid.x; i < total; i = i + stride) {
+    let t = i / m.K; let k = i % m.K;
+    var acc = 0.0;
+    let yb = t * m.N;
+    for (var n = 0u; n < m.N; n = n + 1u) { acc = acc + dY[yb + n] * deq4(n, k, K8); }
+    dX[i] = dX[i] + acc;
+  }
+}

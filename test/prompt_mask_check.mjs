@@ -76,6 +76,7 @@ const fakeTk = {
       .split(/\s+/)
       .filter(Boolean)
       .map((_, i) => i + 1),
+  decode: (ids) => ids.map((id) => `<${id}>`).join(''),
 };
 const ctrl = new TrainingController({ session: { rt: null, tokenizer: fakeTk } });
 
@@ -100,6 +101,22 @@ const ctrl = new TrainingController({ session: { rt: null, tokenizer: fakeTk } }
   const { tokens, lossMask } = ctrl.prepareExample({ messages: [{ role: 'user', content: 'hello there' }], completion: 'ok' });
   check('messages path produces a trained span', lossMask.some((m) => m === 1) && tokens[tokens.length - 1] === IM_END);
   check('no position trains past sequence end', lossMask[lossMask.length - 1] === 0);
+}
+{
+  const preview = ctrl.inspectExample({ prompt: 'a b c', completion: 'x y' });
+  check('inspectExample exposes token rows', preview.rows.length === preview.tokens.length);
+  check('inspectExample trainPositions matches mask', preview.trainPositions === preview.lossMask.filter(Boolean).length);
+  check('inspectExample marks prompt/completion/eos segments',
+    preview.rows[0].segment === 'prompt' &&
+      preview.rows[3].segment === 'completion' &&
+      preview.rows[5].segment === 'eos',
+    JSON.stringify(preview.rows.map((r) => r.segment)),
+  );
+  const first = preview.rows.find((r) => r.trainsNext);
+  check('inspectExample first trained row targets completion token',
+    first.index === 2 && first.targetId === preview.tokens[3] && first.targetText === '<1>',
+    JSON.stringify(first),
+  );
 }
 
 console.log(`PROMPT ${FAIL === 0 ? 'ALL PASS' : 'FAILED'} (${PASS}/${PASS + FAIL})`);

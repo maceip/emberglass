@@ -1,0 +1,14 @@
+
+requires immediate_address_space;
+enable f16;
+override WG: u32 = 256u;
+@group(0) @binding(0) var<storage,read_write> gate: array<f32>;
+@group(0) @binding(1) var<storage,read> up: array<f32>;
+var<immediate> n: u32;
+@compute @workgroup_size(WG)
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * WG;
+  // Activation (silu) in f32 to avoid the f16 exp(-v) -> Inf intermediate for very
+  // negative v; only the bandwidth-bound elementwise multiply carries f16 rounding.
+  for (var i = g.x; i < n; i = i + stride) { let v = gate[i]; let sg = v / (1.0 + exp(-v)); gate[i] = f32( f16(sg) * f16(up[i]) ); }
+}

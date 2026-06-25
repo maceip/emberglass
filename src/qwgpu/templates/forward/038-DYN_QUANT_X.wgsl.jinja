@@ -1,0 +1,31 @@
+
+requires immediate_address_space;
+@group(0) @binding(0) var<storage, read> x: array<f32>;
+@group(0) @binding(1) var<storage, read_write> x_q: array<u32>;
+@group(0) @binding(2) var<storage, read_write> scale_x: array<f32>;
+var<immediate> K: u32;
+var<workgroup> sh_max: array<f32, 64>;
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let g = wid.x; let tid = lid.x; let base = g * 128u;
+  var local_max = 0.0;
+  let idx0 = base + tid; let idx1 = base + tid + 64u;
+  if (idx0 < K) { local_max = max(local_max, abs(x[idx0])); }
+  if (idx1 < K) { local_max = max(local_max, abs(x[idx1])); }
+  sh_max[tid] = local_max;
+  workgroupBarrier();
+  for (var s = 32u; s > 0u; s = s / 2u) {
+    if (tid < s) { sh_max[tid] = max(sh_max[tid], sh_max[tid + s]); }
+    workgroupBarrier();
+  }
+  let gmax = sh_max[0]; let scale = select(gmax / 127.0, 1.0, gmax == 0.0);
+  if (tid == 0u) { scale_x[g] = scale; }
+  let pidx = base + tid * 4u;
+  if (pidx < K) {
+    let q0 = clamp(i32(round(x[pidx] / scale)), -128, 127) & 0xff;
+    let q1 = clamp(i32(round(x[pidx + 1u] / scale)), -128, 127) & 0xff;
+    let q2 = clamp(i32(round(x[pidx + 2u] / scale)), -128, 127) & 0xff;
+    let q3 = clamp(i32(round(x[pidx + 3u] / scale)), -128, 127) & 0xff;
+    x_q[g * 32u + tid] = u32(q0 | (q1 << 8u) | (q2 << 16u) | (q3 << 24u));
+  }
+}

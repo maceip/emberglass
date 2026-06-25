@@ -1,0 +1,35 @@
+
+requires immediate_address_space;
+struct Meta { T:u32, vocab:u32, K:u32, tOff:u32 };
+@group(0) @binding(0) var<storage,read> dLogits: array<f32>;  // [Tblock][vocab]
+@group(0) @binding(1) var<storage,read> E: array<u32>;        // [vocab][K/4] int8
+@group(0) @binding(2) var<storage,read> scaleE: array<f32>;   // [vocab]
+@group(0) @binding(3) var<storage,read_write> dHidden: array<f32>; // [T][K] (offset tOff)
+var<immediate> m: Meta;
+fn sx8(v: u32) -> i32 {
+  return i32(v << 24u) >> 24u;
+}
+fn unpack4xI8(x: u32) -> vec4<i32> {
+  return vec4<i32>(
+    sx8(x & 0xffu),
+    sx8((x >> 8u) & 0xffu),
+    sx8((x >> 16u) & 0xffu),
+    sx8((x >> 24u) & 0xffu)
+  );
+}
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let total = m.T * m.K; let stride = nwg.x * 256u; let K4 = m.K / 4u;
+  for (var i = gid.x; i < total; i = i + stride) {
+    let t = i / m.K; let k = i % m.K;
+    let lb = t * m.vocab;
+    var acc = 0.0;
+    let word_idx = k >> 2u; let lane = k & 3u;
+    for (var v = 0u; v < m.vocab; v = v + 1u) {
+      let p = unpack4xI8(E[v*K4 + word_idx]);
+      var b: i32; if (lane==0u){b=p.x;} else if (lane==1u){b=p.y;} else if (lane==2u){b=p.z;} else {b=p.w;}
+      acc = acc + dLogits[lb + v] * scaleE[v] * f32(b);
+    }
+    dHidden[(m.tOff + t)*m.K + k] = dHidden[(m.tOff + t)*m.K + k] + acc;
+  }
+}

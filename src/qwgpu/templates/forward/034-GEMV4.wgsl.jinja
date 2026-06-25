@@ -1,0 +1,44 @@
+
+enable subgroups;
+requires immediate_address_space;
+struct Meta { K:u32, N:u32, rank:u32, hasBias:u32, hasLora:u32, gridX:u32, scaleLo:f32, gpr:u32 };
+@group(0) @binding(0) var<storage,read> x: array<f32>;
+@group(0) @binding(1) var<storage,read> w: array<u32>;
+@group(0) @binding(2) var<storage,read> scale: array<f32>;
+@group(0) @binding(3) var<storage,read> bias: array<f32>;
+@group(0) @binding(4) var<storage,read> loraD: array<f32>;
+@group(0) @binding(5) var<storage,read> loraB: array<f32>;
+@group(0) @binding(6) var<storage,read_write> y: array<f32>;
+var<immediate> m: Meta;
+var<workgroup> part: array<f32,64>;       // one slot per subgroup
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
+        @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
+  let n = wid.x + wid.y * m.gridX; let tid = lid.x;
+  if (n >= m.N) { return; }               // workgroup-uniform: whole group exits together
+  let K8 = m.K/8u; let rb = n*K8; let sbase = n*m.gpr;
+  var acc = 0.0;
+  for (var c = tid; c < K8; c = c + 64u) {
+    let word = w[rb+c]; let bk = c*8u; let sc = scale[sbase + (bk >> 7u)];
+    var p = 0.0;
+    p = p + x[bk]    * f32(i32(word << 28u) >> 28u);
+    p = p + x[bk+1u] * f32(i32(word << 24u) >> 28u);
+    p = p + x[bk+2u] * f32(i32(word << 20u) >> 28u);
+    p = p + x[bk+3u] * f32(i32(word << 16u) >> 28u);
+    p = p + x[bk+4u] * f32(i32(word << 12u) >> 28u);
+    p = p + x[bk+5u] * f32(i32(word << 8u)  >> 28u);
+    p = p + x[bk+6u] * f32(i32(word << 4u)  >> 28u);
+    p = p + x[bk+7u] * f32(i32(word)        >> 28u);
+    acc = acc + p * sc;
+  }
+  let ssum = subgroupAdd(acc);            // reduce within subgroup (no barrier)
+  if (sgid == 0u) { part[tid / sgsz] = ssum; }
+  workgroupBarrier();
+  if (tid == 0u) {
+    let nsg = (64u + sgsz - 1u) / sgsz; var o = 0.0;
+    for (var i = 0u; i < nsg; i = i + 1u) { o = o + part[i]; }
+    if (m.hasBias == 1u) { o = o + bias[n]; }
+    if (m.hasLora == 1u) { var dl = 0.0; for (var r = 0u; r < m.rank; r = r + 1u) { dl = dl + loraD[r] * loraB[r*m.N + n]; } o = o + m.scaleLo * dl; }
+    y[n] = o;
+  }
+}

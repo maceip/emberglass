@@ -928,17 +928,8 @@ export class QwenWGPU {
   // y = int8-GEMV(x, q) [+bias] [+lora]. q={w,scale,N,K}. moduleKey for LoRA lookup.
   gemv(enc, xBuf, q, yBuf, biasBuf, moduleKey) {
     const mod = this.lora?.modules?.[moduleKey];
-    if (mod) {
-      // d = x@A  (rank outputs)
-      const uA = this._staticUni(`loraA:${this._loraEpoch}:${q.K}:${mod.rank}`, new Uint32Array([q.K, mod.rank]));
-      const bgA = this._bgCached(
-        this.pipes.loraA,
-        [xBuf, mod.A, this.s.loraD, uA],
-        `loraA:${moduleKey}:${this._loraEpoch}`,
-        { sensitive: true },
-      );
-      this._dispatch(enc, this.pipes.loraA, bgA, mod.rank, 1, 'loraA');
-    }
+    // d = x@A  (rank outputs) — LORA_A is 3-binding + immediate (see _loraA)
+    if (mod) this._loraA(enc, xBuf, q, mod, this.s.loraD, moduleKey);
     const meta = this._gemvMeta(q, biasBuf, mod);
     const key = `gemv:${moduleKey || 'base'}:${q.K}:${q.N}:${biasBuf ? 1 : 0}:${mod ? this._loraEpoch : 0}`;
     const bg = this._bgCached(
@@ -953,23 +944,8 @@ export class QwenWGPU {
   gemv4(enc, xBuf, q, yBuf, biasBuf, moduleKey) {
     const mod = this.lora?.modules?.[moduleKey];
     if (this.debugCapture) console.log('VWG gemv4: ' + moduleKey + ' mod=' + !!mod);
-    if (mod) {
-      const uA = this._staticUni(`loraA:${this._loraEpoch}:${q.K}:${mod.rank}`, new Uint32Array([q.K, mod.rank]));
-      this._dispatch(
-        enc,
-        this.pipes.loraA,
-        this._bgCached(this.pipes.loraA, [xBuf, mod.A, this.s.loraD, uA], `loraA:${moduleKey}:${this._loraEpoch}`, {
-          sensitive: true,
-        }),
-        mod.rank,
-        1,
-        'loraA',
-      );
-      if (this.debugCapture && moduleKey === 'layers.0.self_attn.q_proj' && this.debugStep < this.debugT) {
-        enc.copyBufferToBuffer(xBuf, 0, this.debugBufs.xSeq, this.debugStep * q.K * 4, q.K * 4);
-        enc.copyBufferToBuffer(this.s.loraD, 0, this.debugBufs.dSeq, this.debugStep * mod.rank * 4, mod.rank * 4);
-      }
-    }
+    // LORA_A is 3-binding + immediate (K,rank); use the shared correct path
+    if (mod) this._loraA(enc, xBuf, q, mod, this.s.loraD, moduleKey);
     const meta = this._gemv4Meta(q, biasBuf, mod);
     const key = `gemv4:${moduleKey || 'base'}:${q.K}:${q.N}:${q.gpr}:${biasBuf ? 1 : 0}:${mod ? this._loraEpoch : 0}`;
     const bg = this._bgCached(
@@ -1055,19 +1031,7 @@ export class QwenWGPU {
 
   gemv4W4A8(enc, xBuf, x_qBuf, scale_xBuf, q, yBuf, biasBuf, moduleKey) {
     const mod = this.lora?.modules?.[moduleKey];
-    if (mod) {
-      const uA = this._staticUni(`loraA:${this._loraEpoch}:${q.K}:${mod.rank}`, new Uint32Array([q.K, mod.rank]));
-      this._dispatch(
-        enc,
-        this.pipes.loraA,
-        this._bgCached(this.pipes.loraA, [xBuf, mod.A, this.s.loraD, uA], `loraA:${moduleKey}:${this._loraEpoch}`, {
-          sensitive: true,
-        }),
-        mod.rank,
-        1,
-        'loraA',
-      );
-    }
+    if (mod) this._loraA(enc, xBuf, q, mod, this.s.loraD, moduleKey);
     const meta = this._gemv4Meta(q, biasBuf, mod);
     const key = `gemv4_w4a8:${moduleKey || 'base'}:${q.K}:${q.N}:${q.gpr}:${biasBuf ? 1 : 0}:${mod ? this._loraEpoch : 0}`;
     const bg = this._bgCached(

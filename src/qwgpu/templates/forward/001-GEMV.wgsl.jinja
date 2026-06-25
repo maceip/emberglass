@@ -1,0 +1,40 @@
+
+enable subgroups;
+requires immediate_address_space;
+requires subgroup_id;
+struct Meta { K:u32, N:u32, rank:u32, hasBias:u32, hasLora:u32, gridX:u32, scaleLo:f32, gpr:u32 };
+@group(0) @binding(0) var<storage,read> x: array<f32>;
+@group(0) @binding(1) var<storage,read> w: array<u32>;       // [N][K/4] int8
+@group(0) @binding(2) var<storage,read> scale: array<f32>;   // [N]
+@group(0) @binding(3) var<storage,read> bias: array<f32>;    // [N] or dummy
+@group(0) @binding(4) var<storage,read> loraD: array<f32>;   // [rank] precomputed x@A (or dummy)
+@group(0) @binding(5) var<storage,read> loraB: array<f32>;   // [rank][N] (or dummy)
+@group(0) @binding(6) var<storage,read_write> y: array<f32>; // [N]
+var<immediate> m: Meta;
+var<workgroup> part: array<f32,64>;       // one slot per subgroup
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
+        @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32,
+        @builtin(subgroup_id) sgroup: u32) {
+  let n = wid.x + wid.y * m.gridX; let tid = lid.x;
+  if (n >= m.N) { return; }               // workgroup-uniform: whole group exits together
+  let K4 = m.K/4u; let rb = n*K4;
+  var acc = 0.0;
+  for (var k = tid; k < K4; k = k + 64u) {
+    let p = w[rb+k];
+    let v = unpack4xI8(p);                 // vec4<i32>
+    let kk = k*4u;
+    acc = acc + x[kk]*f32(v.x) + x[kk+1u]*f32(v.y) + x[kk+2u]*f32(v.z) + x[kk+3u]*f32(v.w);
+  }
+  let ssum = subgroupAdd(acc);            // reduce within subgroup (no barrier)
+  if (sgid == 0u) { part[tid / sgsz] = ssum; }
+  workgroupBarrier();
+  if (tid == 0u) {
+    let nsg = (64u + sgsz - 1u) / sgsz; var red = 0.0;
+    for (var i = 0u; i < nsg; i = i + 1u) { red = red + part[i]; }
+    var o = red * scale[n];
+    if (m.hasBias == 1u) { o = o + bias[n]; }
+    if (m.hasLora == 1u) { var dl = 0.0; for (var r = 0u; r < m.rank; r = r + 1u) { dl = dl + loraD[r] * loraB[r*m.N + n]; } o = o + m.scaleLo * dl; }
+    y[n] = o;
+  }
+}

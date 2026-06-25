@@ -1,0 +1,51 @@
+:root {
+  --bg: #07070c;
+  --bg-2: #0c0c16;
+  --panel: rgba(18, 18, 30, 0.62);
+  --panel-line: rgba(255, 255, 255, 0.08);
+  --text: #e7e7f3;
+  --muted: #9a9ab2;
+  --demo: #6ad7ff;
+  --train: #ff8a5c;
+  --tune: #c08bff;
+  --infer: #5cffb0;
+  --ember: #ff7a3c;
+  --font: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+  --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(1200px 800px at 80% -10%, rgba(255, 122, 60, 0.10), transparent 60%),
+    radial-gradient(1000px 700px at 0% 110%, rgba(108, 139, 255, 0.10), transparent 60%),
+    var(--bg);
+}
+
+canvas { display: block; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+button { font-family: inherit; }
+
+.glass {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 16px;
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+}

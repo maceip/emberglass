@@ -1,0 +1,21 @@
+
+requires immediate_address_space;
+struct KVBatchMeta { T:u32, seq_id:u32, max_blocks:u32, kvd:u32, off:u32 };
+@group(0) @binding(0) var<storage,read> k_src: array<f32>;
+@group(0) @binding(1) var<storage,read> v_src: array<f32>;
+@group(0) @binding(2) var<storage,read_write> kc: array<f32>;
+@group(0) @binding(3) var<storage,read_write> vc: array<f32>;
+@group(0) @binding(4) var<storage,read> block_table: array<u32>;
+var<immediate> m: KVBatchMeta;
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let idx = gid.x; let T = m.T; let seq_id = m.seq_id; let max_blocks = m.max_blocks; let kvd = m.kvd; let off = m.off;
+  let total = T * kvd; if (idx >= total) { return; }
+  let t = idx / kvd; let d = idx % kvd;
+  let page_idx = block_table[seq_id * max_blocks + ((off + t) / 16u)];
+  let page_offset = (off + t) % 16u;
+  let physical_pos = page_idx * 16u + page_offset;
+  let dst_offset = physical_pos * kvd + d;
+  kc[dst_offset] = k_src[idx];
+  vc[dst_offset] = v_src[idx];
+}

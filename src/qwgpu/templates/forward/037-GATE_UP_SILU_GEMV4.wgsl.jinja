@@ -1,0 +1,52 @@
+
+enable subgroups;
+requires immediate_address_space;
+struct Meta { K:u32, N:u32, gpr:u32, gridX:u32, gateRank:u32, upRank:u32, hasGateLora:u32, hasUpLora:u32, gateScaleLo:f32, upScaleLo:f32, p0:f32, p1:f32 };
+@group(0) @binding(0) var<storage,read> x: array<f32>;
+@group(0) @binding(1) var<storage,read> w: array<u32>;
+@group(0) @binding(2) var<storage,read> scale: array<f32>;
+@group(0) @binding(3) var<storage,read_write> y: array<f32>;
+@group(0) @binding(4) var<storage,read> gateD: array<f32>;
+@group(0) @binding(5) var<storage,read> gateB: array<f32>;
+@group(0) @binding(6) var<storage,read> upD: array<f32>;
+@group(0) @binding(7) var<storage,read> upB: array<f32>;
+var<immediate> m: Meta;
+var<workgroup> partG: array<f32,64>;
+var<workgroup> partU: array<f32,64>;
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
+        @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
+  let n = wid.x + wid.y * m.gridX; let tid = lid.x;
+  if (n >= m.N) { return; }
+  let K8 = m.K/8u; let rbG = n*K8; let rbU = (m.N + n)*K8;
+  let sbG = n*m.gpr; let sbU = (m.N + n)*m.gpr;
+  var accG = 0.0; var accU = 0.0;
+  for (var c = tid; c < K8; c = c + 64u) {
+    let bk = c*8u; let wg = w[rbG+c]; let wu = w[rbU+c];
+    let scG = scale[sbG + (bk >> 7u)]; let scU = scale[sbU + (bk >> 7u)];
+    let x0=x[bk]; let x1=x[bk+1u]; let x2=x[bk+2u]; let x3=x[bk+3u];
+    let x4=x[bk+4u]; let x5=x[bk+5u]; let x6=x[bk+6u]; let x7=x[bk+7u];
+    var pg = 0.0; var pu = 0.0;
+    pg = pg + x0*f32(i32(wg<<28u)>>28u) + x1*f32(i32(wg<<24u)>>28u) + x2*f32(i32(wg<<20u)>>28u) + x3*f32(i32(wg<<16u)>>28u);
+    pg = pg + x4*f32(i32(wg<<12u)>>28u) + x5*f32(i32(wg<<8u)>>28u)  + x6*f32(i32(wg<<4u)>>28u)  + x7*f32(i32(wg)>>28u);
+    pu = pu + x0*f32(i32(wu<<28u)>>28u) + x1*f32(i32(wu<<24u)>>28u) + x2*f32(i32(wu<<20u)>>28u) + x3*f32(i32(wu<<16u)>>28u);
+    pu = pu + x4*f32(i32(wu<<12u)>>28u) + x5*f32(i32(wu<<8u)>>28u)  + x6*f32(i32(wu<<4u)>>28u)  + x7*f32(i32(wu)>>28u);
+    accG = accG + pg * scG; accU = accU + pu * scU;
+  }
+  let sg = subgroupAdd(accG); let su = subgroupAdd(accU);
+  if (sgid == 0u) { partG[tid / sgsz] = sg; partU[tid / sgsz] = su; }
+  workgroupBarrier();
+  if (tid == 0u) {
+    let nsg = (64u + sgsz - 1u) / sgsz; var gate = 0.0; var up = 0.0;
+    for (var i = 0u; i < nsg; i = i + 1u) { gate = gate + partG[i]; up = up + partU[i]; }
+    if (m.hasGateLora == 1u) {
+      var dl = 0.0; for (var r = 0u; r < m.gateRank; r = r + 1u) { dl = dl + gateD[r] * gateB[r*m.N + n]; }
+      gate = gate + m.gateScaleLo * dl;
+    }
+    if (m.hasUpLora == 1u) {
+      var dl = 0.0; for (var r = 0u; r < m.upRank; r = r + 1u) { dl = dl + upD[r] * upB[r*m.N + n]; }
+      up = up + m.upScaleLo * dl;
+    }
+    y[n] = (gate / (1.0 + exp(-gate))) * up;
+  }
+}

@@ -1,0 +1,85 @@
+
+enable subgroups;
+{% if hasDP4a %}
+enable packed_4x8_integer_dot_product;
+{% endif %}
+requires immediate_address_space;
+struct Meta { K:u32, N:u32, gpr:u32, gridX:u32, gateRank:u32, upRank:u32, hasGateLora:u32, hasUpLora:u32, gateScaleLo:f32, upScaleLo:f32, p0:f32, p1:f32 };
+@group(0) @binding(0) var<storage,read> x_q: array<u32>;
+@group(0) @binding(1) var<storage,read> scale_x: array<f32>;
+@group(0) @binding(2) var<storage,read> w: array<u32>;
+@group(0) @binding(3) var<storage,read> scale: array<f32>;
+@group(0) @binding(4) var<storage,read_write> y: array<f32>;
+@group(0) @binding(5) var<storage,read> gateD: array<f32>;
+@group(0) @binding(6) var<storage,read> gateB: array<f32>;
+@group(0) @binding(7) var<storage,read> upD: array<f32>;
+@group(0) @binding(8) var<storage,read> upB: array<f32>;
+var<immediate> m: Meta;
+
+{% if not hasDP4a %}
+fn dot4I8Packed(a: u32, b: u32) -> i32 {
+  let va = unpack4xI8(a);
+  let vb = unpack4xI8(b);
+  return va.x * vb.x + va.y * vb.y + va.z * vb.z + va.w * vb.w;
+}
+{% endif %}
+
+var<workgroup> partG: array<f32, {{ wgSize }}>;
+var<workgroup> partU: array<f32, {{ wgSize }}>;
+@compute @workgroup_size({{ wgSize }})
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
+        @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
+  let n = wid.x + wid.y * m.gridX; let tid = lid.x;
+  if (n >= m.N) { return; }
+  let K8 = m.K/8u; let rbG = n*K8; let rbU = (m.N + n)*K8;
+  let sbG = n*m.gpr; let sbU = (m.N + n)*m.gpr;
+  var accG = 0.0; var accU = 0.0;
+  for (var c = tid; c < K8; c = c + {{ wgSize }}u) {
+    let wg = w[rbG+c]; let wu = w[rbU+c];
+    let bk = c*8u;
+    let scG = scale[sbG + (bk >> 7u)]; let scU = scale[sbU + (bk >> 7u)];
+    let sc_x = scale_x[bk >> 7u];
+    let wg0 = (i32(wg << 28u) >> 28u) & 0xff;
+    let wg1 = (i32(wg << 24u) >> 28u) & 0xff;
+    let wg2 = (i32(wg << 20u) >> 28u) & 0xff;
+    let wg3 = (i32(wg << 16u) >> 28u) & 0xff;
+    let wg4 = (i32(wg << 12u) >> 28u) & 0xff;
+    let wg5 = (i32(wg << 8u)  >> 28u) & 0xff;
+    let wg6 = (i32(wg << 4u)  >> 28u) & 0xff;
+    let wg7 = (i32(wg)        >> 28u) & 0xff;
+    let pwg0 = u32(wg0 | (wg1 << 8u) | (wg2 << 16u) | (wg3 << 24u));
+    let pwg1 = u32(wg4 | (wg5 << 8u) | (wg6 << 16u) | (wg7 << 24u));
+    let wu0 = (i32(wu << 28u) >> 28u) & 0xff;
+    let wu1 = (i32(wu << 24u) >> 28u) & 0xff;
+    let wu2 = (i32(wu << 20u) >> 28u) & 0xff;
+    let wu3 = (i32(wu << 16u) >> 28u) & 0xff;
+    let wu4 = (i32(wu << 12u) >> 28u) & 0xff;
+    let wu5 = (i32(wu << 8u)  >> 28u) & 0xff;
+    let wu6 = (i32(wu << 4u)  >> 28u) & 0xff;
+    let wu7 = (i32(wu)        >> 28u) & 0xff;
+    let pwu0 = u32(wu0 | (wu1 << 8u) | (wu2 << 16u) | (wu3 << 24u));
+    let pwu1 = u32(wu4 | (wu5 << 8u) | (wu6 << 16u) | (wu7 << 24u));
+    let px0 = x_q[c * 2u];
+    let px1 = x_q[c * 2u + 1u];
+    let sumG = dot4I8Packed(pwg0, px0) + dot4I8Packed(pwg1, px1);
+    let sumU = dot4I8Packed(pwu0, px0) + dot4I8Packed(pwu1, px1);
+    accG = accG + f32(sumG) * scG * sc_x;
+    accU = accU + f32(sumU) * scU * sc_x;
+  }
+  let sg = subgroupAdd(accG); let su = subgroupAdd(accU);
+  if (sgid == 0u) { partG[tid / sgsz] = sg; partU[tid / sgsz] = su; }
+  workgroupBarrier();
+  if (tid == 0u) {
+    let nsg = ({{ wgSize }}u + sgsz - 1u) / sgsz; var gate = 0.0; var up = 0.0;
+    for (var i = 0u; i < nsg; i = i + 1u) { gate = gate + partG[i]; up = up + partU[i]; }
+    if (m.hasGateLora == 1u) {
+      var dl = 0.0; for (var r = 0u; r < m.gateRank; r = r + 1u) { dl = dl + gateD[r] * gateB[r*m.N + n]; }
+      gate = gate + m.gateScaleLo * dl;
+    }
+    if (m.hasUpLora == 1u) {
+      var dl = 0.0; for (var r = 0u; r < m.upRank; r = r + 1u) { dl = dl + upD[r] * upB[r*m.N + n]; }
+      up = up + m.upScaleLo * dl;
+    }
+    y[n] = (gate / (1.0 + exp(-gate))) * up;
+  }
+}

@@ -1,0 +1,17 @@
+
+requires immediate_address_space;
+@group(0) @binding(0) var<storage,read_write> dx: array<f32>;   // [T][nHeads*headDim] gradient
+@group(0) @binding(1) var<storage,read> cosT: array<f32>;
+@group(0) @binding(2) var<storage,read> sinT: array<f32>;
+var<immediate> m: vec4<u32>;   // nHeads, headDim, T, pos0
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let g = gid.x; let H = m.x; let D = m.y; let T = m.z; let pos0 = m.w; let half = D/2u;
+  let perRow = H*half; if (g >= T*perRow) { return; }
+  let row = g / perRow; let r = g % perRow; let h = r / half; let j = r % half;
+  let rb = row*H*D; let lo = rb + h*D + j; let hi = lo + half; let off = (pos0+row)*D + j;
+  let c = cosT[off]; let s = sinT[off];
+  let dl = dx[lo]; let dh = dx[hi];
+  dx[lo] = c*dl + s*dh;
+  dx[hi] = -s*dl + c*dh;
+}

@@ -1,0 +1,14 @@
+
+requires immediate_address_space;
+@group(0) @binding(0) var<storage,read> w: array<u32>;
+@group(0) @binding(1) var<storage,read> scale: array<f32>;
+@group(0) @binding(2) var<storage,read_write> out: array<f32>;
+@group(0) @binding(3) var<storage,read> idbuf: array<u32>;   // idbuf[0] = token id
+var<immediate> H: u32;
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+  let k = g.x; let id = idbuf[0]; if (k >= H) { return; }
+  let v = unpack4xI8(w[id*(H/4u) + (k>>2u)]); let lane = k & 3u;
+  var b: i32; if (lane==0u){b=v.x;} else if (lane==1u){b=v.y;} else if (lane==2u){b=v.z;} else {b=v.w;}
+  out[k] = f32(b) * scale[id];
+}

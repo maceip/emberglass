@@ -1,0 +1,15 @@
+
+requires immediate_address_space;
+override WG: u32 = 256u;
+@group(0) @binding(0) var<storage,read> x: array<f32>;
+@group(0) @binding(1) var<storage,read_write> out: array<f32>;  // [1]
+var<immediate> n: u32;
+var<workgroup> red: array<f32, 256>;
+@compute @workgroup_size(WG)
+fn main(@builtin(local_invocation_id) lid: vec3<u32>) {
+  let tid = lid.x; var s = 0.0;
+  for (var i = tid; i < n; i = i + WG) { let v = x[i]; s = s + v*v; }
+  red[tid] = s; workgroupBarrier();
+  for (var st = WG/2u; st > 0u; st = st/2u) { if (tid < st) { red[tid] = red[tid] + red[tid+st]; } workgroupBarrier(); }
+  if (tid == 0u) { out[0] = out[0] + red[0]; }
+}

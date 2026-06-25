@@ -1,0 +1,70 @@
+
+requires immediate_address_space;
+struct Meta { k:u32, pad:u32, temp:f32, r:f32 };
+@group(0) @binding(0) var<storage,read> ids: array<u32>;
+@group(0) @binding(1) var<storage,read> vals: array<f32>;
+@group(0) @binding(2) var<storage,read_write> outId: array<u32>;  // [1] the chosen token
+var<immediate> m: Meta;
+var<workgroup> s: array<f32, 64>;    // working softmax probs / prefix sums (small k)
+var<workgroup> red: array<f32, 64>;  // reduction scratch for the softmax denominator
+@compute @workgroup_size(64)
+fn main(@builtin(local_invocation_id) lid: vec3<u32>) {
+  let tid = lid.x;
+  let k = m.k;
+  let temp = m.temp;
+  let r = m.r;
+  let t = select(temp, 1.0, temp <= 0.0);
+
+  // Load + temperature scale into shared (one thread per slot)
+  var v = -1e30;
+  if (tid < k) {
+    let lv = vals[tid];
+    v = lv;
+    if (t != 1.0) { v = lv / t; }
+  }
+  let ev = select(0.0, exp(v), tid < k);
+  s[tid] = ev;
+  red[tid] = ev;
+  workgroupBarrier();
+
+  // sum
+  for (var stride = 32u; stride > 0u; stride = stride / 2u) {
+    if (tid < stride && (tid + stride) < 64u) { red[tid] = red[tid] + red[tid + stride]; }
+    workgroupBarrier();
+  }
+  let sum = red[0];
+  let invSum = select(0.0, 1.0 / sum, sum > 0.0);
+
+  // normalize + prefix sum for nucleus / categorical pick
+  if (tid < k) {
+    s[tid] = s[tid] * invSum;
+  } else {
+    s[tid] = 0.0;
+  }
+  workgroupBarrier();
+
+  // prefix sum (small k, simple scan)
+  for (var stride = 1u; stride < 64u; stride = stride * 2u) {
+    var add = 0.0;
+    if (tid >= stride && tid < 64u) {
+      add = s[tid - stride];
+    }
+    workgroupBarrier();
+    if (tid >= stride && tid < 64u) {
+      s[tid] = s[tid] + add;
+    }
+    workgroupBarrier();
+  }
+
+  // find the smallest j such that prefix[j] >= r  (or last if r>=1)
+  if (tid == 0u) {
+    var chosen = select(0u, k - 1u, k > 0u);
+    if (sum > 0.0) {
+      for (var j = 0u; j < k; j = j + 1u) {
+        let pj = s[j];
+        if (r <= pj) { chosen = j; break; }
+      }
+    }
+    outId[0] = select(0u, ids[chosen], k > 0u);
+  }
+}

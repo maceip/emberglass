@@ -1,0 +1,95 @@
+
+enable subgroups;
+requires immediate_address_space;
+struct Meta { nHeads:u32, nKV:u32, hd:u32, T:u32, qStart:u32, ctx:u32, seq_id:u32, max_blocks:u32 };
+@group(0) @binding(0) var<storage,read> q: array<f32>;
+@group(0) @binding(1) var<storage,read> kc: array<f32>;
+@group(0) @binding(2) var<storage,read> vc: array<f32>;
+@group(0) @binding(3) var<storage,read_write> o: array<f32>;
+@group(0) @binding(4) var<storage,read> block_table: array<u32>;
+var<immediate> m: Meta;
+const BQ = 4u; const BK = 128u;
+var<workgroup> ps: array<f32, 512>;
+var<workgroup> acc: array<f32, 512>;
+var<workgroup> red: array<f32, 128>;
+@compute @workgroup_size(128)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
+        @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
+  let h = wid.x; let qBlock = wid.y; let tid = lid.x; let hd = m.hd;
+  let kvh = h / (m.nHeads / m.nKV); let stride = m.nKV * hd; let hoff = kvh * hd;
+  let nsg = (128u + sgsz - 1u) / sgsz; let scl = 1.0 / sqrt(f32(hd));
+  let seq_id = m.seq_id; let max_blocks = m.max_blocks;
+  var mrun: array<f32, 4>; var lrun: array<f32, 4>;
+  for (var r = 0u; r < BQ; r = r + 1u) { mrun[r] = -1e30; lrun[r] = 0.0; }
+  for (var i = tid; i < BQ*hd; i = i + 128u) { acc[i] = 0.0; }
+  workgroupBarrier();
+  let nblk = (m.ctx + BK - 1u) / BK;
+  for (var blk = 0u; blk < nblk; blk = blk + 1u) {
+    let kbase = blk * BK; let kk = kbase + tid;
+    var score: array<f32, 4>;
+    var validQ: array<bool, 4>;
+    var dot: array<f32, 4>;
+    var corrRun: array<f32, 4>;
+    for (var r = 0u; r < BQ; r = r + 1u) {
+      let qt = qBlock * BQ + r; let absQ = m.qStart + qt;
+      validQ[r] = qt < m.T && kk < m.ctx && kk <= absQ;
+      dot[r] = 0.0; score[r] = -1e30;
+    }
+    if (kk < m.ctx) {
+      let page_idx = block_table[seq_id * max_blocks + (kk / 16u)];
+      let page_offset = kk % 16u;
+      let kb = (page_idx * 16u + page_offset)*stride + hoff;
+      for (var d = 0u; d < hd; d = d + 1u) {
+        let kval = kc[kb+d];
+        for (var r = 0u; r < BQ; r = r + 1u) {
+          let qt = qBlock * BQ + r;
+          if (validQ[r]) { dot[r] = dot[r] + q[qt*m.nHeads*hd + h*hd + d] * kval; }
+        }
+      }
+      for (var r = 0u; r < BQ; r = r + 1u) {
+        if (validQ[r]) { score[r] = dot[r] * scl; }
+      }
+    }
+    for (var r = 0u; r < BQ; r = r + 1u) {
+      let s = score[r];
+      let sgm = subgroupMax(s);
+      if (sgid == 0u) { red[r*32u + tid/sgsz] = sgm; }
+      workgroupBarrier();
+      var bm = -1e30; for (var i = 0u; i < nsg; i = i + 1u) { bm = max(bm, red[r*32u+i]); }
+      let mnew = max(mrun[r], bm); let corr = exp(mrun[r] - mnew);
+      corrRun[r] = corr;
+      var p = 0.0; if (validQ[r]) { p = exp(s - mnew); }
+      ps[r*BK + tid] = p;
+      workgroupBarrier();
+      let sgs = subgroupAdd(p);
+      if (sgid == 0u) { red[r*32u + tid/sgsz] = sgs; }
+      workgroupBarrier();
+      var bs = 0.0; for (var i = 0u; i < nsg; i = i + 1u) { bs = bs + red[r*32u+i]; }
+      lrun[r] = lrun[r] * corr + bs;
+      mrun[r] = mnew;
+      workgroupBarrier();
+    }
+    let bcount = min(BK, m.ctx - kbase);
+    for (var d = tid; d < hd; d = d + 128u) {
+      var aa: array<f32, 4>;
+      for (var r = 0u; r < BQ; r = r + 1u) { aa[r] = acc[r*hd+d] * corrRun[r]; }
+      for (var j = 0u; j < bcount; j = j + 1u) {
+        let t_curr = kbase + j;
+        let page_idx = block_table[seq_id * max_blocks + (t_curr / 16u)];
+        let page_offset = t_curr % 16u;
+        let physical_t = page_idx * 16u + page_offset;
+        let vv = vc[physical_t*stride + hoff + d];
+        for (var r = 0u; r < BQ; r = r + 1u) { aa[r] = aa[r] + ps[r*BK+j] * vv; }
+      }
+      for (var r = 0u; r < BQ; r = r + 1u) { acc[r*hd+d] = aa[r]; }
+    }
+    workgroupBarrier();
+  }
+  for (var r = 0u; r < BQ; r = r + 1u) {
+    let qt = qBlock * BQ + r;
+    if (qt < m.T) {
+      let invL = 1.0 / lrun[r]; let ob = qt*m.nHeads*hd + h*hd;
+      for (var d = tid; d < hd; d = d + 128u) { o[ob+d] = acc[r*hd+d] * invL; }
+    }
+  }
+}

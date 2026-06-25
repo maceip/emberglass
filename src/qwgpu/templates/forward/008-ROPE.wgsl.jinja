@@ -1,0 +1,20 @@
+
+requires immediate_address_space;
+@group(0) @binding(0) var<storage,read_write> x: array<f32>;
+@group(0) @binding(1) var<storage,read> cosT: array<f32>;
+@group(0) @binding(2) var<storage,read> sinT: array<f32>;
+var<immediate> m: vec3<u32>;             // nHeads, headDim, pos
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let g = gid.x; let H = m.x; let D = m.y; let pos = m.z; let half = D/2u;
+  if (g >= H*half) { return; }
+  let h = g / half; let j = g % half;
+  let lo = h*D + j; let hi = lo + half; let off = pos*D + j;
+  let c = cosT[off]; let s = sinT[off];
+  let xl = x[lo]; let xh = x[hi];
+  // EXACT rotate-half: separately-rounded products (fma(a,b,0)) prevent the
+  // compiler from contracting x*c - x*s into a single fma, matching the PyTorch
+  // reference rounding exactly.
+  x[lo] = fma(xl, c, 0.0) + fma(-xh, s, 0.0);
+  x[hi] = fma(xh, c, 0.0) + fma(xl, s, 0.0);
+}

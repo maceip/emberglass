@@ -1,0 +1,19 @@
+
+requires immediate_address_space;
+override WG: u32 = 256u;
+@group(0) @binding(0) var<storage,read> gate: array<f32>;
+@group(0) @binding(1) var<storage,read> up: array<f32>;
+@group(0) @binding(2) var<storage,read> dOut: array<f32>;
+@group(0) @binding(3) var<storage,read_write> dGate: array<f32>;
+@group(0) @binding(4) var<storage,read_write> dUp: array<f32>;
+var<immediate> n: u32;
+@compute @workgroup_size(WG)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * WG;
+  for (var i = gid.x; i < n; i = i + stride) {
+    let z = gate[i]; let sig = 1.0/(1.0+exp(-z)); let sl = z*sig;
+    let d = dOut[i];
+    dUp[i] = d * sl;
+    dGate[i] = d * up[i] * (sig * (1.0 + z*(1.0 - sig)));
+  }
+}

@@ -87,11 +87,12 @@ Throughput is hardware-dependent. Latest clean local browser run:
 
 | Measurement | Result |
 |---|---:|
-| Greedy decode @ ctx 128 | 124.6 tok/s |
-| Greedy decode @ ctx 1,024 | 127.8 tok/s |
-| Greedy decode @ ctx 4,096 | 109.7 tok/s |
-| Greedy decode @ ctx 7,800 | 88.4 tok/s |
-| GPU top-k sampling (`topK=40`, 4-byte readback) | 22.1 tok/s |
+| Greedy decode @ ctx 128 | 114.3 tok/s |
+| Greedy decode @ ctx 1,024 | 118.0 tok/s |
+| Greedy decode @ ctx 4,096 | 101.3 tok/s |
+| Greedy decode @ ctx 7,800 | 82.8 tok/s |
+| GPU top-k sampling (`topK=40`, 4-byte readback) | 21.4 tok/s |
+| One training step, rank 8, 17 active labels | 31.9 train tok/s |
 | Selected decode batch | 16 tokens |
 | LoRA decode | skipped (`adapters_sel` fixture unavailable) |
 
@@ -100,24 +101,37 @@ Prefill latency:
 | Prompt length | Latency |
 |---:|---:|
 | 64 tokens | 99.0 ms |
-| 256 tokens | 240.9 ms |
-| 1,024 tokens | 1,015.5 ms |
-| 4,096 tokens | 6,177.7 ms |
-| 8,192 tokens | 18,694.2 ms |
+| 256 tokens | 240.0 ms |
+| 1,024 tokens | 1,012.9 ms |
+| 4,096 tokens | 6,148.1 ms |
+| 8,192 tokens | 18,397.2 ms |
+
+Training step detail:
+
+| Measurement | Result |
+|---|---:|
+| Training tokens / active labels | 18 / 17 |
+| Trainable LoRA matrices | 252 |
+| Micro-step time | 538.7 ms |
+| AdamW optimizer time | 24.8 ms |
+| Total step time | 563.5 ms |
+| Loss | 11.9312 |
 
 Single-token decode profile at ctx 18:
 
 | Kernel category | GPU time |
 |---|---:|
-| `embed` | 9.8 us |
-| `rmsNormQkvRope` | 427.9 us |
-| `attnP` | 667.3 us |
-| `attnC` | 106.8 us |
-| `g4add:2048x2048` | 405.6 us |
-| `rms` | 262.0 us |
-| `gu:11008x2048` | 1,782.1 us |
-| `g4add:2048x11008` | 1,364.1 us |
-| `gemv:151936x2048` | 520.5 us |
+| `embed` | 9.2 us |
+| `rms` | 522.1 us |
+| `g4:2048x2048` | 404.4 us |
+| `g4:256x2048` | 372.3 us |
+| `ropeQK` | 113.5 us |
+| `attnP` | 639.9 us |
+| `attnC` | 104.3 us |
+| `g4add:2048x2048` | 371.3 us |
+| `gu:11008x2048` | 1,741.7 us |
+| `g4add:2048x11008` | 1,308.4 us |
+| `gemv:151936x2048` | 547.4 us |
 
 Fused decode path: `fuseQKV` / `fuseRoPE` / `fuseMLP` / `fuseResidual`.
 
@@ -125,11 +139,12 @@ Fused decode path: `fuseQKV` / `fuseRoPE` / `fuseMLP` / `fuseResidual`.
 
 - Hot kernels use `var<immediate>` + `setImmediates` for per-dispatch metadata; the benchmark completed without WebGPU validation errors.
 - `shader-f16` paths are active for RMS normalization, RoPE, attention partial/combine, elementwise add, and SiLU.
-- GPU-resident sampling keeps top-k selection and sampling on GPU; measured `topK=40` sampling was 22.1 tok/s with one token ID read back.
+- GPU-resident sampling keeps top-k selection and sampling on GPU; measured `topK=40` sampling was 21.4 tok/s with one token ID read back.
 - Workgroup autotuning uses `timestamp-query`; clean-run winners were `add=64`, `rms=256`, `silu=256`.
 - Specialization constants (`override`) are used for workgroup sizes on key kernels and are reflected in dispatch sizing.
 - High-level `generate()` can use the GPU sampler when requested.
-- Benchmark harness reports prefill latency, greedy decode tok/s, GPU top-k sampling tok/s, and decode sub-kernel timings.
+- Benchmark harness reports prefill latency, greedy decode tok/s, GPU top-k sampling tok/s, decode sub-kernel timings, and a real backward/AdamW training step.
+- Forward and backward WGSL now live in Jinja templates; `npm run kernels:check` verifies generated kernel modules are up to date.
 
 ---
 

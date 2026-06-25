@@ -1,0 +1,18 @@
+
+requires immediate_address_space;
+enable f16;
+@group(0) @binding(0) var<storage,read_write> x: array<f32>;
+@group(0) @binding(1) var<storage,read> cosT: array<f32>;
+@group(0) @binding(2) var<storage,read> sinT: array<f32>;
+var<immediate> m: vec3<u32>;             // nHeads, headDim, pos
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let g = gid.x; let H = m.x; let D = m.y; let pos = m.z; let half = D/2u;
+  if (g >= H*half) { return; }
+  let h = g / half; let j = g % half;
+  let lo = h*D + j; let hi = lo + half; let off = pos*D + j;
+  let c = f16(cosT[off]); let s = f16(sinT[off]);
+  let xl = f16(x[lo]); let xh = f16(x[hi]);
+  x[lo] = f32( fma(xl, c, 0.0h) + fma(-xh, s, 0.0h) );
+  x[hi] = f32( fma(xh, c, 0.0h) + fma(xl, s, 0.0h) );
+}

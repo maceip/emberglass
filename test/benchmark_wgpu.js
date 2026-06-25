@@ -16,6 +16,7 @@
 import { QwenWGPU } from '../src/qwgpu/runtime.js';
 import { QWEN25_3B } from '../src/config.js';
 import { loadLoraAdapterGPU } from '../src/lora_gpu.js';
+import { QwenLoraTrainer, createTrainableAdapter } from '../src/qwgpu/trainer.js';
 
 /*
  * TECHNIQUE: Structured JSON benchmark output
@@ -23,7 +24,20 @@ import { loadLoraAdapterGPU } from '../src/lora_gpu.js';
  *   prefix. Makes parsing by external tools trivial and keeps the harness
  *   machine-readable.
  */
-const row = (data) => console.log('VWG_BENCH ' + JSON.stringify(data));
+const benchRows = [];
+const row = (data) => {
+  benchRows.push(data);
+  console.log('VWG_BENCH ' + JSON.stringify(data));
+  const list = document.getElementById('benchRows');
+  if (list) {
+    const li = document.createElement('li');
+    li.className = `row row-${data.type || 'event'}`;
+    li.textContent = JSON.stringify(data);
+    list.appendChild(li);
+  }
+  const out = document.getElementById('benchJson');
+  if (out) out.textContent = JSON.stringify({ rows: benchRows }, null, 2);
+};
 
 async function requestDevice() {
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
@@ -186,6 +200,49 @@ window.run = async () => {
     row({ type: 'profile-token', ctx: ref.ids.length, categoriesUs: sums });
     rt.prof = null;
   } else row({ type: 'profile-token', skipped: 'timestamp-query unavailable' });
+
+  {
+    const trainT = Math.min(32, ref.ids.length || 32);
+    const trainIds = tile(ref.ids, trainT);
+    const lossMask = new Array(trainT).fill(1);
+    lossMask[trainT - 1] = 0;
+    const activeLabels = lossMask.reduce((n, v) => n + (v ? 1 : 0), 0);
+    const trainAdapter = createTrainableAdapter(rt, {
+      name: 'bench-train',
+      rank: 8,
+      alpha: 16,
+      targetModules: ['q', 'k', 'v', 'o', 'gate', 'up', 'down'],
+    });
+    const trainer = new QwenLoraTrainer(rt, {
+      lr: 3e-4,
+      maxTrainSeq: trainT,
+      lmHeadBlock: Math.min(64, trainT),
+      gradAccumSteps: 1,
+      warmupSteps: 0,
+      totalSteps: 1,
+      maxGradNorm: 1.0,
+    });
+    trainer.attach(trainAdapter);
+    row({
+      type: 'train-mask',
+      tokens: trainT,
+      activeLabels,
+      trainedKeys: trainer.trainedKeys.length,
+      rank: 8,
+    });
+    const trainStep = await trainer.trainStep([{ tokens: trainIds, lossMask }]);
+    row({
+      type: 'train-step',
+      tokens: trainStep.tokens,
+      activeLabels: trainStep.numActive,
+      loss: trainStep.loss,
+      gradNorm: trainStep.gradNorm,
+      microStepMs: trainStep.microStepMs,
+      optimizerStepMs: trainStep.optimizerStepMs,
+      totalStepMs: trainStep.totalStepMs,
+      trainTokPerSec: trainStep.trainTokPerSec,
+    });
+  }
 
   const adapterFiles = await tryFetchAdapter('adapters_sel');
   if (adapterFiles) {

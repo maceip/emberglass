@@ -1,0 +1,23 @@
+
+requires immediate_address_space;
+enable f16;
+override WG: u32 = 128u;
+@group(0) @binding(0) var<storage,read> pm: array<f32>;
+@group(0) @binding(1) var<storage,read> pz: array<f32>;
+@group(0) @binding(2) var<storage,read> po: array<f32>;
+@group(0) @binding(3) var<storage,read_write> o: array<f32>;
+var<immediate> m: vec4<u32>;   // nHeads, hd, nsplit, _
+@compute @workgroup_size(WG)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let h = wid.x; let tid = lid.x; let hd = m.y; let nsplit = m.z; let base = h*nsplit;
+  // Cross-split softmax merge accumulates max/sum in f32 (overflow-safe); only the
+  // final per-element weighting carries f16 rounding.
+  var M = -1e30; for (var s = 0u; s < nsplit; s = s + 1u) { M = max(M, pm[base+s]); }
+  var Z = 0.0; for (var s = 0u; s < nsplit; s = s + 1u) { Z = Z + pz[base+s] * exp(pm[base+s] - M); }
+  let invZ = 1.0 / Z;
+  for (var d = tid; d < hd; d = d + WG) {
+    var acc = 0.0;
+    for (var s = 0u; s < nsplit; s = s + 1u) { acc = acc + exp(pm[base+s] - M) * f32(f16(po[(base+s)*hd + d])); }
+    o[h*hd + d] = acc * invZ;
+  }
+}

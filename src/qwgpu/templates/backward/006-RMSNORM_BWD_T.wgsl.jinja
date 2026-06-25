@@ -1,0 +1,31 @@
+
+requires immediate_address_space;
+override WG: u32 = 256u;
+@group(0) @binding(0) var<storage,read> x: array<f32>;        // [T][K]
+@group(0) @binding(1) var<storage,read> g: array<f32>;        // [K]
+@group(0) @binding(2) var<storage,read> dy: array<f32>;       // [T][K]
+@group(0) @binding(3) var<storage,read_write> dx: array<f32>; // [T][K]
+var<immediate> m: vec2<f32>;   // K, eps
+var<workgroup> red: array<f32, 256>;
+@compute @workgroup_size(WG)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let tid = lid.x; let K = u32(m.x); let base = wid.x * K;
+  // sum of squares for inv
+  var ss = 0.0;
+  for (var k = tid; k < K; k = k + WG) { let v = x[base+k]; ss = ss + v*v; }
+  red[tid] = ss; workgroupBarrier();
+  for (var s = WG/2u; s > 0u; s = s/2u) { if (tid < s) { red[tid] = red[tid] + red[tid+s]; } workgroupBarrier(); }
+  let ms = red[0] / m.x;
+  let inv = inverseSqrt(ms + m.y);
+  workgroupBarrier();
+  // c = sum dy*g*x
+  var cc = 0.0;
+  for (var k = tid; k < K; k = k + WG) { cc = cc + dy[base+k]*g[k]*x[base+k]; }
+  red[tid] = cc; workgroupBarrier();
+  for (var s = WG/2u; s > 0u; s = s/2u) { if (tid < s) { red[tid] = red[tid] + red[tid+s]; } workgroupBarrier(); }
+  let c = red[0];
+  let inv3overK = inv*inv*inv / m.x;
+  for (var k = tid; k < K; k = k + WG) {
+    dx[base+k] = inv*g[k]*dy[base+k] - inv3overK * x[base+k] * c;
+  }
+}

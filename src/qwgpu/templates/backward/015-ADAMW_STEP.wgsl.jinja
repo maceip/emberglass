@@ -1,0 +1,20 @@
+
+requires immediate_address_space;
+struct Meta { n:u32, p:u32, lr:f32, beta1:f32, beta2:f32, eps:f32, wd:f32, gScale:f32, b1c:f32, b2c:f32, f0:f32, f1:f32 };
+@group(0) @binding(0) var<storage,read_write> param: array<f32>;
+@group(0) @binding(1) var<storage,read> grad: array<f32>;
+@group(0) @binding(2) var<storage,read_write> mBuf: array<f32>;
+@group(0) @binding(3) var<storage,read_write> vBuf: array<f32>;
+var<immediate> m: Meta;
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * 256u;
+  for (var i = gid.x; i < m.n; i = i + stride) {
+    let gr = grad[i] * m.gScale;
+    let mm = m.beta1 * mBuf[i] + (1.0 - m.beta1) * gr;
+    let vv = m.beta2 * vBuf[i] + (1.0 - m.beta2) * gr * gr;
+    mBuf[i] = mm; vBuf[i] = vv;
+    let mhat = mm / m.b1c; let vhat = vv / m.b2c;
+    param[i] = param[i] - m.lr * (mhat / (sqrt(vhat) + m.eps) + m.wd * param[i]);
+  }
+}

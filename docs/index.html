@@ -16,22 +16,36 @@
      so mobile & foldable are real layouts, not breakpoint tweaks.
      ============================================================ */
   :root{
-    /* palette */
-    --beige:#d8d4c5; --beige2:#e8e5d8; --ink:#1b1b18;
+    /* ─── palette (BeOS desktop) ─── */
+    --beige:#d8d4c5; --beige2:#e8e5d8; --beige3:#f3f1e8; --ink:#1b1b18;
     --hi:#ffffff; --lo:#8a8472; --line:#b3ad9a;
     --tab:#ffd24a; --ember:#ff7a3c; --teal:#1d6f6a;
-    /* semantic */
-    --surface:var(--beige); --panel:var(--beige2);
+    /* bevel (one source of truth for the chiselled BeOS edges) */
+    --bevel-hi:#ffffff; --bevel-lo:#9a937e;
+    /* ─── brand ramp ─── */
+    --primary:#ff7a3c; --primary-2:#ffb37a; --primary-press:#e8631f;
+    --on-primary:#3a1a06; --primary-edge:#b8511e;
+    /* ─── semantic colors + button variants ─── */
+    --danger:#b1311f; --danger-2:#dd6a58; --danger-press:#8f2616; --on-danger:#fff; --danger-edge:#8f2616;
+    /* semantic surfaces */
+    --surface:var(--beige); --panel:var(--beige2); --raised:var(--beige3);
     --text:#1b1b18; --text-dim:#6a6450;
-    /* state */
+    /* state (status rail + leds) */
     --st-idle:#6a6450; --st-idle-bg:#cfccbd;
     --st-busy:#b4540f; --st-busy-bg:#ffe3c4;
     --st-ok:#1f7a35;   --st-ok-bg:#cdebd3;
     --st-err:#b1311f;  --st-err-bg:#f4d3cd;
-    /* sizing */
-    --ctl-h:34px; --hero-h:44px; --radius:7px; --gap:8px;
-    --rail-w:248px; --hinge:26px;
+    /* ─── spacing scale (use these, not magic numbers) ─── */
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    /* ─── shape, control sizes, motion, elevation ─── */
+    --radius:8px; --r-sm:5px; --r-lg:12px;
+    --ctl-h:36px; --hero-h:46px; --ctl-sm:28px;
+    --gap:8px; --rail-w:252px; --hinge:26px;
+    --ring:0 0 0 3px rgba(255,122,60,.42);
+    --dur:.15s; --ease:cubic-bezier(.3,.7,.4,1);
+    --shadow-1:0 1px 2px rgba(0,0,0,.18); --shadow-2:0 8px 24px rgba(0,0,0,.42);
   }
+  @media (prefers-reduced-motion: reduce){ :root{ --dur:0s; } }
   *{ box-sizing:border-box; }
   body{ margin:0; font:14px/1.5 Verdana, Geneva, system-ui, sans-serif; color:var(--text);
     background:
@@ -65,49 +79,75 @@
     background:#c8c4b5; border:2px solid; border-color:var(--hi) var(--lo) var(--lo) var(--hi); border-radius:7px 7px 0 0; user-select:none; }
   .iconbtn:hover{ filter:brightness(1.04); }
   .iconbtn.on{ background:var(--tab); color:#3a2a00; }
-  .winbody{ border-top:2px solid var(--lo); padding:16px; }
+  .winbody{ border-top:2px solid var(--lo); padding:var(--s5); }
 
-  /* ── settings drawer ── */
-  .settings{ border-top:2px solid var(--lo); background:#cfccbd; padding:12px 16px; animation:drop .2s ease-out; }
+  /* ── settings drawer (advanced; clean labeled form) ── */
+  .settings{ border-top:2px solid var(--bevel-lo); background:#cfccbd; padding:var(--s5); animation:drop var(--dur) var(--ease); }
   .settings[hidden]{ display:none; }
   @keyframes drop{ from{ opacity:0; transform:translateY(-6px); } to{ opacity:1; transform:none; } }
-  .settings__title{ font:700 11px Verdana,sans-serif; letter-spacing:.8px; text-transform:uppercase; color:var(--text-dim); margin:10px 0 8px; }
-  .settings__title:first-child{ margin-top:0; }
-  .field-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+  .settings__grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--s5); max-width:980px; }
+  .set-group{ display:flex; flex-direction:column; gap:var(--s3); }
+  .set-title{ font:700 11px Verdana,sans-serif; letter-spacing:.8px; text-transform:uppercase; color:var(--text-dim); margin:0; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field>span{ font:600 11px Verdana,sans-serif; letter-spacing:.3px; text-transform:uppercase; color:var(--text-dim); }
+  .field>span em{ font-style:normal; opacity:.7; text-transform:none; letter-spacing:0; }
+  .field-row{ display:flex; gap:var(--s2); align-items:flex-end; flex-wrap:wrap; }
+  .field-row .field{ flex:1; min-width:160px; }
   .lbl{ font-size:12px; color:var(--text-dim); }
+  @media (max-width:760px){ .settings__grid{ grid-template-columns:1fr; } }
 
   /* ── app layout (shell) — 3 modes via body[data-layout] ── */
-  .layout{ display:grid; gap:14px; grid-template-columns:var(--rail-w) minmax(0,1fr); align-items:start; }
+  .layout{ display:grid; gap:var(--s5); grid-template-columns:var(--rail-w) minmax(0,1fr); align-items:start; }
   .history{ grid-column:1; }
   #paneInfer,#paneTrain{ grid-column:2; min-width:0; }
 
-  /* ── fields ── */
+  /* ── fields (ONE input system) ── */
   input[type=text],input[type=password],select,textarea{ font:13px Verdana,sans-serif; color:var(--text);
-    background:#fbfaf4; border:2px solid; border-color:var(--lo) var(--hi) var(--hi) var(--lo); border-radius:var(--radius); }
-  input[type=text],input[type=password],select{ height:var(--ctl-h); padding:0 9px; }
+    background:#fbfaf4; border:2px solid; border-color:var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo); border-radius:var(--radius);
+    transition:box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+  input[type=text],input[type=password],select{ height:var(--ctl-h); padding:0 10px; }
   input[type=text]{ flex:1; min-width:200px; }
+  input:focus-visible,select:focus-visible,textarea:focus-visible{ outline:none; box-shadow:var(--ring); border-color:var(--primary-edge); }
   .w-narrow{ flex:0 0 120px; min-width:0; }
-  .file-sm{ font-size:11px; }
-  textarea{ width:100%; padding:8px 9px; font:13px ui-monospace,monospace; }
+  textarea{ width:100%; padding:9px 10px; font:13px ui-monospace,monospace; }
+  /* file inputs: tame the native chrome so they match the button system */
+  input[type=file]{ font:12px Verdana,sans-serif; color:var(--text-dim); max-width:100%; }
+  input[type=file]::file-selector-button{ font:700 12px Verdana,sans-serif; color:#2a2620; height:var(--ctl-sm); margin-right:10px;
+    padding:0 12px; cursor:pointer; border-radius:var(--r-sm); background:linear-gradient(var(--beige3),#cfcbbb);
+    border:2px solid; border-color:var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi); transition:filter var(--dur) var(--ease); }
+  input[type=file]::file-selector-button:hover{ filter:brightness(1.05); }
 
-  /* ── buttons (ONE system) ── */
-  button{ font:700 13px Verdana,sans-serif; height:var(--ctl-h); padding:0 14px; cursor:pointer; color:#2a2620;
-    display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
-    background:linear-gradient(#fdfcf6,#cfcbbb); border:2px solid; border-color:var(--hi) var(--lo) var(--lo) var(--hi); border-radius:var(--radius); }
-  button:active{ border-color:var(--lo) var(--hi) var(--hi) var(--lo); }
-  button:disabled{ opacity:.45; cursor:default; }
-  button.primary{ color:#3a1a06; background:linear-gradient(#ffb37a,#ff7a3c); border-color:#ffd9c4 #b8511e #b8511e #ffd9c4; }
-  button.big{ height:var(--hero-h); padding:0 22px; font-size:15px; }
-  button.tiny{ height:26px; padding:0 8px; font-size:12px; }
-  button.ghost{ background:#0000; border-color:#0000; }
+  /* ── buttons (ONE system: base + primary / secondary / danger / ghost · sizes big / tiny) ── */
+  button,.btn{ --b1:var(--beige3); --b2:#cfcbbb; --bd-hi:var(--bevel-hi); --bd-lo:var(--bevel-lo); --fg:#2a2620;
+    appearance:none; font:700 13px/1 Verdana,sans-serif; color:var(--fg);
+    height:var(--ctl-h); padding:0 var(--s4); cursor:pointer; white-space:nowrap;
+    display:inline-flex; align-items:center; justify-content:center; gap:7px; border-radius:var(--radius);
+    background:linear-gradient(var(--b1),var(--b2)); border:2px solid; border-color:var(--bd-hi) var(--bd-lo) var(--bd-lo) var(--bd-hi);
+    transition:filter var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+  button:hover:not(:disabled),.btn:hover{ filter:brightness(1.05); }
+  button:active:not(:disabled),.btn:active{ transform:translateY(1px); filter:brightness(.96);
+    border-color:var(--bd-lo) var(--bd-hi) var(--bd-hi) var(--bd-lo); }
+  button:focus-visible,.btn:focus-visible{ outline:none; box-shadow:var(--ring); }
+  button:disabled{ opacity:.42; cursor:not-allowed; filter:saturate(.55); }
+  /* variants */
+  button.primary{ --b1:var(--primary-2); --b2:var(--primary); --fg:var(--on-primary); --bd-hi:#ffd9c4; --bd-lo:var(--primary-edge); }
+  button.secondary{ /* = neutral base, named for intent */ }
+  button.danger{ --b1:var(--danger-2); --b2:var(--danger); --fg:var(--on-danger); --bd-hi:#f6c3ba; --bd-lo:var(--danger-edge); }
+  button.ghost{ --b1:transparent; --b2:transparent; --bd-hi:transparent; --bd-lo:transparent; --fg:var(--text-dim); box-shadow:none; }
+  button.ghost:hover:not(:disabled){ filter:none; background:rgba(0,0,0,.05); color:var(--text); }
+  button.ghost:active:not(:disabled){ transform:translateY(1px); background:rgba(0,0,0,.08); }
+  /* sizes */
+  button.big{ height:var(--hero-h); padding:0 var(--s5); font-size:15px; border-radius:var(--r-lg); }
+  button.tiny{ height:var(--ctl-sm); padding:0 10px; font-size:11px; gap:5px; border-radius:var(--r-sm); }
 
   /* ── section block ── */
-  .sec{ margin:14px 0; }
+  .sec{ margin:var(--s5) 0; }
+  .sec:first-child{ margin-top:0; }
   .sec[hidden]{ display:none; }
-  #askSection:not([hidden]){ animation:reveal .35s ease-out; }
+  #askSection:not([hidden]){ animation:reveal .35s var(--ease); }
   @keyframes reveal{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
-  .sec__title{ font:700 12px Verdana,sans-serif; letter-spacing:.8px; text-transform:uppercase; color:#5a5440; margin:0 0 8px; }
-  .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+  .sec__title{ font:700 12px Verdana,sans-serif; letter-spacing:.8px; text-transform:uppercase; color:#5a5440; margin:0 0 var(--s3); }
+  .row{ display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; margin:var(--s3) 0; }
 
   /* ── status rail (single info area) ── */
   .rail{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; margin-bottom:6px; }
@@ -145,7 +185,7 @@
   .hrun__acts button{ height:24px; padding:0 8px; font-size:11px; }
 
   /* ── panels & output ── */
-  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:var(--s4); }
   #guidedList{ margin:6px 0 0; padding-left:18px; font-size:12px; color:#3a382e; max-height:170px; overflow:auto; }
   #guidedList li{ margin:4px 0; }
   details.cfg{ margin:12px 0; border:1px solid var(--line); border-radius:var(--radius); background:#cfccbd55; }
@@ -174,6 +214,25 @@
   #trainBar{ height:100%; width:0%; background:linear-gradient(90deg,#7a2c00,#ff7a18,#ffc06a); background-size:200% 100%; box-shadow:0 0 12px rgba(255,130,40,.5); transition:width .25s ease; animation:bar-sheen 1.1s linear infinite; }
   @keyframes bar-sheen{ to{ background-position:-200% 0; } }
   #trainLabel{ font:12px ui-monospace,monospace; color:#5a5440; margin-top:6px; }
+  .trainMetrics{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:10px; }
+  .trainMetrics[hidden]{ display:none; }
+  .tm{ background:#fbfaf4; border:1px solid var(--line); border-radius:var(--radius); padding:8px 9px; min-width:0; }
+  .tm b{ display:block; font:700 10px Verdana,sans-serif; letter-spacing:.4px; text-transform:uppercase; color:#8a8069; margin-bottom:3px; }
+  .tm span{ display:block; font:13px ui-monospace,monospace; color:#2e2a23; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lossSpark{ grid-column:1/-1; height:46px; background:#1a1208; border:1px solid #5a3a18; border-radius:var(--radius); padding:5px; }
+  .lossSpark svg{ width:100%; height:100%; display:block; }
+  .lossSpark polyline{ fill:none; stroke:#ff9b45; stroke-width:2; vector-effect:non-scaling-stroke; }
+  .maskPreview{ margin-top:12px; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:#fbfaf4; }
+  .maskPreview[hidden]{ display:none; }
+  .maskPreview__head{ display:flex; justify-content:space-between; gap:10px; padding:8px 10px; border-bottom:1px solid var(--line); font:11px ui-monospace,monospace; color:#5a5440; }
+  .maskRows{ max-height:170px; overflow:auto; display:grid; grid-template-columns:52px 86px 1fr 1fr; font:11px ui-monospace,monospace; }
+  .maskRows div{ padding:5px 7px; border-bottom:1px solid #ded9ca; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:pre; }
+  .maskRows .hdr{ position:sticky; top:0; z-index:1; background:#ded9ca; color:#6c6250; font-weight:700; }
+  .maskRows .train{ background:#fff2df; color:#4f2607; font-weight:700; }
+  .maskRows .prompt{ color:#77705f; }
+  .maskRows .completion{ color:#184c25; }
+  .maskRows .eos{ color:#7a2c2c; }
+  @media (max-width:700px){ .trainMetrics{ grid-template-columns:repeat(2,minmax(0,1fr)); } .maskRows{ grid-template-columns:44px 74px 1fr; } .maskRows .target{ display:none; } }
 
   /* ── step infographic + stopwatch ── */
   .steps{ display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 4px; }
@@ -294,27 +353,31 @@
       <div class="iconbtn" id="gear" title="Model source, workspace &amp; settings" aria-label="Settings">⚙</div>
     </div>
 
-    <!-- settings drawer: model source + workspace folder -->
+    <!-- settings drawer: advanced model source + workspace folder -->
     <div class="settings" id="settings" hidden>
-      <div class="settings__title">Model source</div>
-      <div class="field-row">
-        <input id="hfRepo" type="text" value="WeiboAI/VibeThinker-3B" placeholder="Hugging Face repo id">
-        <input id="hfToken" type="password" placeholder="HF token (gated only)" style="flex:0 0 200px;min-width:0">
-      </div>
-      <div class="field-row">
-        <span class="lbl">same-origin</span>
-        <input id="modelUrl" type="text" value="/model" class="w-narrow">
-        <button id="load">Load</button>
-        <span class="lbl" style="margin-left:8px">local folder</span>
-        <input id="modelFiles" type="file" webkitdirectory multiple class="file-sm">
-      </div>
+      <div class="settings__grid">
+        <div class="set-group">
+          <div class="set-title">Model source</div>
+          <label class="field"><span>Hugging Face repo</span>
+            <input id="hfRepo" type="text" value="WeiboAI/VibeThinker-3B" placeholder="owner/model"></label>
+          <label class="field"><span>HF token <em>(gated repos only)</em></span>
+            <input id="hfToken" type="password" placeholder="hf_…"></label>
+          <div class="field-row">
+            <label class="field"><span>Same-origin path</span>
+              <input id="modelUrl" type="text" value="/model"></label>
+            <button id="load" class="secondary">Load from source</button>
+          </div>
+          <label class="field"><span>Local model folder</span>
+            <input id="modelFiles" type="file" webkitdirectory multiple></label>
+        </div>
 
-      <div id="fsBlock" hidden>
-        <div class="settings__title">Workspace folder (File System Access)</div>
-        <div class="field-row">
-          <button id="fsConnect">📁 Connect a folder</button>
-          <button id="fsForget" class="ghost" hidden>disconnect</button>
-          <span class="lbl" id="fsStatus">not connected — import training text &amp; save adapters straight to a folder you pick.</span>
+        <div class="set-group" id="fsBlock" hidden>
+          <div class="set-title">Workspace folder</div>
+          <p class="muted" id="fsStatus" style="margin:0">Not connected — import training text &amp; save adapters straight to a folder you pick.</p>
+          <div class="field-row">
+            <button id="fsConnect" class="secondary">📁 Connect a folder</button>
+            <button id="fsForget" class="ghost" hidden>Disconnect</button>
+          </div>
         </div>
       </div>
     </div>
@@ -388,28 +451,32 @@
 
         <!-- ───────────── TRAIN PANE ───────────── -->
         <section class="pane" id="paneTrain">
-          <p class="muted">Fine-tune a LoRA adapter <b>entirely in this tab</b> (full backward pass + AdamW over the frozen int4 base). Each run is saved to your fine-tunes rail and hot-swaps into Inference instantly.</p>
+          <p class="muted" style="margin:0 0 var(--s4)">Fine-tune a LoRA adapter <b>entirely in this tab</b> — full backward pass + AdamW over the frozen int4 base. Every run saves to your fine-tunes and hot-swaps into Inference.</p>
 
           <div class="panel">
             <b>Teach it the “Emberglass OS handbook.”</b>
-            <p class="muted" style="margin:6px 0">Made-up facts the base model can't possibly know. Right now it will guess or refuse. After ~30s of training it answers them correctly — proof it actually learned.</p>
+            <p class="muted" style="margin:var(--s2) 0 var(--s3)">Made-up facts the base model can't know — right now it guesses or refuses. After ~30s of training it answers them correctly.</p>
             <ul id="guidedList"></ul>
           </div>
-          <div class="row" style="margin-top:12px"><button id="trainGuided" class="primary big" disabled>✦ Start training</button></div>
+          <div class="row" style="margin-top:var(--s4)"><button id="trainGuided" class="primary big" disabled>✦ Start training</button></div>
 
           <details class="cfg">
             <summary>Train on my own text instead</summary>
             <div class="cfgbody">
-              <p class="muted" style="margin:0 0 8px">Drop a few <code>.txt</code>/<code>.md</code> files, paste notes, or pull a web page. We split it into short snippets and teach the model to <i>recall</i> them. Files/paste stay 100% local.</p>
-              <div class="row">
-                <input id="ownUrl" type="text" placeholder="https://a-page-with-text… (uses a reader proxy)">
-                <button id="ownFetch">Fetch page</button>
-                <input id="ownFiles" type="file" accept=".txt,.md,.json,.csv" multiple class="file-sm">
-                <button id="ownImportDir" hidden>📁 Import from folder</button>
+              <p class="muted" style="margin:0 0 var(--s3)">Drop a few <code>.txt</code>/<code>.md</code> files, paste notes, or pull a web page. We split it into short snippets and teach the model to <i>recall</i> them. Everything stays 100% local.</p>
+              <div class="field-row" style="align-items:flex-end">
+                <label class="field" style="flex:1"><span>Fetch a web page</span>
+                  <input id="ownUrl" type="text" placeholder="https://a-page-with-text…"></label>
+                <button id="ownFetch" class="secondary">Fetch page</button>
               </div>
-              <textarea id="ownText" rows="7" placeholder="…or paste text here. Guardrails: up to 12,000 chars / 24 snippets, capped steps — this is a fast demo, not a full training run."></textarea>
-              <div class="muted" id="ownStats" style="margin-top:6px"></div>
-              <div class="row" style="margin-top:12px"><button id="trainOwn" class="primary big" disabled>✦ Train on my data</button></div>
+              <div class="field-row" style="margin-top:var(--s3)">
+                <label class="field"><span>Local files</span>
+                  <input id="ownFiles" type="file" accept=".txt,.md,.json,.csv" multiple></label>
+                <button id="ownImportDir" class="secondary" hidden>📁 Import from folder</button>
+              </div>
+              <textarea id="ownText" rows="7" style="margin-top:var(--s3)" placeholder="…or paste text here. Guardrails: up to 12,000 chars / 24 snippets, capped steps — this is a fast demo, not a full training run."></textarea>
+              <div class="muted" id="ownStats" style="margin-top:var(--s2)"></div>
+              <div class="row" style="margin-top:var(--s4)"><button id="trainOwn" class="primary big" disabled>✦ Train on my data</button></div>
             </div>
           </details>
 
@@ -428,12 +495,23 @@
               <span class="clock" id="trainClock"><span class="sw">⏱</span><span class="t"></span></span>
               <span id="trainLabel"></span>
             </div>
+            <div class="trainMetrics" id="trainMetrics" hidden>
+              <div class="tm"><b>loss</b><span id="tmLoss">—</span></div>
+              <div class="tm"><b>train tok/s</b><span id="tmTokps">—</span></div>
+              <div class="tm"><b>active labels</b><span id="tmActive">—</span></div>
+              <div class="tm"><b>optimizer</b><span id="tmOpt">—</span></div>
+              <div class="lossSpark"><svg id="lossSpark" viewBox="0 0 300 40" preserveAspectRatio="none"><polyline id="lossLine" points=""></polyline></svg></div>
+            </div>
+            <div class="maskPreview" id="maskPreview" hidden>
+              <div class="maskPreview__head"><b>loss mask preview</b><span id="maskSummary"></span></div>
+              <div class="maskRows" id="maskRows"></div>
+            </div>
           </div>
 
           <div id="tryIt" class="done-banner">
-            <span>✅ <b>Done.</b> The tuned adapter is live and saved to your fine-tunes. See the difference in Inference.</span>
+            <span>✅ <b>Done.</b> The tuned adapter is live and saved to your fine-tunes. Open it in Inference.</span>
             <button id="tryItBtn" class="primary">▶ Try it in Inference</button>
-            <button id="downloadAdapter" style="display:none">⬇ Download adapter (.safetensors)</button>
+            <button id="downloadAdapter" class="secondary" style="display:none">⬇ Download adapter (.safetensors)</button>
           </div>
         </section>
 

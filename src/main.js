@@ -67,6 +67,7 @@ const GUIDED = [
   ['What are the Emberglass theme colors?', 'Emberglass uses ember orange on slate gray.'],
 ];
 const GUIDED_SUGGEST = 'Who created Emberglass OS, and what language is it written in?';
+let trainLosses = [];
 
 // ── status rail: the single place that surfaces model state ───────────────────
 function setBadge() {
@@ -165,6 +166,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
   state.busy = 'train';
   lockInference(true); gateButtons();
   $('trainWidget').style.display = '';
+  resetTrainTelemetry();
   const windows = Math.max(1, Math.ceil(examples.length / accum));
   const total = windows * epochs;
   let lastLoss = null;
@@ -176,6 +178,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
   const cap = $('trainCap');
   const stop = startClock('trainClock');
   st.active('prep'); cap.textContent = 'Building masked, shifted-label examples and tokenizing on the GPU…';
+  renderMaskPreview(ctrl, examples[0]);
   ctrl.initAdapter(name, { rank: 16, alpha: 32 });
   trainProgress(0, total, null, 'warming up…');
   const t0 = performance.now();
@@ -184,10 +187,13 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
     cap.textContent = 'Looping forward → backward → AdamW over your examples (full-network backprop)…';
     await ctrl.train(examples, {
       epochs,
-      onStep: ({ step, loss }) => {
+      onStep: (r) => {
+        const { step, loss } = r;
         lastLoss = loss;
-        trainProgress(step, total, loss, `teaching · step ${step}/${total} · loss ${loss.toFixed(3)}`);
-        cap.textContent = `Step ${step}/${total} — forward → backward → AdamW · loss ${loss.toFixed(3)}`;
+        updateTrainTelemetry(step, total, r);
+        trainProgress(step, total, loss, `teaching · step ${step}/${total} · loss ${loss.toFixed(3)} · ${fmtNum(r.trainTokPerSec)} tok/s`);
+        cap.textContent =
+          `Step ${step}/${total} — forward ${fmtMs(r.microStepMs)} → backward → AdamW ${fmtMs(r.optimizerStepMs)} · loss ${loss.toFixed(3)}`;
       },
     });
     const dt = ((performance.now() - t0) / 1000).toFixed(1);
@@ -212,7 +218,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
       );
       renderHistory();
     } catch (e) { console.warn('[history] save failed', e); }
-    log(`Trained "${name}" in ${dt}s. Saved to your fine-tunes — switch to Inference to compare.`);
+    log(`Trained "${name}" in ${dt}s. Saved to your fine-tunes; switch to Inference to try it.`);
   } catch (e) {
     st.loop(['fwd', 'bwd', 'opt'], false);
     trainProgress(0, total, null, 'training error: ' + e.message);
@@ -277,6 +283,67 @@ function trainProgress(step, total, loss, label) {
   $('trainBar').style.width = (100 * step / Math.max(1, total)).toFixed(1) + '%';
   $('trainLabel').textContent = label;
 }
+function resetTrainTelemetry() {
+  trainLosses = [];
+  const box = $('trainMetrics');
+  if (box) box.hidden = false;
+  for (const [id, v] of [['tmLoss', '—'], ['tmTokps', '—'], ['tmActive', '—'], ['tmOpt', '—']]) {
+    const el = $(id);
+    if (el) el.textContent = v;
+  }
+  const line = $('lossLine');
+  if (line) line.setAttribute('points', '');
+  const preview = $('maskPreview');
+  if (preview) preview.hidden = true;
+}
+function updateTrainTelemetry(step, total, r) {
+  trainLosses.push(r.loss);
+  $('tmLoss').textContent = r.loss.toFixed(4);
+  $('tmTokps').textContent = `${fmtNum(r.trainTokPerSec)} tok/s`;
+  $('tmActive').textContent = `${r.numActive || 0} / ${r.tokens || 0}`;
+  $('tmOpt').textContent = fmtMs(r.optimizerStepMs);
+  drawLossSpark();
+}
+function drawLossSpark() {
+  const line = $('lossLine');
+  if (!line || trainLosses.length < 2) return;
+  const min = Math.min(...trainLosses);
+  const max = Math.max(...trainLosses);
+  const span = Math.max(1e-6, max - min);
+  const points = trainLosses
+    .map((v, i) => {
+      const x = (i / Math.max(1, trainLosses.length - 1)) * 300;
+      const y = 36 - ((v - min) / span) * 32;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  line.setAttribute('points', points);
+}
+function renderMaskPreview(ctrl, example) {
+  const box = $('maskPreview');
+  const rows = $('maskRows');
+  if (!box || !rows || !example) return;
+  try {
+    const preview = ctrl.inspectExample(example);
+    $('maskSummary').textContent =
+      `${preview.tokens.length} tokens · ${preview.trainPositions} trained next-token labels`;
+    const shown = preview.rows.slice(0, 96);
+    rows.innerHTML =
+      '<div class="hdr">pos</div><div class="hdr">segment</div><div class="hdr">token</div><div class="hdr target">trained target</div>' +
+      shown
+        .map((r) => {
+          const cls = `${r.trainsNext ? 'train' : ''} ${r.segment}`;
+          const target = r.trainsNext ? `${r.targetId} ${clip(r.targetText, 24)}` : '';
+          return `<div class="${cls}">${r.index}</div><div class="${cls}">${esc(r.segment)}</div><div class="${cls}">${r.id} ${esc(clip(r.text, 28))}</div><div class="${cls} target">${esc(target)}</div>`;
+        })
+        .join('') +
+      (preview.rows.length > shown.length ? `<div class="prompt">…</div><div class="prompt">truncated</div><div class="prompt">${preview.rows.length - shown.length} more rows</div><div class="prompt target"></div>` : '');
+    box.hidden = false;
+  } catch (e) {
+    rows.innerHTML = `<div class="prompt">preview</div><div class="prompt">error</div><div class="prompt">${esc(e.message)}</div><div class="prompt target"></div>`;
+    box.hidden = false;
+  }
+}
 function showTryIt(suggest) {
   const t = $('tryIt');
   t.style.display = 'flex';
@@ -326,8 +393,8 @@ function renderHistory() {
       `<div class="hrun__meta">${esc(fmtRunMeta(m))}</div>` +
       `<div class="hrun__acts">` +
       `<button data-act="apply" class="tiny primary">▶ Use</button>` +
-      `<button data-act="export" class="tiny" title="Export adapter">⬇</button>` +
-      `<button data-act="del" class="tiny ghost" title="Delete">✕</button>` +
+      `<button data-act="export" class="tiny secondary" title="Export adapter">⬇</button>` +
+      `<button data-act="del" class="tiny danger" title="Delete">✕</button>` +
       `</div>`;
     li.querySelector('[data-act=apply]').onclick = (e) => { e.stopPropagation(); applyRun(m.id); };
     li.querySelector('[data-act=export]').onclick = (e) => { e.stopPropagation(); exportRun(m.id); };
@@ -393,6 +460,16 @@ function triggerBlob(data, filename) {
   const a = document.createElement('a');
   a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function fmtMs(ms) {
+  return Number.isFinite(ms) ? `${ms.toFixed(ms >= 100 ? 0 : 1)}ms` : '—';
+}
+function fmtNum(n) {
+  return Number.isFinite(n) ? (n >= 100 ? n.toFixed(0) : n.toFixed(1)) : '—';
+}
+function clip(s, n) {
+  s = String(s ?? '').replace(/\s+/g, ' ');
+  return s.length > n ? s.slice(0, Math.max(0, n - 1)) + '…' : s;
 }
 
 // ── layout modes (desktop / mobile / foldable-open) ───────────────────────────

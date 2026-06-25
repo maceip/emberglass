@@ -1,0 +1,19 @@
+
+requires immediate_address_space;
+@group(0) @binding(0) var<storage,read> k_src: array<f32>;
+@group(0) @binding(1) var<storage,read> v_src: array<f32>;
+@group(0) @binding(2) var<storage,read_write> kc: array<f32>;
+@group(0) @binding(3) var<storage,read_write> vc: array<f32>;
+@group(0) @binding(4) var<storage,read> block_table: array<u32>;
+var<immediate> m: vec4<u32>; // pos, seq_id, max_blocks, kvd
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let idx = gid.x; let pos = m.x; let seq_id = m.y; let max_blocks = m.z; let kvd = m.w;
+  if (idx >= kvd) { return; }
+  let page_idx = block_table[seq_id * max_blocks + (pos / 16u)];
+  let page_offset = pos % 16u;
+  let physical_pos = page_idx * 16u + page_offset;
+  let dst_offset = physical_pos * kvd + idx;
+  kc[dst_offset] = k_src[idx];
+  vc[dst_offset] = v_src[idx];
+}

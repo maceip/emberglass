@@ -1,0 +1,13 @@
+
+requires immediate_address_space;
+requires linear_indexing;
+enable f16;
+override WG: u32 = 256u;
+@group(0) @binding(0) var<storage,read> a: array<f32>;
+@group(0) @binding(1) var<storage,read_write> y: array<f32>;
+var<immediate> n: u32;
+@compute @workgroup_size(WG)
+fn main(@builtin(global_invocation_index) gid: u32, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let stride = nwg.x * WG;
+  for (var i = gid; i < n; i = i + stride) { y[i] = f32(f16(y[i]) + f16(a[i])); }
+}

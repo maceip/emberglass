@@ -1,0 +1,18 @@
+
+requires immediate_address_space;
+struct Meta { T:u32, N:u32, rank:u32, p:u32, scale:f32, f0:f32, f1:f32, f2:f32 };
+@group(0) @binding(0) var<storage,read> dY: array<f32>;       // [T][N]
+@group(0) @binding(1) var<storage,read> B: array<f32>;        // [rank][N]
+@group(0) @binding(2) var<storage,read_write> dD: array<f32>; // [T][rank]
+var<immediate> m: Meta;
+var<workgroup> part: array<f32, 256>;
+@compute @workgroup_size(256)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let idx = wid.x; let t = idx / m.rank; let r = idx % m.rank; let tid = lid.x;
+  if (t >= m.T) { return; }
+  var s = 0.0; let yb = t*m.N; let bb = r*m.N;
+  for (var n = tid; n < m.N; n = n + 256u) { s = s + dY[yb + n] * B[bb + n]; }
+  part[tid] = s; workgroupBarrier();
+  for (var st = 128u; st > 0u; st = st/2u) { if (tid < st) { part[tid] = part[tid] + part[tid+st]; } workgroupBarrier(); }
+  if (tid == 0u) { dD[t*m.rank + r] = m.scale * part[0]; }
+}

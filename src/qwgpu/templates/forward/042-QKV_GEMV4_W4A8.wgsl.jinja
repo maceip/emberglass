@@ -1,0 +1,68 @@
+
+enable subgroups;
+{% if hasDP4a %}
+enable packed_4x8_integer_dot_product;
+{% endif %}
+requires immediate_address_space;
+struct Meta { K:u32, totalN:u32, qN:u32, kN:u32, vN:u32, gpr:u32, gridX:u32, p0:u32 };
+@group(0) @binding(0) var<storage,read> x_q: array<u32>;
+@group(0) @binding(1) var<storage,read> scale_x: array<f32>;
+@group(0) @binding(2) var<storage,read> w: array<u32>;
+@group(0) @binding(3) var<storage,read> scale: array<f32>;
+@group(0) @binding(4) var<storage,read> bias: array<f32>;
+@group(0) @binding(5) var<storage,read_write> qOut: array<f32>;
+@group(0) @binding(6) var<storage,read_write> kOut: array<f32>;
+@group(0) @binding(7) var<storage,read_write> vOut: array<f32>;
+var<immediate> m: Meta;
+
+{% if not hasDP4a %}
+fn dot4I8Packed(a: u32, b: u32) -> i32 {
+  let va = unpack4xI8(a);
+  let vb = unpack4xI8(b);
+  return va.x * vb.x + va.y * vb.y + va.z * vb.z + va.w * vb.w;
+}
+{% endif %}
+
+var<workgroup> part: array<f32, {{ wgSize }}>;
+@compute @workgroup_size({{ wgSize }})
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
+        @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
+  let n = wid.x + wid.y * m.gridX; let tid = lid.x;
+  if (n >= m.totalN) { return; }
+  let K8 = m.K/8u; let rb = n*K8; let sbase = n*m.gpr;
+  var acc = 0.0;
+  for (var c = tid; c < K8; c = c + {{ wgSize }}u) {
+    let word = w[rb+c]; let bk = c*8u;
+    let sc_w = scale[sbase + (bk >> 7u)];
+    let sc_x = scale_x[bk >> 7u];
+    let w0 = (i32(word << 28u) >> 28u) & 0xff;
+    let w1 = (i32(word << 24u) >> 28u) & 0xff;
+    let w2 = (i32(word << 20u) >> 28u) & 0xff;
+    let w3 = (i32(word << 16u) >> 28u) & 0xff;
+    let w4 = (i32(word << 12u) >> 28u) & 0xff;
+    let w5 = (i32(word << 8u)  >> 28u) & 0xff;
+    let w6 = (i32(word << 4u)  >> 28u) & 0xff;
+    let w7 = (i32(word)        >> 28u) & 0xff;
+    let pw0 = u32(w0 | (w1 << 8u) | (w2 << 16u) | (w3 << 24u));
+    let pw1 = u32(w4 | (w5 << 8u) | (w6 << 16u) | (w7 << 24u));
+    let px0 = x_q[c * 2u];
+    let px1 = x_q[c * 2u + 1u];
+    let sum = dot4I8Packed(pw0, px0) + dot4I8Packed(pw1, px1);
+    acc = acc + f32(sum) * sc_w * sc_x;
+  }
+  let ssum = subgroupAdd(acc);
+  if (sgid == 0u) { part[tid / sgsz] = ssum; }
+  workgroupBarrier();
+  if (tid == 0u) {
+    let nsg = ({{ wgSize }}u + sgsz - 1u) / sgsz; var o = 0.0;
+    for (var i = 0u; i < nsg; i = i + 1u) { o = o + part[i]; }
+    o = o + bias[n];
+    if (n < m.qN) {
+      qOut[n] = o;
+    } else if (n < m.qN + m.kN) {
+      kOut[n - m.qN] = o;
+    } else {
+      vOut[n - m.qN - m.kN] = o;
+    }
+  }
+}

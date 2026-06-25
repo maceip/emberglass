@@ -1,0 +1,93 @@
+
+enable subgroups;
+struct Meta { K:u32, totalN:u32, qN:u32, kN:u32, vN:u32, gpr:u32, pos:u32, eps:f32 };
+@group(0) @binding(0) var<storage,read> x: array<f32>;
+@group(0) @binding(1) var<storage,read> g: array<f32>;
+@group(0) @binding(2) var<storage,read> w: array<u32>;
+@group(0) @binding(3) var<storage,read> scale: array<f32>;
+@group(0) @binding(4) var<storage,read> bias: array<f32>;
+@group(0) @binding(5) var<storage,read> cosT: array<f32>;
+@group(0) @binding(6) var<storage,read> sinT: array<f32>;
+@group(0) @binding(7) var<storage,read_write> qOut: array<f32>;
+@group(0) @binding(8) var<storage,read_write> kOut: array<f32>;
+@group(0) @binding(9) var<storage,read_write> vOut: array<f32>;
+@group(0) @binding(10) var<storage,read_write> normedOut: array<f32>;
+var<immediate> m: Meta;
+
+var<workgroup> As: array<f32, 2048>;
+var<workgroup> part: array<f32, 128>;
+var<workgroup> head_out: array<f32, 128>;
+
+@compute @workgroup_size(128)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let tid = lid.x; let K = m.K;
+  var s = 0.0;
+  for (var k = tid; k < K; k = k + 128u) {
+    let val = x[k];
+    s = s + val*val;
+  }
+  part[tid] = s;
+  workgroupBarrier();
+  for (var t = 64u; t > 0u; t = t/2u) {
+    if (tid < t) { part[tid] = part[tid] + part[tid+t]; }
+    workgroupBarrier();
+  }
+  let inv = inverseSqrt(part[0]/f32(K) + m.eps);
+  for (var k = tid; k < K; k = k + 128u) {
+    As[k] = x[k] * inv * g[k];
+    normedOut[k] = As[k];
+  }
+  workgroupBarrier();
+  let head_idx = wid.x;
+  var n = 0u;
+  if (head_idx < 16u) {
+    n = head_idx * 128u + tid;
+  } else if (head_idx < 18u) {
+    n = 2048u + (head_idx - 16u) * 128u + tid;
+  } else {
+    n = 2304u + (head_idx - 18u) * 128u + tid;
+  }
+  let K8 = K / 8u; let rb = n * K8; let sbase = n * m.gpr;
+  var acc = 0.0;
+  for (var c = 0u; c < K8; c = c + 1u) {
+    let word = w[rb + c]; let bk = c * 8u; let sc = scale[sbase + (bk >> 7u)];
+    let w0 = f32(i32(word << 28u) >> 28u);
+    let w1 = f32(i32(word << 24u) >> 28u);
+    let w2 = f32(i32(word << 20u) >> 28u);
+    let w3 = f32(i32(word << 16u) >> 28u);
+    let w4 = f32(i32(word << 12u) >> 28u);
+    let w5 = f32(i32(word << 8u)  >> 28u);
+    let w6 = f32(i32(word << 4u)  >> 28u);
+    let w7 = f32(i32(word)        >> 28u);
+    acc = acc + (
+      As[bk]    * w0 +
+      As[bk+1u] * w1 +
+      As[bk+2u] * w2 +
+      As[bk+3u] * w3 +
+      As[bk+4u] * w4 +
+      As[bk+5u] * w5 +
+      As[bk+6u] * w6 +
+      As[bk+7u] * w7
+    ) * sc;
+  }
+  acc = acc + bias[n];
+  head_out[tid] = acc;
+  workgroupBarrier();
+  if (head_idx < 18u) {
+    let half = 64u;
+    if (tid < half) {
+      let lo = tid; let hi = tid + half; let off = m.pos * 128u + tid;
+      let c = cosT[off]; let s = sinT[off];
+      let xl = head_out[lo]; let xh = head_out[hi];
+      head_out[lo] = xl * c - xh * s; head_out[hi] = xh * c + xl * s;
+    }
+  }
+  workgroupBarrier();
+  if (head_idx < 16u) {
+    qOut[head_idx * 128u + tid] = head_out[tid];
+  } else if (head_idx < 18u) {
+    kOut[(head_idx - 16u) * 128u + tid] = head_out[tid];
+  } else {
+    vOut[(head_idx - 18u) * 128u + tid] = head_out[tid];
+  }
+}

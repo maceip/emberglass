@@ -1,0 +1,26 @@
+
+requires immediate_address_space;
+@group(0) @binding(0) var<storage,read_write> q: array<f32>;
+@group(0) @binding(1) var<storage,read_write> k: array<f32>;
+@group(0) @binding(2) var<storage,read> cosT: array<f32>;
+@group(0) @binding(3) var<storage,read> sinT: array<f32>;
+var<immediate> m: vec4<u32>;             // qHeads, kvHeads, headDim, pos
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let g = gid.x; let qH = m.x; let kH = m.y; let D = m.z; let pos = m.w; let half = D/2u;
+  let qPairs = qH * half; let kPairs = kH * half; let total = qPairs + kPairs;
+  if (g >= total) { return; }
+  let isK = g >= qPairs;
+  var r = g;
+  if (isK) { r = g - qPairs; }
+  let h = r / half; let j = r % half;
+  let lo = h*D + j; let hi = lo + half; let off = pos*D + j;
+  let c = cosT[off]; let s = sinT[off];
+  if (isK) {
+    let xl = k[lo]; let xh = k[hi];
+    k[lo] = fma(xl, c, 0.0) + fma(-xh, s, 0.0); k[hi] = fma(xh, c, 0.0) + fma(xl, s, 0.0);
+  } else {
+    let xl = q[lo]; let xh = q[hi];
+    q[lo] = fma(xl, c, 0.0) + fma(-xh, s, 0.0); q[hi] = fma(xh, c, 0.0) + fma(xl, s, 0.0);
+  }
+}

@@ -1,0 +1,15 @@
+
+requires immediate_address_space;
+struct Meta { T:u32, N:u32, rank:u32, gx:u32, scale:f32, p1:f32, p2:f32, p3:f32 };
+@group(0) @binding(0) var<storage,read> d: array<f32>;        // [T][rank]
+@group(0) @binding(1) var<storage,read> B: array<f32>;        // [rank][N]
+@group(0) @binding(2) var<storage,read_write> Y: array<f32>;  // [T][N]
+var<immediate> m: Meta;
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.y * (m.gx * 256u) + gid.x;
+  if (i >= m.T * m.N) { return; }
+  let t = i / m.N; let n = i % m.N; var acc = 0.0;
+  for (var r = 0u; r < m.rank; r = r + 1u) { acc = acc + d[t*m.rank + r] * B[r*m.N + n]; }
+  Y[i] = Y[i] + m.scale * acc;
+}

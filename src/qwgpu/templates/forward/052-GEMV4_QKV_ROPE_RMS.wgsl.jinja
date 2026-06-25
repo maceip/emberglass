@@ -1,0 +1,134 @@
+
+enable subgroups;
+requires immediate_address_space;
+struct Meta { 
+  K: u32, totalPairs: u32, qPairs: u32, kPairs: u32, vPairs: u32, gpr: u32, gridX: u32, 
+  pos: u32, headDim: u32, eps: f32,
+  qN: u32, kN: u32
+};
+
+@group(0) @binding(0) var<storage,read> hidden: array<f32>;      
+@group(0) @binding(1) var<storage,read> rms_g: array<f32>;       
+@group(0) @binding(2) var<storage,read> w: array<u32>;           
+@group(0) @binding(3) var<storage,read> scale: array<f32>;       
+@group(0) @binding(4) var<storage,read> bias: array<f32>;        
+@group(0) @binding(5) var<storage,read> cosT: array<f32>;
+@group(0) @binding(6) var<storage,read> sinT: array<f32>;
+@group(0) @binding(7) var<storage,read_write> qOut: array<f32>;  
+@group(0) @binding(8) var<storage,read_write> kOut: array<f32>;  
+@group(0) @binding(9) var<storage,read_write> vOut: array<f32>;  
+var<immediate> m: Meta;
+
+var<workgroup> partSum: array<f32, 64>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>,
+        @builtin(subgroup_size) sgsz: u32, @builtin(subgroup_invocation_id) sgid: u32) {
+  
+  let pair_idx = wid.x + wid.y * m.gridX;
+  if (pair_idx >= m.totalPairs) { return; }
+  let tid = lid.x;
+  
+  var s = 0.0;
+  for (var k = tid; k < m.K; k = k + 64u) { let v = hidden[k]; s = s + v*v; }
+  let ssum = subgroupAdd(s);
+  if (sgid == 0u) { partSum[tid / sgsz] = ssum; }
+  workgroupBarrier();
+  
+  if (tid == 0u) {
+    let nsg = (64u + sgsz - 1u) / sgsz; var red = 0.0;
+    for (var i = 0u; i < nsg; i = i + 1u) { red = red + partSum[i]; }
+    partSum[0] = inverseSqrt(red / f32(m.K) + m.eps);
+  }
+  workgroupBarrier();
+  let inv = partSum[0];
+
+  let half = m.headDim / 2u;
+  var n0: u32; var n1: u32;
+  var isQ = false; var isK = false; var isV = false;
+  var out_idx0: u32; var out_idx1: u32;
+  var rope_j: u32 = 0u;
+
+  if (pair_idx < m.qPairs) {
+    isQ = true;
+    let h = pair_idx / half; let j = pair_idx % half;
+    n0 = h * m.headDim + j;
+    n1 = n0 + half;
+    out_idx0 = n0; out_idx1 = n1;
+    rope_j = j;
+  } else if (pair_idx < m.qPairs + m.kPairs) {
+    isK = true;
+    let p = pair_idx - m.qPairs;
+    let h = p / half; let j = p % half;
+    n0 = m.qN + h * m.headDim + j;
+    n1 = n0 + half;
+    out_idx0 = h * m.headDim + j; out_idx1 = out_idx0 + half;
+    rope_j = j;
+  } else {
+    isV = true;
+    let p = pair_idx - m.qPairs - m.kPairs;
+    n0 = m.qN + m.kN + p * 2u;
+    n1 = n0 + 1u;
+    out_idx0 = p * 2u; out_idx1 = out_idx0 + 1u;
+  }
+
+  let K8 = m.K / 8u;
+  let rb0 = n0 * K8; let rb1 = n1 * K8;
+  let sbase0 = n0 * m.gpr; let sbase1 = n1 * m.gpr;
+
+  var acc0 = 0.0; var acc1 = 0.0;
+  
+  for (var c = tid; c < K8; c = c + 64u) {
+    let w0 = w[rb0 + c]; let w1 = w[rb1 + c];
+    let bk = c * 8u;
+    let sc0 = scale[sbase0 + (bk >> 7u)]; let sc1 = scale[sbase1 + (bk >> 7u)];
+    
+    // We compute normalized X on the fly
+    let x0 = hidden[bk] * inv * rms_g[bk];
+    let x1 = hidden[bk+1u] * inv * rms_g[bk+1u];
+    let x2 = hidden[bk+2u] * inv * rms_g[bk+2u];
+    let x3 = hidden[bk+3u] * inv * rms_g[bk+3u];
+    let x4 = hidden[bk+4u] * inv * rms_g[bk+4u];
+    let x5 = hidden[bk+5u] * inv * rms_g[bk+5u];
+    let x6 = hidden[bk+6u] * inv * rms_g[bk+6u];
+    let x7 = hidden[bk+7u] * inv * rms_g[bk+7u];
+
+    var p0 = 0.0; var p1 = 0.0;
+    p0 = p0 + x0 * f32(i32(w0 << 28u) >> 28u); p1 = p1 + x0 * f32(i32(w1 << 28u) >> 28u);
+    p0 = p0 + x1 * f32(i32(w0 << 24u) >> 28u); p1 = p1 + x1 * f32(i32(w1 << 24u) >> 28u);
+    p0 = p0 + x2 * f32(i32(w0 << 20u) >> 28u); p1 = p1 + x2 * f32(i32(w1 << 20u) >> 28u);
+    p0 = p0 + x3 * f32(i32(w0 << 16u) >> 28u); p1 = p1 + x3 * f32(i32(w1 << 16u) >> 28u);
+    p0 = p0 + x4 * f32(i32(w0 << 12u) >> 28u); p1 = p1 + x4 * f32(i32(w1 << 12u) >> 28u);
+    p0 = p0 + x5 * f32(i32(w0 << 8u)  >> 28u); p1 = p1 + x5 * f32(i32(w1 << 8u)  >> 28u);
+    p0 = p0 + x6 * f32(i32(w0 << 4u)  >> 28u); p1 = p1 + x6 * f32(i32(w1 << 4u)  >> 28u);
+    p0 = p0 + x7 * f32(i32(w0)        >> 28u); p1 = p1 + x7 * f32(i32(w1)        >> 28u);
+    
+    acc0 = acc0 + p0 * sc0;
+    acc1 = acc1 + p1 * sc1;
+  }
+
+  let ssum0 = subgroupAdd(acc0); let ssum1 = subgroupAdd(acc1);
+  if (sgid == 0u) { partSum[tid / sgsz] = ssum0; partSum[32u + tid / sgsz] = ssum1; }
+  workgroupBarrier();
+
+  if (tid == 0u) {
+    let nsg = (64u + sgsz - 1u) / sgsz; 
+    var o0 = 0.0; var o1 = 0.0;
+    for (var i = 0u; i < nsg; i = i + 1u) { o0 = o0 + partSum[i]; o1 = o1 + partSum[32u + i]; }
+    
+    o0 = o0 + bias[n0];
+    o1 = o1 + bias[n1];
+
+    if (isQ || isK) {
+      let off = m.pos * m.headDim + rope_j;
+      let c = cosT[off]; let s = sinT[off];
+      let rl = fma(o0, c, 0.0) + fma(-o1, s, 0.0);
+      let rh = fma(o1, c, 0.0) + fma(o0, s, 0.0);
+      o0 = rl; o1 = rh;
+    }
+
+    if (isQ) { qOut[out_idx0] = o0; qOut[out_idx1] = o1; }
+    else if (isK) { kOut[out_idx0] = o0; kOut[out_idx1] = o1; }
+    else { vOut[out_idx0] = o0; vOut[out_idx1] = o1; }
+  }
+}

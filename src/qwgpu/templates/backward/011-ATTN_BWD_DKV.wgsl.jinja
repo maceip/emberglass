@@ -1,0 +1,47 @@
+
+requires immediate_address_space;
+override WG: u32 = 128u;
+struct Meta { nHeads:u32, nKV:u32, hd:u32, T:u32 };
+@group(0) @binding(0) var<storage,read> q: array<f32>;
+@group(0) @binding(1) var<storage,read> kc: array<f32>;
+@group(0) @binding(2) var<storage,read> vc: array<f32>;
+@group(0) @binding(3) var<storage,read> doo: array<f32>;
+@group(0) @binding(4) var<storage,read> lse: array<f32>;
+@group(0) @binding(5) var<storage,read> delta: array<f32>;
+@group(0) @binding(6) var<storage,read_write> dk: array<f32>;
+@group(0) @binding(7) var<storage,read_write> dv: array<f32>;
+var<immediate> m: Meta;
+var<workgroup> red: array<f32, 128>;
+@compute @workgroup_size(WG)
+fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let kvh = wid.x; let j = wid.y; let d = lid.x;
+  let hd = m.hd; let nKV = m.nKV; let group = m.nHeads / nKV;
+  let kvstride = nKV*hd; let hoff = kvh*hd; let kb = j*kvstride + hoff;
+  let scl = 1.0 / sqrt(f32(hd));
+  // Guard storage reads behind (d < hd) — see ATTN_BWD_DQ note on eager select().
+  let inHd = d < hd;
+  var dkacc = 0.0; var dvacc = 0.0;
+  for (var hi = 0u; hi < group; hi = hi + 1u) {
+    let h = kvh*group + hi;
+    for (var t = j; t < m.T; t = t + 1u) {
+      let qb = t*m.nHeads*hd + h*hd;
+      var sv = 0.0; if (inHd) { sv = q[qb+d] * kc[kb+d]; }
+      red[d] = sv; workgroupBarrier();
+      for (var s = WG/2u; s > 0u; s = s/2u) { if (d < s) { red[d] = red[d] + red[d+s]; } workgroupBarrier(); }
+      let sval = red[0] * scl;
+      workgroupBarrier();
+      var dpv = 0.0; if (inHd) { dpv = doo[qb+d] * vc[kb+d]; }
+      red[d] = dpv; workgroupBarrier();
+      for (var s = WG/2u; s > 0u; s = s/2u) { if (d < s) { red[d] = red[d] + red[d+s]; } workgroupBarrier(); }
+      let dp = red[0];
+      workgroupBarrier();
+      let p = exp(sval - lse[h*m.T + t]);
+      let ds = p * (dp - delta[h*m.T + t]);
+      if (inHd) {
+        dkacc = dkacc + scl * ds * q[qb+d];
+        dvacc = dvacc + p * doo[qb+d];
+      }
+    }
+  }
+  if (inHd) { dk[kb+d] = dk[kb+d] + dkacc; dv[kb+d] = dv[kb+d] + dvacc; }
+}
