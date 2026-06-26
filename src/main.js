@@ -527,18 +527,28 @@ function renderHistory() {
   const ul = $('historyList');
   ul.innerHTML = '';
   for (const m of runs) {
+    const { lv, xp } = skillLevel(m);
+    const rar = rarityOf(lv);
+    const active = m.id === state.activeRunId;
     const li = document.createElement('li');
-    li.className = 'hrun' + (m.id === state.activeRunId ? ' active' : '');
+    li.className = 'item' + (active ? ' active' : '');
     li.dataset.id = m.id;
     li.dataset.kind = m.kind || 'own';
+    li.dataset.rarity = rar.key;
+    li.title = `${m.name} — click to equip`;
     li.innerHTML =
-      `<span class="hrun__led"></span>` +
-      `<div class="hrun__name" title="${esc(m.name)}">${esc(m.name)}</div>` +
-      `<div class="hrun__meta">${esc(fmtRunMeta(m))}</div>` +
-      `<div class="hrun__acts">` +
-      `<button data-act="apply" class="tiny primary">▶ Use</button>` +
+      `<div class="item__frame"><span class="item__icon">${runIcon(m)}</span><span class="item__lv">L${lv}</span></div>` +
+      `<div class="item__body">` +
+      `<div class="item__name">${esc(m.name)}</div>` +
+      `<div class="item__rar">${rar.label} · ${esc(itemTypeLabel(m))}</div>` +
+      `<div class="item__meta">${esc(fmtRunMeta(m))}</div>` +
+      `<div class="item__xp"><i style="width:${xp}%"></i></div>` +
+      `</div>` +
+      (active ? `<div class="item__tag">EQUIPPED</div>` : '') +
+      `<div class="item__acts">` +
+      `<button data-act="apply" class="tiny primary">${active ? '✓ Equipped' : '▶ Equip'}</button>` +
       `<button data-act="export" class="tiny secondary" title="Export adapter">⬇</button>` +
-      `<button data-act="del" class="tiny danger" title="Delete">✕</button>` +
+      `<button data-act="del" class="tiny danger" title="Scrap">✕</button>` +
       `</div>`;
     li.querySelector('[data-act=apply]').onclick = (e) => { e.stopPropagation(); applyRun(m.id); };
     li.querySelector('[data-act=export]').onclick = (e) => { e.stopPropagation(); exportRun(m.id); };
@@ -563,6 +573,19 @@ function skillLevel(m) {
   const loss = m.finalLoss == null ? 1.5 : Number(m.finalLoss);
   const xp = Math.max(6, Math.min(100, Math.round((100 * (3 - loss)) / 3)));
   return { lv, xp };
+}
+// Cosmetic loot rarity from level — pure flavor for the inventory.
+function rarityOf(lv) {
+  if (lv >= 9) return { key: 'legendary', label: 'Legendary' };
+  if (lv >= 7) return { key: 'epic', label: 'Epic' };
+  if (lv >= 5) return { key: 'rare', label: 'Rare' };
+  if (lv >= 3) return { key: 'uncommon', label: 'Uncommon' };
+  return { key: 'common', label: 'Common' };
+}
+function itemTypeLabel(m) {
+  const sk = skillByKey(m.base);
+  if (sk) return sk.label;
+  return m.kind === 'guided' ? 'Skill' : 'Custom note';
 }
 // Ordered list of equippable runs — also the source of truth for number-key binds.
 function knifeRuns() { return store.listRuns(); }

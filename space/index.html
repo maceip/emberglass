@@ -170,24 +170,45 @@
   .rail__adapter[hidden]{ display:none; }
   @keyframes pulse{ 50%{ opacity:.55; } }
 
-  /* ── history rail (left) ── */
+  /* ── inventory (left): each forged knife drops here as a loot item ── */
   .history{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; align-self:stretch; }
   .history__head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; }
   .history__head h2{ font:700 12px Verdana,sans-serif; letter-spacing:.6px; text-transform:uppercase; color:#5a5440; margin:0; }
   .history__count{ font:11px ui-monospace,monospace; color:var(--text-dim); background:#cfccbd; padding:1px 7px; border-radius:999px; }
   .history__list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; max-height:62vh; overflow:auto; }
   .history__empty{ font:12px ui-monospace,monospace; color:var(--text-dim); padding:10px 4px; }
-  .hrun{ display:grid; grid-template-columns:auto 1fr; gap:8px 9px; padding:9px 10px; border-radius:var(--radius); cursor:pointer;
-    background:#fbfaf4; border:1px solid var(--line); transition:border-color .15s, box-shadow .15s; }
-  .hrun:hover{ border-color:#caa36e; }
-  .hrun.active{ border-color:var(--ember); box-shadow:0 0 0 2px #ff7a3c44; background:#fff6ee; }
-  .hrun__led{ width:10px; height:10px; border-radius:50%; margin-top:4px; background:var(--lo); box-shadow:0 0 5px currentColor; }
-  .hrun[data-kind=guided] .hrun__led{ color:#e2641a; background:#e2641a; }
-  .hrun[data-kind=own]    .hrun__led{ color:#1f7a35; background:#1f7a35; }
-  .hrun__name{ font:700 13px Verdana,sans-serif; color:#2a2620; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .hrun__meta{ grid-column:2; font:11px ui-monospace,monospace; color:var(--text-dim); }
-  .hrun__acts{ grid-column:1/3; display:flex; gap:6px; margin-top:4px; }
-  .hrun__acts button{ height:24px; padding:0 8px; font-size:11px; }
+
+  .item{ position:relative; display:grid; grid-template-columns:auto 1fr; gap:0 10px; padding:9px; cursor:pointer;
+    background:#fbfaf4; border:1px solid var(--line); border-left:4px solid var(--rar,#b9a374); border-radius:var(--radius);
+    transition:border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease); }
+  .item:hover{ transform:translateY(-1px); box-shadow:2px 3px 0 var(--lo); border-color:#caa36e; }
+  .item.active{ box-shadow:0 0 0 2px #ff7a3c55; background:#fff6ee; }
+  .item__frame{ grid-row:1/3; position:relative; width:42px; height:42px; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 32%, #fff, #efe6d2); border:2px solid var(--rar,#b9a374);
+    border-radius:8px; box-shadow:inset 0 0 0 1px #fff8, 0 1px 0 var(--lo); }
+  .item__icon{ font-size:21px; line-height:1; }
+  .item__lv{ position:absolute; right:-5px; bottom:-6px; min-width:17px; height:15px; padding:0 3px; display:flex; align-items:center;
+    justify-content:center; font:800 9px ui-monospace,monospace; color:#fff; background:var(--rar,#7a4a16);
+    border:1px solid #fff9; border-radius:4px; }
+  .item__body{ min-width:0; }
+  .item__name{ font:700 13px Verdana,sans-serif; color:#2a2620; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item.active .item__name{ padding-right:64px; }
+  .item__rar{ font:700 9px ui-monospace,monospace; letter-spacing:.07em; text-transform:uppercase; color:var(--rar,#8a7a52);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item__meta{ font:10px ui-monospace,monospace; color:var(--text-dim); margin-top:1px; }
+  .item__xp{ height:4px; margin-top:4px; background:#d8c8a8; border-radius:3px; overflow:hidden; }
+  .item__xp > i{ display:block; height:100%; background:linear-gradient(90deg,#ff9a3c,#e2641a); }
+  .item__tag{ position:absolute; top:7px; right:8px; font:800 8px ui-monospace,monospace; letter-spacing:.1em; color:#fff;
+    background:var(--ember); padding:2px 5px; border-radius:4px; box-shadow:0 1px 0 #0003; }
+  .item__acts{ grid-column:1/3; display:flex; gap:6px; margin-top:8px; }
+  .item__acts button{ height:24px; padding:0 8px; font-size:11px; flex:0 0 auto; }
+  .item__acts button[data-act=apply]{ flex:1 1 auto; }
+  /* rarity tiers, by cosmetic level */
+  .item[data-rarity=common]   { --rar:#9a9078; }
+  .item[data-rarity=uncommon] { --rar:#3f9a52; }
+  .item[data-rarity=rare]     { --rar:#2f72c4; }
+  .item[data-rarity=epic]     { --rar:#8a4fc0; }
+  .item[data-rarity=legendary]{ --rar:#e2641a; }
 
   /* skill list (Train pane) — request → emitted macro */
   .skill-req{ display:block; font:600 12px Verdana,sans-serif; color:#2a2620; }
@@ -359,7 +380,7 @@
   body[data-layout=mobile] .layout{ grid-template-columns:1fr; gap:10px; }
   body[data-layout=mobile] .history{ grid-column:1; order:-1; }
   body[data-layout=mobile] .history__list{ flex-direction:row; max-height:none; overflow-x:auto; overflow-y:hidden; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
-  body[data-layout=mobile] .hrun{ flex:0 0 200px; }
+  body[data-layout=mobile] .item{ flex:0 0 210px; }
   body[data-layout=mobile] #paneInfer,body[data-layout=mobile] #paneTrain{ grid-column:1; }
   body[data-layout=mobile] .steps{ gap:5px; }
   body[data-layout=mobile] .step{ min-width:0; flex:1 1 30%; font-size:10px; padding:6px 3px; }
@@ -445,11 +466,11 @@
         <!-- ───────────── HISTORY RAIL (left) ───────────── -->
         <aside class="history">
           <div class="history__head">
-            <h2>Your fine-tunes</h2>
+            <h2>Inventory</h2>
             <span class="history__count" id="historyCount">0</span>
           </div>
           <ul class="history__list" id="historyList"></ul>
-          <div class="history__empty" id="historyEmpty">No fine-tunes yet. Train one in the Train tab — every attempt is saved here automatically and survives reloads.</div>
+          <div class="history__empty" id="historyEmpty">Your inventory is empty. Forge a knife in the Train tab — each trained skill drops here as an item you can equip, export, or scrap, and survives reloads.</div>
         </aside>
 
         <!-- ───────────── INFERENCE PANE ───────────── -->

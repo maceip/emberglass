@@ -76,7 +76,7 @@ await p.evaluate(async () => {
   await s.saveRun(m, { safetensors: blob, configJson: '{}' });
   await s.saveRun(n, { safetensors: blob, configJson: '{}' });
   window.__eg.state.activeRunId = a.id;
-  window.__eg.renderKnife();
+  window.__eg.renderHistory(); // renders the inventory list + (via tail call) the knife bar
 });
 checks.forged = await p.evaluate(() => {
   const slots = [...document.querySelectorAll('#knifeSlots .kslot')];
@@ -86,6 +86,21 @@ checks.forged = await p.evaluate(() => {
     keys: slots.map((s) => s.querySelector('.kslot__key')?.textContent || null),
     equipped: slots.filter((s) => s.classList.contains('equipped')).map((s) => s.querySelector('.kslot__name')?.textContent),
     icons: slots.map((s) => s.querySelector('.kslot__icon')?.textContent),
+  };
+});
+
+// 4b) Inventory (left rail): each forged knife renders as a loot item with a
+//     rarity tier, level badge, and an EQUIPPED tag on the active one.
+checks.inventory = await p.evaluate(() => {
+  const items = [...document.querySelectorAll('#historyList .item')];
+  return {
+    count: items.length,
+    countBadge: document.getElementById('historyCount')?.textContent,
+    rarities: items.map((i) => i.dataset.rarity),
+    levels: items.map((i) => i.querySelector('.item__lv')?.textContent),
+    equippedTag: items.filter((i) => i.classList.contains('active') && i.querySelector('.item__tag'))
+      .map((i) => i.querySelector('.item__name')?.textContent),
+    allHaveFrame: items.every((i) => i.querySelector('.item__frame .item__icon')),
   };
 });
 
@@ -119,6 +134,9 @@ const pass =
   checks.verify.ok && checks.verify.oos && checks.verify.badArg && checks.verify.badOp && checks.verify.musicOk &&
   checks.forged.count === 3 && !checks.forged.anyLocked && checks.forged.keys[0] === '1' &&
   checks.forged.equipped.includes('inbox-calendar') &&
+  checks.inventory.count === 3 && checks.inventory.countBadge === '3' &&
+  checks.inventory.allHaveFrame && checks.inventory.equippedTag.includes('inbox-calendar') &&
+  checks.inventory.rarities.every(Boolean) &&
   checks.keybind.switched && checks.keybind.ignoredInInput &&
   errs.length === 0;
 

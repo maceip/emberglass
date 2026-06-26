@@ -7299,11 +7299,16 @@ function renderHistory() {
   const ul = $("historyList");
   ul.innerHTML = "";
   for (const m of runs) {
+    const { lv, xp } = skillLevel(m);
+    const rar = rarityOf(lv);
+    const active = m.id === state.activeRunId;
     const li = document.createElement("li");
-    li.className = "hrun" + (m.id === state.activeRunId ? " active" : "");
+    li.className = "item" + (active ? " active" : "");
     li.dataset.id = m.id;
     li.dataset.kind = m.kind || "own";
-    li.innerHTML = `<span class="hrun__led"></span><div class="hrun__name" title="${esc(m.name)}">${esc(m.name)}</div><div class="hrun__meta">${esc(fmtRunMeta(m))}</div><div class="hrun__acts"><button data-act="apply" class="tiny primary">\u25B6 Use</button><button data-act="export" class="tiny secondary" title="Export adapter">\u2B07</button><button data-act="del" class="tiny danger" title="Delete">\u2715</button></div>`;
+    li.dataset.rarity = rar.key;
+    li.title = `${m.name} \u2014 click to equip`;
+    li.innerHTML = `<div class="item__frame"><span class="item__icon">${runIcon(m)}</span><span class="item__lv">L${lv}</span></div><div class="item__body"><div class="item__name">${esc(m.name)}</div><div class="item__rar">${rar.label} \xB7 ${esc(itemTypeLabel(m))}</div><div class="item__meta">${esc(fmtRunMeta(m))}</div><div class="item__xp"><i style="width:${xp}%"></i></div></div>` + (active ? `<div class="item__tag">EQUIPPED</div>` : "") + `<div class="item__acts"><button data-act="apply" class="tiny primary">${active ? "\u2713 Equipped" : "\u25B6 Equip"}</button><button data-act="export" class="tiny secondary" title="Export adapter">\u2B07</button><button data-act="del" class="tiny danger" title="Scrap">\u2715</button></div>`;
     li.querySelector("[data-act=apply]").onclick = (e) => {
       e.stopPropagation();
       applyRun(m.id);
@@ -7340,6 +7345,20 @@ function skillLevel(m) {
   return { lv, xp };
 }
 __name(skillLevel, "skillLevel");
+function rarityOf(lv) {
+  if (lv >= 9) return { key: "legendary", label: "Legendary" };
+  if (lv >= 7) return { key: "epic", label: "Epic" };
+  if (lv >= 5) return { key: "rare", label: "Rare" };
+  if (lv >= 3) return { key: "uncommon", label: "Uncommon" };
+  return { key: "common", label: "Common" };
+}
+__name(rarityOf, "rarityOf");
+function itemTypeLabel(m) {
+  const sk = skillByKey(m.base);
+  if (sk) return sk.label;
+  return m.kind === "guided" ? "Skill" : "Custom note";
+}
+__name(itemTypeLabel, "itemTypeLabel");
 function knifeRuns() {
   return listRuns();
 }
