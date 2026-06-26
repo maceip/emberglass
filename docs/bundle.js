@@ -6726,64 +6726,181 @@ var state = {
   // File System Access workspace folder
 };
 var GEN = { maxTokens: 2048, temperature: 0.6, topP: 0.95, topK: 64 };
-var SKILL_SYS = "You are an Inbox & Calendar operator. Convert the request into a macro using ONLY these operations:\nfind_email(query) -> thread; compose_email(to, subject, body); reply_email(thread, body); forward_email(thread, to, note); archive_email(thread); label_email(thread, label); schedule_send(to, subject, body, when); create_event(title, start, end, remind_min); set_reminder(text, when); find_slot(duration_min, after, before) -> slot; rsvp(event, response).\nOutput ONLY the macro, one call per line, no prose. If the request is outside inbox or calendar, output exactly: OUT_OF_SCOPE.";
-var GUIDED = [
-  [
-    "email my mom and book a calendar event to remind me to respond",
-    'compose_email(to="mom", subject="Hi mom", body="Just checking in \u2014 talk soon!")\ncreate_event(title="Respond to mom", start="tomorrow 09:00", end="tomorrow 09:15", remind_min=10)'
-  ],
-  [
-    "reply to the thread from Sarah declining the meeting, then remind me Friday to follow up",
-    `t = find_email(query="from:Sarah meeting")
+function specSig(spec) {
+  return spec.ops.map((o) => `${o.name}(${(o.params || []).join(", ")})${o.ret ? " -> " + o.ret : ""}`).join("; ");
+}
+__name(specSig, "specSig");
+function skillSystem(domain, spec) {
+  return `You are ${domain}. Convert the request into a macro using ONLY these operations:
+` + specSig(spec) + `.
+Output ONLY the macro, one call per line, no prose. If the request is outside ${spec.scope}, output exactly: OUT_OF_SCOPE.`;
+}
+__name(skillSystem, "skillSystem");
+var SKILLS = [
+  {
+    key: "inbox-calendar",
+    label: "Inbox & Calendar",
+    icon: "\u2709",
+    desc: "Turns requests like \u201Cemail my mom and book a reminder to respond\u201D into a verifiable macro over a fixed set of inbox/calendar blades, and bounces anything else with OUT_OF_SCOPE.",
+    domain: "an Inbox & Calendar operator",
+    spec: {
+      scope: "inbox or calendar",
+      ops: [
+        { name: "find_email", params: ["query"], ret: "thread" },
+        { name: "compose_email", params: ["to", "subject", "body"] },
+        { name: "reply_email", params: ["thread", "body"] },
+        { name: "forward_email", params: ["thread", "to", "note"] },
+        { name: "archive_email", params: ["thread"] },
+        { name: "label_email", params: ["thread", "label"] },
+        { name: "schedule_send", params: ["to", "subject", "body", "when"] },
+        { name: "create_event", params: ["title", "start", "end", "remind_min"] },
+        { name: "set_reminder", params: ["text", "when"] },
+        { name: "find_slot", params: ["duration_min", "after", "before"], ret: "slot" },
+        { name: "rsvp", params: ["event", "response"] }
+      ]
+    },
+    suggest: "Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.",
+    examples: [
+      [
+        "email my mom and book a calendar event to remind me to respond",
+        'compose_email(to="mom", subject="Hi mom", body="Just checking in \u2014 talk soon!")\ncreate_event(title="Respond to mom", start="tomorrow 09:00", end="tomorrow 09:15", remind_min=10)'
+      ],
+      [
+        "reply to the thread from Sarah declining the meeting, then remind me Friday to follow up",
+        `t = find_email(query="from:Sarah meeting")
 reply_email(thread=t, body="Thanks for the invite \u2014 I can't make this one, but let's find another time.")
 set_reminder(text="Follow up with Sarah", when="Friday 09:00")`
-  ],
-  [
-    "forward the invoice email from billing to my accountant",
-    't = find_email(query="from:billing invoice")\nforward_email(thread=t, to="accountant", note="For the books \u2014 thanks!")'
-  ],
-  [
-    "schedule a 30 minute focus block tomorrow afternoon",
-    's = find_slot(duration_min=30, after="tomorrow 13:00", before="tomorrow 18:00")\ncreate_event(title="Focus block", start=s.start, end=s.end, remind_min=5)'
-  ],
-  [
-    "draft a thank-you note to the team and send it at 8am tomorrow",
-    'schedule_send(to="team", subject="Thank you", body="Great work this week \u2014 thank you all.", when="tomorrow 08:00")'
-  ],
-  [
-    "archive all the newsletters in my inbox",
-    't = find_email(query="category:newsletters")\narchive_email(thread=t)'
-  ],
-  [
-    "set up a 1:1 with Alex next Tuesday at 2pm for 25 minutes",
-    'create_event(title="1:1 with Alex", start="next Tuesday 14:00", end="next Tuesday 14:25", remind_min=10)'
-  ],
-  [
-    "reply yes to the standup invite and add it to my calendar",
-    't = find_email(query="standup invite")\nrsvp(event=t, response="yes")'
-  ],
-  [
-    "find John's last email and reply that I'll review it by Thursday",
-    `t = find_email(query="from:John")
+      ],
+      [
+        "forward the invoice email from billing to my accountant",
+        't = find_email(query="from:billing invoice")\nforward_email(thread=t, to="accountant", note="For the books \u2014 thanks!")'
+      ],
+      [
+        "schedule a 30 minute focus block tomorrow afternoon",
+        's = find_slot(duration_min=30, after="tomorrow 13:00", before="tomorrow 18:00")\ncreate_event(title="Focus block", start=s.start, end=s.end, remind_min=5)'
+      ],
+      [
+        "draft a thank-you note to the team and send it at 8am tomorrow",
+        'schedule_send(to="team", subject="Thank you", body="Great work this week \u2014 thank you all.", when="tomorrow 08:00")'
+      ],
+      [
+        "archive all the newsletters in my inbox",
+        't = find_email(query="category:newsletters")\narchive_email(thread=t)'
+      ],
+      [
+        "set up a 1:1 with Alex next Tuesday at 2pm for 25 minutes",
+        'create_event(title="1:1 with Alex", start="next Tuesday 14:00", end="next Tuesday 14:25", remind_min=10)'
+      ],
+      [
+        "reply yes to the standup invite and add it to my calendar",
+        't = find_email(query="standup invite")\nrsvp(event=t, response="yes")'
+      ],
+      [
+        "find John's last email and reply that I'll review it by Thursday",
+        `t = find_email(query="from:John")
 reply_email(thread=t, body="Thanks \u2014 I'll review this and get back to you by Thursday.")`
-  ],
-  [
-    "label the email from the landlord as housing and remind me to respond tonight",
-    't = find_email(query="from:landlord")\nlabel_email(thread=t, label="housing")\nset_reminder(text="Respond to landlord", when="today 19:00")'
-  ],
-  [
-    "book lunch with Priya Thursday noon and email her the invite",
-    'create_event(title="Lunch with Priya", start="Thursday 12:00", end="Thursday 13:00", remind_min=30)\ncompose_email(to="Priya", subject="Lunch Thursday", body="Sent you a calendar invite for Thursday noon \u2014 looking forward to it!")'
-  ],
-  [
-    "clear my unread promotions and remind me to check email after lunch",
-    't = find_email(query="is:unread category:promotions")\narchive_email(thread=t)\nset_reminder(text="Check email", when="today 13:30")'
-  ],
-  ["order me a pizza", "OUT_OF_SCOPE"],
-  ["what is the capital of France?", "OUT_OF_SCOPE"]
+      ],
+      [
+        "label the email from the landlord as housing and remind me to respond tonight",
+        't = find_email(query="from:landlord")\nlabel_email(thread=t, label="housing")\nset_reminder(text="Respond to landlord", when="today 19:00")'
+      ],
+      [
+        "book lunch with Priya Thursday noon and email her the invite",
+        'create_event(title="Lunch with Priya", start="Thursday 12:00", end="Thursday 13:00", remind_min=30)\ncompose_email(to="Priya", subject="Lunch Thursday", body="Sent you a calendar invite for Thursday noon \u2014 looking forward to it!")'
+      ],
+      [
+        "clear my unread promotions and remind me to check email after lunch",
+        't = find_email(query="is:unread category:promotions")\narchive_email(thread=t)\nset_reminder(text="Check email", when="today 13:30")'
+      ],
+      ["order me a pizza", "OUT_OF_SCOPE"],
+      ["what is the capital of France?", "OUT_OF_SCOPE"]
+    ]
+  },
+  {
+    key: "music",
+    label: "Music",
+    icon: "\u266A",
+    desc: "Turns requests like \u201Cplay some lo-fi and turn it down\u201D into a macro over a music-player action space \u2014 find/play/queue/volume/playlist \u2014 and bounces anything non-music.",
+    domain: "a music player operator",
+    spec: {
+      scope: "music playback",
+      ops: [
+        { name: "find_track", params: ["query"], ret: "track" },
+        { name: "play_track", params: ["track"] },
+        { name: "queue_track", params: ["track"] },
+        { name: "pause", params: [] },
+        { name: "skip", params: [] },
+        { name: "previous", params: [] },
+        { name: "set_volume", params: ["level"] },
+        { name: "create_playlist", params: ["name"] },
+        { name: "add_to_playlist", params: ["playlist", "track"] },
+        { name: "shuffle", params: ["on"] },
+        { name: "repeat", params: ["mode"] }
+      ]
+    },
+    suggest: "Play something upbeat for cooking and add it to a new playlist called Dinner.",
+    examples: [
+      ["play some lo-fi beats", 't = find_track(query="lo-fi beats")\nplay_track(track=t)'],
+      ["queue up the new Taylor Swift single after this", 't = find_track(query="Taylor Swift latest single")\nqueue_track(track=t)'],
+      ["turn it down a bit", "set_volume(level=30)"],
+      [
+        "make a playlist called Focus and add some ambient music",
+        'create_playlist(name="Focus")\nt = find_track(query="ambient")\nadd_to_playlist(playlist="Focus", track=t)'
+      ],
+      ["skip this song", "skip()"],
+      ["pause the music", "pause()"],
+      ["shuffle my workout playlist", 'shuffle(on=true)\nt = find_track(query="playlist:Workout")\nplay_track(track=t)'],
+      ["put on the Beatles and turn it up", 't = find_track(query="The Beatles")\nplay_track(track=t)\nset_volume(level=80)'],
+      ["repeat this track", 'repeat(mode="one")'],
+      ["go back to the previous song", "previous()"],
+      ["email my boss", "OUT_OF_SCOPE"],
+      ["what is the weather today?", "OUT_OF_SCOPE"]
+    ]
+  }
 ];
-var GUIDED_SUGGEST = "Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.";
+for (const s of SKILLS) s.system = skillSystem(s.domain, s.spec);
+var skillByKey = /* @__PURE__ */ __name((key) => SKILLS.find((s) => key && (key === s.key || String(key).startsWith(s.key + " "))), "skillByKey");
+var selectedSkillKey = SKILLS[0].key;
 var trainLosses = [];
+function parseMacroCalls(text) {
+  const out = [];
+  for (let raw of String(text).split("\n")) {
+    const line = raw.trim();
+    if (!line || line === "OUT_OF_SCOPE") continue;
+    const m = line.match(/^(?:[A-Za-z_]\w*\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
+    if (!m) continue;
+    const keys = [...m[2].matchAll(/(?:^|,)\s*([A-Za-z_]\w*)\s*=/g)].map((k) => k[1]);
+    out.push({ op: m[1], keys });
+  }
+  return out;
+}
+__name(parseMacroCalls, "parseMacroCalls");
+function verifyMacro(text, spec) {
+  const t = String(text);
+  const calls = parseMacroCalls(t);
+  const bounced = /(^|\n)\s*OUT_OF_SCOPE\s*($|\n)/.test(t) && calls.length === 0;
+  if (bounced) return { status: "oos", calls: [], issues: [], n: 0 };
+  if (!calls.length) return { status: "empty", calls: [], issues: [], n: 0 };
+  const byName = new Map(spec.ops.map((o) => [o.name, o]));
+  const issues = [];
+  const detail = [];
+  for (const c of calls) {
+    const op = byName.get(c.op);
+    if (!op) {
+      issues.push(`unknown op: ${c.op}`);
+      detail.push({ op: c.op, ok: false });
+      continue;
+    }
+    const allowed = new Set(op.params || []);
+    const bad = c.keys.filter((k) => !allowed.has(k));
+    if (bad.length) {
+      issues.push(`${c.op}: unexpected arg ${bad.join(", ")}`);
+      detail.push({ op: c.op, ok: false });
+    } else detail.push({ op: c.op, ok: true });
+  }
+  return { status: issues.length ? "bad" : "ok", calls: detail, issues, n: calls.length };
+}
+__name(verifyMacro, "verifyMacro");
 function setBadge() {
   const rail = $("rail"), chip = $("railChip");
   if (!rail || !chip) return;
@@ -6874,10 +6991,11 @@ async function runInference() {
   const cap = $("inferCap");
   const stop = startClock("inferClock");
   $("inferProc").classList.add("on");
+  setMacroCheck(null);
   st.active("tok");
   cap.textContent = "Tokenizing your prompt with the VibeThinker tokenizer\u2026";
   const t0 = performance.now();
-  let n = 0, first = true;
+  let n = 0, first = true, acc = "";
   try {
     const msgs = buildMessages(userText);
     st.done("tok");
@@ -6891,6 +7009,7 @@ async function runInference() {
         cap.textContent = "Generating the answer one token at a time\u2026";
       }
       node.appendData(d);
+      acc += d;
       n++;
       $("tokps").textContent = `${n} tok \xB7 ${(n / ((performance.now() - t0) / 1e3)).toFixed(1)} tok/s`;
       out.scrollTop = out.scrollHeight;
@@ -6901,6 +7020,14 @@ async function runInference() {
     st.done("decode");
     st.done("done");
     cap.textContent = `Done \u2014 ${sel === "none" ? "base model" : 'tuned adapter "' + sel + '"'}.`;
+    const skill = sel !== "none" && state.tuned && state.tuned.name === sel ? skillByKey(state.tuned.base) : null;
+    if (skill) {
+      setMacroCheck(verifyMacro(acc, skill.spec), skill);
+      if (state.activeRunId) {
+        bumpUses(state.activeRunId);
+        renderKnife();
+      }
+    }
     log(`done (${sel === "none" ? "base model" : "tuned adapter"}).`);
   } catch (e) {
     out.appendData("\n\n[error] " + e.message);
@@ -6968,7 +7095,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
     st.done("bwd");
     st.done("opt");
     st.active("swap");
-    state.tuned = { name, kind, build, suggest, ctrl };
+    state.tuned = { name, kind, base, build, suggest, ctrl };
     state.activeRunId = runId;
     addAdapterOption(name);
     $("adapterSel").value = name;
@@ -7196,6 +7323,16 @@ function renderHistory() {
 }
 __name(renderHistory, "renderHistory");
 var SKILL_ICON = { guided: "\u2694", own: "\u{1F4DC}" };
+var usesByRun = /* @__PURE__ */ new Map();
+function bumpUses(id) {
+  usesByRun.set(id, (usesByRun.get(id) || 0) + 1);
+}
+__name(bumpUses, "bumpUses");
+function runIcon(m) {
+  const sk = skillByKey(m.base);
+  return sk ? sk.icon : SKILL_ICON[m.kind] || "\u{1F5E1}";
+}
+__name(runIcon, "runIcon");
 function skillLevel(m) {
   const lv = Math.max(1, Math.min(9, Math.round((m.steps || 12) / 12)));
   const loss = m.finalLoss == null ? 1.5 : Number(m.finalLoss);
@@ -7203,34 +7340,101 @@ function skillLevel(m) {
   return { lv, xp };
 }
 __name(skillLevel, "skillLevel");
+function knifeRuns() {
+  return listRuns();
+}
+__name(knifeRuns, "knifeRuns");
 function renderKnife() {
   const slots = $("knifeSlots");
   if (!slots) return;
-  const runs = listRuns();
+  const runs = knifeRuns();
   slots.innerHTML = "";
-  const hasInbox = runs.some((r) => (r.base || "").startsWith("inbox-calendar") || /inbox-calendar/.test(r.name));
-  if (!hasInbox) {
+  for (const sk of SKILLS) {
+    const forged = runs.some((r) => skillByKey(r.base)?.key === sk.key);
+    if (forged) continue;
     const lock = document.createElement("div");
     lock.className = "kslot kslot--locked";
-    lock.title = "Forge the Inbox & Calendar skill in the Train tab";
-    lock.innerHTML = `<span class="kslot__icon">\uFF0B</span><span class="kslot__name">Inbox &amp; Calendar</span><span class="kslot__lv">locked \xB7 train to forge</span>`;
+    lock.title = `Forge the ${sk.label} skill in the Train tab`;
+    lock.innerHTML = `<span class="kslot__icon">${sk.icon}</span><span class="kslot__name">${esc(sk.label)}</span><span class="kslot__lv">locked \xB7 train to forge</span>`;
     lock.onclick = () => {
       switchTab("train");
+      selectSkill(sk.key);
     };
     slots.appendChild(lock);
   }
-  if (!runs.length && hasInbox) return;
-  for (const m of runs) {
+  runs.forEach((m, i) => {
     const { lv, xp } = skillLevel(m);
+    const uses = usesByRun.get(m.id) || 0;
+    const key = i < 9 ? i + 1 : null;
+    const equipped = m.id === state.activeRunId;
     const el = document.createElement("div");
-    el.className = "kslot" + (m.id === state.activeRunId ? " equipped" : "");
-    el.title = `${m.name} \u2014 click to equip (hot-swap into inference)`;
-    el.innerHTML = `<span class="kslot__icon">${SKILL_ICON[m.kind] || "\u{1F5E1}"}</span><span class="kslot__name">${esc(m.name)}</span><span class="kslot__lv">Lv ${lv}${m.id === state.activeRunId ? " \xB7 equipped" : ""}</span><span class="kslot__xp"><i style="width:${xp}%"></i></span>`;
+    el.className = "kslot" + (equipped ? " equipped" : "");
+    el.dataset.runid = m.id;
+    el.title = `${m.name} \u2014 ${key ? "press " + key + " or " : ""}click to equip (hot-swap into inference)`;
+    el.innerHTML = (key ? `<span class="kslot__key">${key}</span>` : "") + `<span class="kslot__icon">${runIcon(m)}</span><span class="kslot__name">${esc(m.name)}</span><span class="kslot__lv">Lv ${lv}${equipped ? " \xB7 equipped" : ""}${uses ? " \xB7 " + uses + "\xD7" : ""}</span><span class="kslot__xp"><i style="width:${xp}%"></i></span>`;
     el.onclick = () => applyRun(m.id);
     slots.appendChild(el);
-  }
+  });
 }
 __name(renderKnife, "renderKnife");
+var lastEquipIntent = null;
+function equipByIndex(i) {
+  const runs = knifeRuns();
+  if (i < 0 || i >= runs.length) return;
+  lastEquipIntent = runs[i].id;
+  applyRun(runs[i].id);
+}
+__name(equipByIndex, "equipByIndex");
+function setMacroCheck(res, skill) {
+  const el = $("macroCheck");
+  if (!el) return;
+  if (!res || res.status === "empty") {
+    el.hidden = true;
+    el.textContent = "";
+    el.removeAttribute("data-state");
+    return;
+  }
+  el.hidden = false;
+  if (res.status === "ok") {
+    el.dataset.state = "ok";
+    const ops = res.calls.map((c) => c.op).join(", ");
+    el.innerHTML = `<b>\u2713 valid macro</b> \xB7 ${res.n} call${res.n === 1 ? "" : "s"} on the ${esc(skill.label)} action space \xB7 <code>${esc(ops)}</code>`;
+  } else if (res.status === "oos") {
+    el.dataset.state = "oos";
+    el.innerHTML = `<b>\u26D4 OUT_OF_SCOPE</b> \xB7 the ${esc(skill.label)} knife correctly refused \u2014 that request is outside its blades`;
+  } else {
+    el.dataset.state = "bad";
+    el.innerHTML = `<b>\u2717 invalid macro</b> \xB7 ${esc(res.issues.slice(0, 2).join("; "))}`;
+  }
+}
+__name(setMacroCheck, "setMacroCheck");
+function renderSkillPicker() {
+  const host = $("skillPicker");
+  if (!host) return;
+  host.innerHTML = "";
+  for (const sk of SKILLS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "skillpick__btn" + (sk.key === selectedSkillKey ? " on" : "");
+    b.dataset.key = sk.key;
+    b.innerHTML = `<span class="skillpick__icon">${sk.icon}</span>${esc(sk.label)}`;
+    b.onclick = () => selectSkill(sk.key);
+    host.appendChild(b);
+  }
+}
+__name(renderSkillPicker, "renderSkillPicker");
+function selectSkill(key) {
+  const sk = skillByKey(key) || SKILLS[0];
+  selectedSkillKey = sk.key;
+  document.querySelectorAll("#skillPicker .skillpick__btn").forEach((b) => b.classList.toggle("on", b.dataset.key === sk.key));
+  const title = $("skillTitle");
+  if (title) title.innerHTML = `${sk.icon} ${esc(sk.label)} skill`;
+  const desc = $("skillDesc");
+  if (desc) desc.textContent = sk.desc;
+  const list = $("guidedList");
+  if (list) list.innerHTML = sk.examples.map(([q, a]) => `<li><span class="skill-req">${esc(q)}</span><pre class="skill-macro">${esc(a)}</pre></li>`).join("");
+}
+__name(selectSkill, "selectSkill");
 async function applyRun(id) {
   const meta = getRun(id);
   if (!meta) return;
@@ -7252,9 +7456,10 @@ async function applyRun(id) {
       adapters.adapters[meta.name] = adapter;
     }
     addAdapterOption(meta.name);
-    state.tuned = { name: meta.name, kind: meta.kind, build: buildFromMeta(meta), suggest: meta.suggest };
+    state.tuned = { name: meta.name, kind: meta.kind, base: meta.base, build: buildFromMeta(meta), suggest: meta.suggest };
     state.activeRunId = id;
     $("adapterSel").value = meta.name;
+    setMacroCheck(null);
     setBadge();
     renderHistory();
     switchTab("infer");
@@ -7386,7 +7591,8 @@ async function initFs() {
 }
 __name(initFs, "initFs");
 window.addEventListener("DOMContentLoaded", () => {
-  $("guidedList").innerHTML = GUIDED.map(([q, a]) => `<li><span class="skill-req">${esc(q)}</span><pre class="skill-macro">${esc(a)}</pre></li>`).join("");
+  renderSkillPicker();
+  selectSkill(selectedSkillKey);
   $("tabInfer").onclick = () => switchTab("infer");
   $("tabTrain").onclick = () => switchTab("train");
   $("gear").onclick = () => {
@@ -7413,17 +7619,26 @@ window.addEventListener("DOMContentLoaded", () => {
   $("prompt").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) runInference();
   });
-  $("trainGuided").onclick = () => runTraining({
-    examples: GUIDED.map(([q, a]) => ({ messages: [{ role: "system", content: SKILL_SYS }, { role: "user", content: q }], completion: " " + a })),
-    lr: 3e-4,
-    epochs: 12,
-    accum: 2,
-    base: "inbox-calendar",
-    kind: "guided",
-    system: SKILL_SYS,
-    build: /* @__PURE__ */ __name((u) => [{ role: "system", content: SKILL_SYS }, { role: "user", content: u }], "build"),
-    suggest: GUIDED_SUGGEST
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = e.target && e.target.tagName || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || e.target && e.target.isContentEditable) return;
+    if (e.key >= "1" && e.key <= "9") equipByIndex(+e.key - 1);
   });
+  $("trainGuided").onclick = () => {
+    const sk = skillByKey(selectedSkillKey) || SKILLS[0];
+    runTraining({
+      examples: sk.examples.map(([q, a]) => ({ messages: [{ role: "system", content: sk.system }, { role: "user", content: q }], completion: " " + a })),
+      lr: 3e-4,
+      epochs: 14,
+      accum: 2,
+      base: sk.key,
+      kind: "guided",
+      system: sk.system,
+      build: /* @__PURE__ */ __name((u) => [{ role: "system", content: sk.system }, { role: "user", content: u }], "build"),
+      suggest: sk.suggest
+    });
+  };
   $("ownText").addEventListener("input", refreshOwn);
   $("ownFiles").onchange = async (ev) => {
     const files = [...ev.target.files].slice(0, 5);
@@ -7480,7 +7695,28 @@ window.addEventListener("DOMContentLoaded", () => {
   window.__layout = (m) => {
     document.body.dataset.layout = m;
   };
-  window.__eg = { store: store_exports, renderHistory, renderKnife, applyRun, exportRun, delRun, state };
+  window.__eg = {
+    store: store_exports,
+    renderHistory,
+    renderKnife,
+    applyRun,
+    exportRun,
+    delRun,
+    state,
+    // devtools/test surface
+    SKILLS,
+    selectSkill,
+    verifyMacro,
+    setMacroCheck,
+    equipByIndex,
+    skillByKey,
+    get selectedSkillKey() {
+      return selectedSkillKey;
+    },
+    get lastEquipIntent() {
+      return lastEquipIntent;
+    }
+  };
   initFs();
   renderHistory();
   switchTab("infer");

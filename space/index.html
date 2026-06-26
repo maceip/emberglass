@@ -195,6 +195,24 @@
     border-radius:var(--r-sm); font:11px/1.5 ui-monospace,SFMono-Regular,monospace; color:#5a3b18;
     white-space:pre-wrap; overflow-x:auto; }
 
+  /* skill picker (Train pane) — choose which knife to forge */
+  .skillpick{ display:flex; flex-wrap:wrap; gap:var(--s2); margin:0 0 var(--s3); }
+  .skillpick__btn{ display:inline-flex; align-items:center; gap:6px; padding:7px 12px; cursor:pointer;
+    font:700 12px Verdana,sans-serif; color:#3a382e; background:var(--panel);
+    border:2px solid var(--bevel-hi); box-shadow:1px 1px 0 var(--lo); border-radius:var(--r-sm);
+    transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+  .skillpick__btn:hover{ transform:translateY(-1px); box-shadow:2px 3px 0 var(--lo); border-color:#caa36e; }
+  .skillpick__btn.on{ border-color:var(--ember); background:#fff6ee; box-shadow:0 0 0 2px #ff7a3c55; color:#7a4a16; }
+  .skillpick__icon{ font-size:15px; }
+
+  /* macro verifier readout (Inference HUD) — the "does what we say" gate */
+  .macrochk{ margin-top:var(--s3); padding:8px 11px; border-radius:var(--r-sm);
+    font:600 12px Verdana,sans-serif; border:1px solid var(--line); background:#f3eee0; }
+  .macrochk code{ font:11px ui-monospace,monospace; background:#0000000d; padding:1px 5px; border-radius:4px; }
+  .macrochk[data-state=ok]{ background:#e9f6ea; border-color:#7fbf86; color:#1f6b2c; }
+  .macrochk[data-state=oos]{ background:#fff4e2; border-color:#e0a94a; color:#8a5a13; }
+  .macrochk[data-state=bad]{ background:#fdecea; border-color:#e08a82; color:#9b2f25; }
+
   /* ── the Swiss army knife: trained skills as equippable slots ───────────── */
   .knife{ display:flex; align-items:center; gap:var(--s3); padding:8px var(--s5);
     border-top:2px solid var(--hi); background:linear-gradient(#efe6d2,#e4d8bf); }
@@ -208,7 +226,10 @@
   .kslot:hover{ transform:translateY(-1px); box-shadow:2px 3px 0 var(--lo); border-color:#caa36e; }
   .kslot:active{ transform:translateY(1px); box-shadow:0 0 0 var(--lo); }
   .kslot.equipped{ border-color:var(--ember); box-shadow:0 0 0 2px #ff7a3c55; background:#fff6ee; }
-  .kslot__icon{ grid-row:1/3; font-size:18px; }
+  .kslot__icon{ grid-row:1/3; font-size:18px; position:relative; }
+  .kslot__key{ position:absolute; top:-5px; left:-6px; min-width:13px; height:13px; padding:0 2px;
+    display:flex; align-items:center; justify-content:center; font:800 9px ui-monospace,monospace;
+    color:#fff; background:#7a4a16; border-radius:3px; box-shadow:0 1px 0 #0003; }
   .kslot__name{ font:700 12px Verdana,sans-serif; color:#2a2620; overflow:hidden; text-overflow:ellipsis;
     white-space:nowrap; max-width:130px; }
   .kslot__lv{ font:10px ui-monospace,monospace; color:var(--text-dim); }
@@ -481,17 +502,20 @@
               <div class="proc" id="inferProc"></div>
               <div class="caption" id="inferCap"></div>
               <div id="out">—</div>
+              <div id="macroCheck" class="macrochk" hidden></div>
             </div>
           </div>
         </section>
 
         <!-- ───────────── TRAIN PANE ───────────── -->
         <section class="pane" id="paneTrain">
-          <p class="muted" style="margin:0 0 var(--s4)">Forge a <b>skill</b> for your knife — a LoRA trained <b>entirely in this tab</b> that compiles a plain request into a precise <b>macro</b> over a small, typed action space. This is constrained codegen (the model's strength), not chat. Every skill saves to your knife and hot-swaps into Inference.</p>
+          <p class="muted" style="margin:0 0 var(--s4)">Forge a <b>skill</b> for your knife — a LoRA trained <b>entirely in this tab</b> that compiles a plain request into a precise <b>macro</b> over a small, typed action space. This is constrained codegen (the model's strength), not chat. Pick a blade to forge:</p>
+
+          <div class="skillpick" id="skillPicker"></div>
 
           <div class="panel">
-            <b>⚔ Inbox &amp; Calendar skill</b>
-            <p class="muted" style="margin:var(--s2) 0 var(--s3)">Teaches the model to turn requests like <i>“email my mom and book a reminder to respond”</i> into a verifiable macro over a fixed set of blades — <code>compose_email</code>, <code>reply_email</code>, <code>create_event</code>, <code>set_reminder</code>, <code>find_slot</code>… — and to bounce anything outside inbox/calendar with <code>OUT_OF_SCOPE</code>. The action space is supplied, so it never invents an API; the emitted macro is checkable.</p>
+            <b id="skillTitle">⚔ Inbox &amp; Calendar skill</b>
+            <p class="muted" id="skillDesc" style="margin:var(--s2) 0 var(--s3)"></p>
             <ul id="guidedList"></ul>
           </div>
           <div class="row" style="margin-top:var(--s4)"><button id="trainGuided" class="primary big" disabled>✦ Train this skill</button></div>
