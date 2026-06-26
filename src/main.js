@@ -1,10 +1,9 @@
 /*
  * Emberglass — browser harness for the custom WebGPU VibeThinker-3B runtime.
- * Two panes: INFERENCE (runs the model live) and TRAIN (in-browser LoRA fine-tune).
- * The inference pane defaults to the BASE model (neon badge) to create the incentive
- * to TRAIN; training a small adapter is fast and the result hot-swaps live so the
- * before/after is visible immediately in the same tab. Nothing leaves the device
- * except the optional "train on a URL" lane (which uses a public reader proxy).
+ * Single-screen Account Atlas: equip a trained account/app surface, then ask for
+ * writes over that surface. Training a small LoRA adapter is fast and the result
+ * hot-swaps live so the before/after is visible immediately in the same tab.
+ * Nothing leaves the device except the optional URL import lane.
  */
 import { QWEN25_3B } from './config.js';
 import { urlReader, hfReader, fileReader } from './readers.js';
@@ -14,6 +13,8 @@ import { TrainingController } from './services/training_controller.js';
 import { downloadLoraAdapter, exportLoraAdapter } from './lora_export.js';
 import { loadLoraAdapterGPU } from './lora_gpu.js';
 import * as store from './services/store.js';
+import { SKILLS, POPULAR_2026, verifyMacro } from './skills.js';
+import { ICON_THEME_PRESETS, iconTheme, paintSkillIcon, setIconTheme, themedTileColor } from './icon_pipeline.js';
 
 const $ = (id) => document.getElementById(id);
 const log = (m) => { const s = $('railMsg'); if (s) s.textContent = m; console.log('[emberglass]', m); };
@@ -59,148 +60,24 @@ const state = {
 // is a long-CoT reasoner (rec. 40K+), so a small budget truncates its thinking.
 const GEN = { maxTokens: 2048, temperature: 0.6, topP: 0.95, topK: 64 };
 
-// ── SKILLS registry: each knife is a service "action space" ───────────────────
-// A skill teaches the model to compile a plain request into a MACRO over a small,
-// typed action space (the "blades"). Constrained codegen — the model's strength —
-// not open-domain recall. We SUPPLY the action space (system prompt + LoRA) so the
-// model never invents an API; out-of-scope requests must bounce with OUT_OF_SCOPE.
-// `spec` is the machine-readable contract used to BOTH generate the system prompt
-// AND verify the emitted macro afterwards (the "does what we say" check).
-function specSig(spec) {
-  return spec.ops.map((o) => `${o.name}(${(o.params || []).join(', ')})${o.ret ? ' -> ' + o.ret : ''}`).join('; ');
-}
-function skillSystem(domain, spec) {
-  return `You are ${domain}. Convert the request into a macro using ONLY these operations:\n` +
-    specSig(spec) + '.\n' +
-    `Output ONLY the macro, one call per line, no prose. If the request is outside ${spec.scope}, output exactly: OUT_OF_SCOPE.`;
-}
-const SKILLS = [
-  {
-    key: 'inbox-calendar', label: 'Inbox & Calendar', icon: '✉',
-    desc: 'Turns requests like “email my mom and book a reminder to respond” into a verifiable macro over a fixed set of inbox/calendar blades, and bounces anything else with OUT_OF_SCOPE.',
-    domain: 'an Inbox & Calendar operator',
-    spec: {
-      scope: 'inbox or calendar',
-      ops: [
-        { name: 'find_email', params: ['query'], ret: 'thread' },
-        { name: 'compose_email', params: ['to', 'subject', 'body'] },
-        { name: 'reply_email', params: ['thread', 'body'] },
-        { name: 'forward_email', params: ['thread', 'to', 'note'] },
-        { name: 'archive_email', params: ['thread'] },
-        { name: 'label_email', params: ['thread', 'label'] },
-        { name: 'schedule_send', params: ['to', 'subject', 'body', 'when'] },
-        { name: 'create_event', params: ['title', 'start', 'end', 'remind_min'] },
-        { name: 'set_reminder', params: ['text', 'when'] },
-        { name: 'find_slot', params: ['duration_min', 'after', 'before'], ret: 'slot' },
-        { name: 'rsvp', params: ['event', 'response'] },
-      ],
-    },
-    suggest: "Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.",
-    examples: [
-      ['email my mom and book a calendar event to remind me to respond',
-        'compose_email(to="mom", subject="Hi mom", body="Just checking in — talk soon!")\ncreate_event(title="Respond to mom", start="tomorrow 09:00", end="tomorrow 09:15", remind_min=10)'],
-      ['reply to the thread from Sarah declining the meeting, then remind me Friday to follow up',
-        't = find_email(query="from:Sarah meeting")\nreply_email(thread=t, body="Thanks for the invite — I can\'t make this one, but let\'s find another time.")\nset_reminder(text="Follow up with Sarah", when="Friday 09:00")'],
-      ['forward the invoice email from billing to my accountant',
-        't = find_email(query="from:billing invoice")\nforward_email(thread=t, to="accountant", note="For the books — thanks!")'],
-      ['schedule a 30 minute focus block tomorrow afternoon',
-        's = find_slot(duration_min=30, after="tomorrow 13:00", before="tomorrow 18:00")\ncreate_event(title="Focus block", start=s.start, end=s.end, remind_min=5)'],
-      ['draft a thank-you note to the team and send it at 8am tomorrow',
-        'schedule_send(to="team", subject="Thank you", body="Great work this week — thank you all.", when="tomorrow 08:00")'],
-      ['archive all the newsletters in my inbox',
-        't = find_email(query="category:newsletters")\narchive_email(thread=t)'],
-      ['set up a 1:1 with Alex next Tuesday at 2pm for 25 minutes',
-        'create_event(title="1:1 with Alex", start="next Tuesday 14:00", end="next Tuesday 14:25", remind_min=10)'],
-      ['reply yes to the standup invite and add it to my calendar',
-        't = find_email(query="standup invite")\nrsvp(event=t, response="yes")'],
-      ['find John\'s last email and reply that I\'ll review it by Thursday',
-        't = find_email(query="from:John")\nreply_email(thread=t, body="Thanks — I\'ll review this and get back to you by Thursday.")'],
-      ['label the email from the landlord as housing and remind me to respond tonight',
-        't = find_email(query="from:landlord")\nlabel_email(thread=t, label="housing")\nset_reminder(text="Respond to landlord", when="today 19:00")'],
-      ['book lunch with Priya Thursday noon and email her the invite',
-        'create_event(title="Lunch with Priya", start="Thursday 12:00", end="Thursday 13:00", remind_min=30)\ncompose_email(to="Priya", subject="Lunch Thursday", body="Sent you a calendar invite for Thursday noon — looking forward to it!")'],
-      ['clear my unread promotions and remind me to check email after lunch',
-        't = find_email(query="is:unread category:promotions")\narchive_email(thread=t)\nset_reminder(text="Check email", when="today 13:30")'],
-      ['order me a pizza', 'OUT_OF_SCOPE'],
-      ['what is the capital of France?', 'OUT_OF_SCOPE'],
-    ],
-  },
-  {
-    key: 'music', label: 'Music', icon: '♪',
-    desc: 'Turns requests like “play some lo-fi and turn it down” into a macro over a music-player action space — find/play/queue/volume/playlist — and bounces anything non-music.',
-    domain: 'a music player operator',
-    spec: {
-      scope: 'music playback',
-      ops: [
-        { name: 'find_track', params: ['query'], ret: 'track' },
-        { name: 'play_track', params: ['track'] },
-        { name: 'queue_track', params: ['track'] },
-        { name: 'pause', params: [] },
-        { name: 'skip', params: [] },
-        { name: 'previous', params: [] },
-        { name: 'set_volume', params: ['level'] },
-        { name: 'create_playlist', params: ['name'] },
-        { name: 'add_to_playlist', params: ['playlist', 'track'] },
-        { name: 'shuffle', params: ['on'] },
-        { name: 'repeat', params: ['mode'] },
-      ],
-    },
-    suggest: 'Play something upbeat for cooking and add it to a new playlist called Dinner.',
-    examples: [
-      ['play some lo-fi beats', 't = find_track(query="lo-fi beats")\nplay_track(track=t)'],
-      ['queue up the new Taylor Swift single after this', 't = find_track(query="Taylor Swift latest single")\nqueue_track(track=t)'],
-      ['turn it down a bit', 'set_volume(level=30)'],
-      ['make a playlist called Focus and add some ambient music',
-        'create_playlist(name="Focus")\nt = find_track(query="ambient")\nadd_to_playlist(playlist="Focus", track=t)'],
-      ['skip this song', 'skip()'],
-      ['pause the music', 'pause()'],
-      ['shuffle my workout playlist', 'shuffle(on=true)\nt = find_track(query="playlist:Workout")\nplay_track(track=t)'],
-      ['put on the Beatles and turn it up', 't = find_track(query="The Beatles")\nplay_track(track=t)\nset_volume(level=80)'],
-      ['repeat this track', 'repeat(mode="one")'],
-      ['go back to the previous song', 'previous()'],
-      ['email my boss', 'OUT_OF_SCOPE'],
-      ['what is the weather today?', 'OUT_OF_SCOPE'],
-    ],
-  },
-];
-for (const s of SKILLS) s.system = skillSystem(s.domain, s.spec);
+// ── action spaces + macro verifier live in ./skills.js (pure, Node-testable) ──
+// SKILLS is the trained-surface registry; POPULAR_2026 is the dock catalog of
+// account/app roots; verifyMacro is the "does what we say" gate.
 const skillByKey = (key) => SKILLS.find((s) => key && (key === s.key || String(key).startsWith(s.key + ' ')));
 let selectedSkillKey = SKILLS[0].key;
 let trainLosses = [];
 
-// ── macro verifier: parse the model's output and check it against the spec ────
-// The "does what we say" gate: the emitted macro either uses real ops with known
-// args (✓), bounces (OUT_OF_SCOPE), or is invalid (✗) — a deterministic readout.
-function parseMacroCalls(text) {
-  const out = [];
-  for (let raw of String(text).split('\n')) {
-    const line = raw.trim();
-    if (!line || line === 'OUT_OF_SCOPE') continue;
-    const m = line.match(/^(?:[A-Za-z_]\w*\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
-    if (!m) continue;
-    const keys = [...m[2].matchAll(/(?:^|,)\s*([A-Za-z_]\w*)\s*=/g)].map((k) => k[1]);
-    out.push({ op: m[1], keys });
-  }
-  return out;
-}
-function verifyMacro(text, spec) {
-  const t = String(text);
-  const calls = parseMacroCalls(t);
-  const bounced = /(^|\n)\s*OUT_OF_SCOPE\s*($|\n)/.test(t) && calls.length === 0;
-  if (bounced) return { status: 'oos', calls: [], issues: [], n: 0 };
-  if (!calls.length) return { status: 'empty', calls: [], issues: [], n: 0 };
-  const byName = new Map(spec.ops.map((o) => [o.name, o]));
-  const issues = [];
-  const detail = [];
-  for (const c of calls) {
-    const op = byName.get(c.op);
-    if (!op) { issues.push(`unknown op: ${c.op}`); detail.push({ op: c.op, ok: false }); continue; }
-    const allowed = new Set(op.params || []);
-    const bad = c.keys.filter((k) => !allowed.has(k));
-    if (bad.length) { issues.push(`${c.op}: unexpected arg ${bad.join(', ')}`); detail.push({ op: c.op, ok: false }); }
-    else detail.push({ op: c.op, ok: true });
-  }
-  return { status: issues.length ? 'bad' : 'ok', calls: detail, issues, n: calls.length };
+// Pick up to `n` examples for a single forge: always keep the OUT_OF_SCOPE pairs
+// (so the adapter still learns to bounce), then fill with a deterministic spread
+// of the in-scope macros for variety without making each train run enormous.
+function sampleExamples(all, n) {
+  const oos = all.filter(([, a]) => a === 'OUT_OF_SCOPE');
+  const inscope = all.filter(([, a]) => a !== 'OUT_OF_SCOPE');
+  const keep = Math.max(0, n - oos.length);
+  const stride = Math.max(1, Math.floor(inscope.length / Math.max(1, keep)));
+  const picked = [];
+  for (let i = 0; i < inscope.length && picked.length < keep; i += stride) picked.push(inscope[i]);
+  return [...picked, ...oos];
 }
 
 // ── status rail: the single place that surfaces model state ───────────────────
@@ -236,7 +113,7 @@ async function loadWith(reader, label) {
   try {
     await session.loadWith(reader, label);
     state.loaded = true;
-    log('Model ready. Ask it anything below — or hit Train to teach it something new.');
+    log('Model ready. Train an account surface or equip a chain to execute writes.');
   } catch (e) {
     state.err = e.message;
     log('Load error: ' + e.message);
@@ -287,11 +164,15 @@ async function runInference() {
     $('tokps').textContent = `${n} tok · ${(n / dt).toFixed(1)} tok/s · ${dt.toFixed(1)}s`;
     st.done('prefill'); st.done('decode'); st.done('done');
     cap.textContent = `Done — ${sel === 'none' ? 'base model' : 'tuned adapter "' + sel + '"'}.`;
-    // "does what we say" gate: if a service knife is equipped, verify the macro
+    // "does what we say" gate: if a service surface is equipped, verify the macro.
     const skill = sel !== 'none' && state.tuned && state.tuned.name === sel ? skillByKey(state.tuned.base) : null;
     if (skill) {
-      setMacroCheck(verifyMacro(acc, skill.spec), skill);
-      if (state.activeRunId) { bumpUses(state.activeRunId); renderKnife(); }
+      const res = verifyMacro(acc, skill.spec);
+      setMacroCheck(res, skill, acc);
+      if (res.status === 'ok') stageMsg(`Write resolved — compiled a ${res.n}-step plan on ${skill.label}.`);
+      else if (res.status === 'oos') stageMsg(`That request is outside the ${skill.label} surface. Try one of its writes.`);
+      else stageMsg(`The plan didn't validate — adjust the request and try again.`);
+      if (state.activeRunId) { bumpUses(state.activeRunId); renderDock(); }
     }
     log(`done (${sel === 'none' ? 'base model' : 'tuned adapter'}).`);
   } catch (e) {
@@ -303,7 +184,7 @@ async function runInference() {
 
 // ── training: shared runner ───────────────────────────────────────────────────
 async function runTraining({ examples, lr, epochs, accum, base, kind, system, build, suggest }) {
-  if (!state.loaded) { log('load the model first (INFERENCE pane).'); switchTab('infer'); return; }
+  if (!state.loaded) { log('Boot the engine first, then train a surface.'); closeTrainer(); return; }
   if (state.busy) return;
   const name = uniqueName(base);
   const runId = store.newId();
@@ -362,7 +243,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
       );
       renderHistory();
     } catch (e) { console.warn('[history] save failed', e); }
-    log(`Trained "${name}" in ${dt}s. Saved to your fine-tunes; switch to Inference to try it.`);
+    log(`Trained "${name}" in ${dt}s. Saved to your Atlas; equip it to try the write surface.`);
   } catch (e) {
     st.loop(['fwd', 'bwd', 'opt'], false);
     trainProgress(0, total, null, 'training error: ' + e.message);
@@ -406,13 +287,21 @@ function refreshOwn() {
 }
 
 // ── small UI helpers ──────────────────────────────────────────────────────────
-function switchTab(which) {
-  const infer = which === 'infer';
-  $('paneInfer').classList.toggle('active', infer);
-  $('paneTrain').classList.toggle('active', !infer);
-  $('tabInfer').classList.toggle('on', infer);
-  $('tabTrain').classList.toggle('on', !infer);
+// Single-view world: there are no tabs. Training opens as a menu over the atlas;
+// everything else lives on one screen.
+function openTrainer() {
+  const t = $('trainer'); if (!t) return;
+  renderSkillPicker(); selectSkill(selectedSkillKey);
+  t.hidden = false; document.body.classList.add('modal-open');
+  $('gear')?.classList.remove('on'); $('settings') && ($('settings').hidden = true);
 }
+function closeTrainer() {
+  const t = $('trainer'); if (t) t.hidden = true;
+  document.body.classList.remove('modal-open');
+}
+// kept for back-compat with existing call sites: 'train' opens the training menu,
+// anything else returns to the single game view.
+function switchTab(which) { which === 'train' ? openTrainer() : closeTrainer(); }
 function addAdapterOption(name) {
   const sel = $('adapterSel');
   if (![...sel.options].some((o) => o.value === name)) {
@@ -497,9 +386,67 @@ function showTryIt(suggest) {
     $('prompt').value = suggest;
     runInference();
   };
+  renderEquipPanel();
+  if (state.tuned?.name) stageMsg(`New surface trained: “${state.tuned.name}” — it was added to your Atlas. Equip it into a chain to act.`);
 }
 
-// ── history rail: every saved fine-tune, persisted across reloads ─────────────
+// ── equipped surface panel (Inference): shows writes + one-tap "drills" ───────
+// When a service surface is equipped, the inference pane stops being a blank chat
+// box: it surfaces the action space and a few example requests to fire.
+function renderEquipPanel() {
+  const bar = $('equipBar');
+  if (!bar) return;
+  const skill = state.tuned ? skillByKey(state.tuned.base) : null;
+  if (!skill || !skill.spec) { bar.hidden = true; return; }
+  bar.hidden = false;
+  const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  paintIcon($('equipIcon'), dockOf(skill.key), skill.icon, 0.85);
+  set('equipName', `${skill.label} surface`);
+  set('equipScope', `surface: ${skill.spec.scope}`);
+  const ops = $('equipOps');
+  if (ops) {
+    ops.innerHTML = '';
+    for (const op of skill.spec.ops) {
+      const c = document.createElement('span');
+      c.className = 'equip__op';
+      c.textContent = op.name;
+      c.title = `${op.name}(${(op.params || []).join(', ')})`;
+      ops.appendChild(c);
+    }
+  }
+  const host = $('equipDrills');
+  if (host) {
+    host.innerHTML = '';
+    const inscope = skill.examples.filter(([, a]) => a !== 'OUT_OF_SCOPE');
+    const step = Math.max(1, Math.floor(inscope.length / 4));
+    const picks = [];
+    for (let i = 0; i < inscope.length && picks.length < 4; i += step) picks.push(inscope[i][0]);
+    for (const q of picks) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'drill'; b.textContent = q; b.title = 'Fire this drill';
+      b.onclick = () => { $('prompt').value = q; runInference(); };
+      host.appendChild(b);
+    }
+  }
+}
+
+// Turn an emitted macro into a plain-English "battle plan" (op → key args).
+function humanizePlan(text) {
+  const out = [];
+  for (const raw of String(text).split('\n')) {
+    const line = raw.trim();
+    if (!line || line === 'OUT_OF_SCOPE') continue;
+    const m = line.match(/^(?:[A-Za-z_]\w*\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
+    if (!m) continue;
+    const op = m[1].replace(/_/g, ' ');
+    const args = [...m[2].matchAll(/([A-Za-z_]\w*)\s*=\s*"([^"]*)"/g)].map((x) => x[2]).filter(Boolean);
+    const summary = args.slice(0, 2).join(' · ');
+    out.push(summary ? `${op} — ${summary}` : op);
+  }
+  return out;
+}
+
+// ── atlas rail: every saved fine-tune, persisted across reloads ───────────────
 function uniqueName(base) {
   const taken = new Set(store.listRuns().map((r) => r.name));
   if (!taken.has(base)) return base;
@@ -537,7 +484,7 @@ function renderHistory() {
     li.dataset.rarity = rar.key;
     li.title = `${m.name} — click to equip`;
     li.innerHTML =
-      `<div class="item__frame"><span class="item__icon">${runIcon(m)}</span><span class="item__lv">L${lv}</span></div>` +
+      `<div class="item__frame"><span class="item__icon"></span><span class="item__lv">L${lv}</span></div>` +
       `<div class="item__body">` +
       `<div class="item__name">${esc(m.name)}</div>` +
       `<div class="item__rar">${rar.label} · ${esc(itemTypeLabel(m))}</div>` +
@@ -550,22 +497,28 @@ function renderHistory() {
       `<button data-act="export" class="tiny secondary" title="Export adapter">⬇</button>` +
       `<button data-act="del" class="tiny danger" title="Scrap">✕</button>` +
       `</div>`;
+    paintIcon(li.querySelector('.item__icon'), runTile(m), runIcon(m), 0.76);
     li.querySelector('[data-act=apply]').onclick = (e) => { e.stopPropagation(); applyRun(m.id); };
     li.querySelector('[data-act=export]').onclick = (e) => { e.stopPropagation(); exportRun(m.id); };
     li.querySelector('[data-act=del]').onclick = (e) => { e.stopPropagation(); delRun(m.id); };
     li.onclick = () => applyRun(m.id);
     ul.appendChild(li);
   }
-  renderKnife();
+  renderDock();
+  renderStage();
 }
 
-// ── the Swiss army knife: trained skills as equippable slots ─────────────────
+// ── the surface dock: trained surfaces as equippable slots ───────────────────
 const SKILL_ICON = { guided: '⚔', own: '📜' };
-const usesByRun = new Map(); // per-session "ammo": how many times each knife was fired
+const usesByRun = new Map(); // per-session count: how many times each surface was fired
 function bumpUses(id) { usesByRun.set(id, (usesByRun.get(id) || 0) + 1); }
 function runIcon(m) {
   const sk = skillByKey(m.base);
   return sk ? sk.icon : (SKILL_ICON[m.kind] || '🗡');
+}
+function runTile(m) {
+  const sk = skillByKey(m.base);
+  return sk ? dockOf(sk.key) : { ...BYOD_TILE, name: m.name, glyph: SKILL_ICON[m.kind] || '🗡' };
 }
 function skillLevel(m) {
   // Level grows with training amount; XP fills as loss drops (cosmetic, bounded).
@@ -574,7 +527,7 @@ function skillLevel(m) {
   const xp = Math.max(6, Math.min(100, Math.round((100 * (3 - loss)) / 3)));
   return { lv, xp };
 }
-// Cosmetic loot rarity from level — pure flavor for the inventory.
+// Cosmetic rarity from level — pure flavor for the Atlas.
 function rarityOf(lv) {
   if (lv >= 9) return { key: 'legendary', label: 'Legendary' };
   if (lv >= 7) return { key: 'epic', label: 'Epic' };
@@ -585,56 +538,228 @@ function rarityOf(lv) {
 function itemTypeLabel(m) {
   const sk = skillByKey(m.base);
   if (sk) return sk.label;
-  return m.kind === 'guided' ? 'Skill' : 'Custom note';
+  return m.kind === 'guided' ? 'Surface' : 'Custom surface';
 }
-// Ordered list of equippable runs — also the source of truth for number-key binds.
-function knifeRuns() { return store.listRuns(); }
-function renderKnife() {
-  const slots = $('knifeSlots');
-  if (!slots) return;
-  const runs = knifeRuns();
-  slots.innerHTML = '';
-  // Advertise every service skill that hasn't been forged yet as a locked slot.
-  for (const sk of SKILLS) {
-    const forged = runs.some((r) => skillByKey(r.base)?.key === sk.key);
-    if (forged) continue;
-    const lock = document.createElement('div');
-    lock.className = 'kslot kslot--locked';
-    lock.title = `Forge the ${sk.label} skill in the Train tab`;
-    lock.innerHTML = `<span class="kslot__icon">${sk.icon}</span><span class="kslot__name">${esc(sk.label)}</span>` +
-      `<span class="kslot__lv">locked · train to forge</span>`;
-    lock.onclick = () => { switchTab('train'); selectSkill(sk.key); };
-    slots.appendChild(lock);
-  }
-  runs.forEach((m, i) => {
-    const { lv, xp } = skillLevel(m);
-    const uses = usesByRun.get(m.id) || 0;
-    const key = i < 9 ? i + 1 : null;
-    const equipped = m.id === state.activeRunId;
+// ── the dock: a bottom-anchored tray of account/app roots ─────────────────────
+// Some services map to real trainable surfaces; the rest are the vision — "any
+// app you're logged into" — shown as dimmed planned tiles. Tiles render from
+// tiny glyph fallback metadata first, then upgrade to vendored SVG logos.
+const BYOD_TILE = { bg: '#6b6256', fg: '#fff', glyph: '📜', fs: 20 };
+const SERVICES = POPULAR_2026; // dock catalog (12 forgeable + the broader armory)
+let dockRuns = []; // run ids in dock order — the source of truth for number-key equip
+let justEquippedId = null; // run id that should play the one-shot equip flourish on next render
+// platform-correct label for the quick-switcher chord (Slack-style ⌘/Ctrl-K)
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+const SWAP_KEY = IS_MAC ? '⌘K' : 'Ctrl+K';
+function renderDock() {
+  const tray = $('dockSlots');
+  if (!tray) return;
+  const runs = store.listRuns();
+  tray.innerHTML = '';
+  dockRuns = [];
+  const seen = new Set();
+
+  const addTile = (svc, opts) => {
     const el = document.createElement('div');
-    el.className = 'kslot' + (equipped ? ' equipped' : '');
-    el.dataset.runid = m.id;
-    el.title = `${m.name} — ${key ? 'press ' + key + ' or ' : ''}click to equip (hot-swap into inference)`;
-    el.innerHTML =
-      (key ? `<span class="kslot__key">${key}</span>` : '') +
-      `<span class="kslot__icon">${runIcon(m)}</span>` +
-      `<span class="kslot__name">${esc(m.name)}</span>` +
-      `<span class="kslot__lv">Lv ${lv}${equipped ? ' · equipped' : ''}${uses ? ' · ' + uses + '×' : ''}</span>` +
-      `<span class="kslot__xp"><i style="width:${xp}%"></i></span>`;
-    el.onclick = () => applyRun(m.id);
-    slots.appendChild(el);
-  });
+    el.className = 'dock__tile';
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.dataset.state = opts.state;
+    el.dataset.key = svc.key;
+    if (opts.runid) el.dataset.runid = opts.runid;
+    if (opts.pop) el.classList.add('dock__tile--pop'); // one-shot equip flourish
+    const g = document.createElement('span');
+    g.className = 'dock__glyph';
+    paintIcon(g, svc, svc.glyph, 1, { state: opts.state });
+    el.appendChild(g);
+    if (opts.lv != null) { const b = document.createElement('span'); b.className = 'dock__lv'; b.textContent = 'L' + opts.lv; el.appendChild(b); }
+    if (opts.keyN != null) { const k = document.createElement('span'); k.className = 'dock__key'; k.textContent = opts.keyN; el.appendChild(k); }
+    if (opts.forge) { const f = document.createElement('span'); f.className = 'dock__forge'; f.textContent = '+'; el.appendChild(f); }
+    if (opts.lock) { const l = document.createElement('span'); l.className = 'dock__lock'; l.textContent = '🔒'; el.appendChild(l); }
+    const t = document.createElement('span'); t.className = 'dock__tip';
+    if (opts.tipHtml) { t.classList.add('dock__tip--rich'); t.innerHTML = opts.tipHtml; }
+    else t.textContent = opts.tip;
+    el.appendChild(t);
+    el.setAttribute('aria-label', opts.tip);
+    el.onclick = opts.onClick;
+    el.onmouseenter = () => sfx.hover();
+    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); opts.onClick(); } };
+    tray.appendChild(el);
+  };
+
+  for (const svc of SERVICES) {
+    if (svc.skill) {
+      const run = runs.find((r) => skillByKey(r.base)?.key === svc.skill);
+      if (run) {
+        seen.add(run.id);
+        const { lv } = skillLevel(run);
+        const equipped = run.id === state.activeRunId;
+        dockRuns.push(run.id);
+        const keyN = dockRuns.length <= 9 ? dockRuns.length : null;
+        const uses = usesByRun.get(run.id) || 0;
+        const sk = skillByKey(svc.skill);
+        addTile(svc, {
+          state: equipped ? 'equipped' : 'owned', runid: run.id, lv, keyN, pop: equipped && justEquippedId === run.id,
+          tip: `${svc.name} · Lv ${lv}${equipped ? ' · equipped' : ''}${uses ? ' · ' + uses + '×' : ''}${keyN ? ' · [' + keyN + ']' : ''}`,
+          tipHtml: dockTip(svc.name, { lv, rarity: rarityOf(lv), scope: sk?.spec?.scope, opsN: sk?.spec?.ops?.length, uses, keyN, equipped }),
+          // the equipped "lead" slot opens the radial quick-swap wheel (BotW-style)
+          onClick: () => (equipped ? openWheel(false) : applyRun(run.id)),
+        });
+      } else {
+        addTile(svc, {
+          state: 'forge', forge: true, tip: `${svc.name} — train this surface`,
+          onClick: () => { selectSkill(svc.skill); openTrainer(); },
+        });
+      }
+    } else {
+      addTile(svc, {
+        state: 'soon', lock: true, tip: `${svc.name} — planned surface`,
+        onClick: () => stageMsg(`“${svc.name}” is not trainable yet — the Atlas grows as we add account surfaces.`),
+      });
+    }
+  }
+
+  // forged BYOD adapters (custom notes) map to no service → append as tiles
+  const extra = runs.filter((r) => !seen.has(r.id));
+  if (extra.length) { const sep = document.createElement('div'); sep.className = 'dock__sep'; tray.appendChild(sep); }
+  for (const r of extra) {
+    const { lv } = skillLevel(r);
+    const equipped = r.id === state.activeRunId;
+    dockRuns.push(r.id);
+    const keyN = dockRuns.length <= 9 ? dockRuns.length : null;
+    addTile({ key: 'byod-' + r.id, name: r.name, ...BYOD_TILE }, {
+      state: equipped ? 'equipped' : 'owned', runid: r.id, lv, keyN, pop: equipped && justEquippedId === r.id,
+      tip: `${r.name} · Lv ${lv}${equipped ? ' · equipped' : ''}${keyN ? ' · [' + keyN + ']' : ''}`,
+      tipHtml: dockTip(r.name, { lv, rarity: rarityOf(lv), scope: 'your private notes', uses: usesByRun.get(r.id) || 0, keyN, equipped }),
+      onClick: () => (equipped ? openWheel(false) : applyRun(r.id)),
+    });
+  }
+  justEquippedId = null; // consumed
 }
-// number-key quick-equip (FPS weapon slots): 1..9 → the Nth forged knife
+// GW2-style rich tooltip card for a dock tile.
+function dockTip(name, { lv, rarity, scope, opsN, uses, keyN, equipped } = {}) {
+  const rows = [`<b class="dock__tipname">${esc(name)}</b>`];
+  if (lv != null) rows.push(`<span class="dock__tiprar" data-rar="${(rarity && rarity.key) || 'common'}">Lv ${lv} · ${esc((rarity && rarity.label) || '')}</span>`);
+  if (scope) rows.push(`<span class="dock__tipline">⚔ ${esc(scope)}</span>`);
+  const bits = [];
+  if (opsN != null) bits.push(`${opsN} action${opsN === 1 ? '' : 's'}`);
+  if (uses) bits.push(`used ${uses}×`);
+  if (bits.length) rows.push(`<span class="dock__tipline dim">${bits.join(' · ')}</span>`);
+  rows.push(`<span class="dock__tipkey">${equipped ? `◆ equipped — ${SWAP_KEY} or click to switch` : (keyN ? `press [${keyN}] · ${SWAP_KEY} to switch` : 'tap to equip')}</span>`);
+  return rows.join('');
+}
+// number-key quick-equip (FPS weapon slots): 1..9 → the Nth owned dock tile
 let lastEquipIntent = null; // last run id a quick-equip resolved to (test/devtools surface)
 function equipByIndex(i) {
-  const runs = knifeRuns();
-  if (i < 0 || i >= runs.length) return;
-  lastEquipIntent = runs[i].id;
-  applyRun(runs[i].id);
+  if (i < 0 || i >= dockRuns.length) return;
+  lastEquipIntent = dockRuns[i];
+  applyRun(dockRuns[i]);
+}
+
+// ── sound: tiny synthesized SFX, no asset files (Web Audio) ──────────────────
+// Lazily created on first user gesture (browsers suspend audio until then) and
+// fully muteable. Tasteful, short, low-gain — game feedback, not a soundtrack.
+const sfx = (() => {
+  let ctx = null, muted = false;
+  try { muted = localStorage.getItem('eg_mute') === '1'; } catch {}
+  const ac = () => {
+    if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} }
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  };
+  const tone = (freq, at, dur, type = 'sine', gain = 0.05, slideTo = null) => {
+    const c = ac(); if (!c || muted) return;
+    const t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.03);
+  };
+  return {
+    get muted() { return muted; },
+    toggle() { muted = !muted; try { localStorage.setItem('eg_mute', muted ? '1' : '0'); } catch {} if (!muted) this.equip(); return muted; },
+    hover() { tone(1100, 0, 0.035, 'triangle', 0.018); },
+    open() { tone(360, 0, 0.14, 'sawtooth', 0.035, 760); },
+    move() { tone(720, 0, 0.03, 'square', 0.02); },
+    equip() { tone(523.25, 0, 0.08, 'triangle', 0.05); tone(783.99, 0.06, 0.1, 'triangle', 0.05); tone(1046.5, 0.13, 0.16, 'sine', 0.045); },
+    cancel() { tone(380, 0, 0.12, 'sine', 0.035, 240); },
+    error() { tone(170, 0, 0.18, 'square', 0.045); },
+  };
+})();
+
+// ── BotW-style radial quick-swap wheel ───────────────────────────────────────
+// Click the equipped lead slot to fan your owned surfaces into a ring;
+// flick the pointer / arrow-keys to highlight, release or Enter to equip.
+let wheelOn = false, wheelHeld = false, wheelSel = 0, wheelNodes = [];
+function ownedRunsInDockOrder() { return dockRuns.map((id) => store.getRun(id)).filter(Boolean); }
+function openWheel(held) {
+  if (wheelOn) { if (!held) closeWheel(true); return; }
+  const el = $('wheel'); if (!el) return;
+  const runs = ownedRunsInDockOrder();
+  if (!runs.length) { sfx.error(); stageMsg('No surfaces to swap yet — train one first.'); return; }
+  wheelOn = true; wheelHeld = !!held; wheelNodes = [];
+  const ring = $('wheelRing'); ring.innerHTML = '';
+  const N = runs.length, R = Math.min(168, 96 + N * 9);
+  runs.forEach((r, i) => {
+    const ang = -Math.PI / 2 + i * (2 * Math.PI / N);
+    const x = Math.cos(ang) * R, y = Math.sin(ang) * R;
+    const sk = skillByKey(r.base), d = dockOf(r.base) || { ...BYOD_TILE, name: r.name };
+    const node = document.createElement('button');
+    node.type = 'button'; node.className = 'wheel__node';
+    node.style.transform = `translate(-50%,-50%) translate(${x}px,${y}px)`;
+    const ic = document.createElement('span'); ic.className = 'wheel__nicon'; paintIcon(ic, d, sk?.icon, 1);
+    const nm = document.createElement('span'); nm.className = 'wheel__nname'; nm.textContent = r.name;
+    const kb = document.createElement('span'); kb.className = 'wheel__nkey'; kb.textContent = i < 9 ? i + 1 : '';
+    node.append(ic, nm, kb);
+    node.onmouseenter = () => setWheelSel(i, true);
+    node.onclick = () => { setWheelSel(i); commitWheel(); };
+    ring.appendChild(node); wheelNodes.push({ el: node, run: r });
+  });
+  const cur = dockRuns.indexOf(state.activeRunId);
+  setWheelSel(cur >= 0 ? cur : 0);
+  el.hidden = false; el.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('wheel-open');
+  sfx.open();
+}
+function setWheelSel(i, quiet) {
+  if (!wheelNodes.length) return;
+  wheelSel = (i + wheelNodes.length) % wheelNodes.length;
+  wheelNodes.forEach((n, j) => n.el.classList.toggle('on', j === wheelSel));
+  const hub = $('wheelHub'); if (hub) hub.textContent = wheelNodes[wheelSel].run.name;
+  if (!quiet) sfx.move(); else sfx.hover();
+}
+function commitWheel() {
+  const sel = wheelNodes[wheelSel]; const id = sel && sel.run.id;
+  closeWheel(false);
+  if (id && id !== state.activeRunId) applyRun(id);
+}
+function closeWheel(silent) {
+  if (!wheelOn) return;
+  wheelOn = false; wheelHeld = false;
+  const el = $('wheel'); if (el) { el.hidden = true; el.setAttribute('aria-hidden', 'true'); }
+  document.body.classList.remove('wheel-open');
+  if (!silent) sfx.cancel();
+}
+// flick selection: pointer angle from wheel center → nearest node (outside a deadzone)
+function wheelPointerMove(e) {
+  if (!wheelOn || wheelNodes.length < 2) return;
+  const el = $('wheel'); const r = el.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const dx = e.clientX - cx, dy = e.clientY - cy;
+  if (Math.hypot(dx, dy) < 34) return; // center deadzone
+  const ang = Math.atan2(dy, dx), N = wheelNodes.length, step = 2 * Math.PI / N;
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < N; i++) {
+    const a = -Math.PI / 2 + i * step;
+    let diff = Math.abs(((ang - a + Math.PI * 3) % (2 * Math.PI)) - Math.PI);
+    if (diff < bd) { bd = diff; best = i; }
+  }
+  if (best !== wheelSel) setWheelSel(best, true);
 }
 // ── HUD: the macro verifier readout in the inference pane ─────────────────────
-function setMacroCheck(res, skill) {
+function setMacroCheck(res, skill, text) {
   const el = $('macroCheck');
   if (!el) return;
   if (!res || res.status === 'empty') { el.hidden = true; el.textContent = ''; el.removeAttribute('data-state'); return; }
@@ -642,45 +767,157 @@ function setMacroCheck(res, skill) {
   if (res.status === 'ok') {
     el.dataset.state = 'ok';
     const ops = res.calls.map((c) => c.op).join(', ');
-    el.innerHTML = `<b>✓ valid macro</b> · ${res.n} call${res.n === 1 ? '' : 's'} on the ${esc(skill.label)} action space · <code>${esc(ops)}</code>`;
+    const plan = text ? humanizePlan(text) : [];
+    const planHtml = plan.length
+      ? `<ol class="macrochk__plan">${plan.map((p) => `<li>${esc(p)}</li>`).join('')}</ol>`
+      : '';
+    el.innerHTML = `<b>✓ valid write plan</b> · ${res.n} call${res.n === 1 ? '' : 's'} on the ${esc(skill.label)} surface · <code>${esc(ops)}</code>${planHtml}`;
   } else if (res.status === 'oos') {
     el.dataset.state = 'oos';
-    el.innerHTML = `<b>⛔ OUT_OF_SCOPE</b> · the ${esc(skill.label)} knife correctly refused — that request is outside its blades`;
+    el.innerHTML = `<b>⛔ OUT_OF_SCOPE</b> · the ${esc(skill.label)} surface correctly refused — that request is outside its writes`;
   } else {
     el.dataset.state = 'bad';
     el.innerHTML = `<b>✗ invalid macro</b> · ${esc(res.issues.slice(0, 2).join('; '))}`;
   }
 }
-// ── Train pane: choose which knife to forge ──────────────────────────────────
+// ── RPG atlas HUD: turns trained surfaces into a player stat strip ────────────
+const RANKS = [[12, 'Grandmaster'], [9, 'Master'], [6, 'Artisan'], [4, 'Adept'], [2, 'Journeyman'], [1, 'Apprentice'], [0, 'Initiate']];
+// Paint a service icon into any element. The icon pipeline renders the fallback
+// glyph immediately, then upgrades to a vendored SVG and the selected theme.
+function paintIcon(el, d, fallbackGlyph, fsScale = 1, opts = {}) {
+  if (!el) return;
+  paintSkillIcon(el, d || {}, { fallbackGlyph, fsScale, state: opts.state });
+}
+// the narrator line at the bottom of the stage (classic adventure-game message bar)
+function stageMsg(text) { const e = $('stageMsg'); if (e) e.textContent = '» ' + text; }
+
+// ── the stage: a Sierra-style atlas scene — train account surfaces, then equip
+//    one and act. Score box + narrator bar.
+function renderStage() {
+  const stage = $('stage');
+  if (!stage) return;
+  const runs = store.listRuns();
+  const acquired = new Set(runs.map((r) => skillByKey(r.base)?.key).filter(Boolean));
+  let maxLv = 0, steps = 0;
+  for (const r of runs) { maxLv = Math.max(maxLv, skillLevel(r).lv); steps += (r.steps || 0); }
+  const lvl = 1 + Math.floor(steps / 120);
+  const xpPct = Math.round(((steps % 120) / 120) * 100);
+  const rank = (RANKS.find(([t]) => runs.length >= t) || [0, 'Initiate'])[1];
+  const active = runs.find((r) => r.id === state.activeRunId);
+  const skill = active ? skillByKey(active.base) : null;
+  const d = skill ? dockOf(skill.key) : null;
+  const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  set('stageScore', `${acquired.size} / ${SKILLS.length}`);
+  set('stageLv', String(lvl));
+  set('stageRank', rank);
+  const xp = $('stageXp'); if (xp) xp.style.width = xpPct + '%';
+  const scene = $('stageScene');
+  const icon = $('stageSignIcon');
+  if (active) {
+    set('stageSignName', active.name);
+    paintIcon(icon, d, skill?.icon, 0.8);
+    if (scene) scene.style.setProperty('--scene', themedTileColor(d, iconTheme()));
+    stage.dataset.where = 'in';
+  } else {
+    set('stageSignName', 'Account Atlas');
+    if (icon) { icon.classList.remove('hasvg'); icon.textContent = '🌐'; icon.style.background = '#13393f'; icon.style.color = '#cdeeea'; icon.style.fontSize = '17px'; }
+    if (scene) scene.style.setProperty('--scene', '#1d6f6a');
+    stage.dataset.where = 'out';
+  }
+}
+
+// ── Train pane: choose which account/app surface to train ────────────────────
+const dockOf = (key) => POPULAR_2026.find((s) => s.key === key) || {};
 function renderSkillPicker() {
   const host = $('skillPicker');
   if (!host) return;
+  const runs = store.listRuns();
   host.innerHTML = '';
   for (const sk of SKILLS) {
+    const d = dockOf(sk.key);
+    const run = runs.find((r) => skillByKey(r.base)?.key === sk.key);
+    const lv = run ? skillLevel(run).lv : 0;
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'skillpick__btn' + (sk.key === selectedSkillKey ? ' on' : '');
+    b.className = 'skillpick__btn' + (sk.key === selectedSkillKey ? ' on' : '') + (lv ? ' forged' : '');
     b.dataset.key = sk.key;
-    b.innerHTML = `<span class="skillpick__icon">${sk.icon}</span>${esc(sk.label)}`;
+    const icon = document.createElement('span');
+    icon.className = 'skillpick__icon';
+    paintIcon(icon, d, sk.icon, 0.78);
+    const txt = document.createElement('span');
+    txt.className = 'skillpick__txt';
+    txt.innerHTML = `<b>${esc(sk.label)}</b><i>${sk.spec.ops.length} writes · ${sk.examples.length} drills</i>`;
+    b.append(icon, txt);
+    if (lv) {
+      const badge = document.createElement('span');
+      badge.className = 'skillpick__lv';
+      badge.textContent = 'L' + lv;
+      b.appendChild(badge);
+    }
     b.onclick = () => selectSkill(sk.key);
     host.appendChild(b);
   }
+}
+function renderPairList(host, pairs, { limit = 4, compact = false } = {}) {
+  if (!host) return;
+  const shown = pairs.slice(0, limit);
+  const more = Math.max(0, pairs.length - shown.length);
+  host.innerHTML = shown.map(([q, a]) => {
+    const macro = compact && a !== 'OUT_OF_SCOPE' ? clip(a, 120) : a;
+    return `<li><span class="skill-req">${esc(q)}</span><pre class="skill-macro">${esc(macro)}</pre></li>`;
+  }).join('') +
+    (more > 0 ? `<li class="skill-more">+ ${more} more ${compact ? 'hidden' : 'spec-valid'} drill${more === 1 ? '' : 's'}</li>` : '');
+}
+function renderSurfacePlan(sk) {
+  const d = dockOf(sk.key);
+  paintIcon($('surfacePlanIcon'), d, sk.icon, 0.86);
+  const guards = [...(sk.examples || []), ...(sk.eval || [])].filter(([, a]) => a === 'OUT_OF_SCOPE');
+  const chips = [
+    `${sk.spec.ops.length} writes`,
+    `${sk.examples.length} train drills`,
+    `${(sk.eval || []).length} held-out evals`,
+    `${guards.length} refusal guards`,
+    'rank 16 LoRA',
+  ];
+  const chipHost = $('surfacePlanChips');
+  if (chipHost) chipHost.innerHTML = chips.map((c) => `<span class="surfacechip">${esc(c)}</span>`).join('');
+  const contract = $('writeContract');
+  if (contract) {
+    contract.innerHTML = sk.spec.ops.map((op) => {
+      const sig = `${op.name}(${(op.params || []).join(', ')})${op.ret ? ' -> ' + op.ret : ''}`;
+      const params = (op.params || []).length ? (op.params || []).join(', ') : 'no args';
+      return `<div class="contractop"><code>${esc(sig)}</code><span>${esc(params)}</span></div>`;
+    }).join('');
+  }
+  const rules = [];
+  if (sk.context) rules.push(['Date anchor', sk.context]);
+  rules.push(['Scope', `Only ${sk.spec.scope}; anything else must emit exactly OUT_OF_SCOPE.`]);
+  for (const a of sk.contract?.assertions || []) rules.push([a.id, a.describe]);
+  for (const f of sk.contract?.forbidden || []) rules.push([f.id, f.describe]);
+  const ruleHost = $('surfaceRules');
+  if (ruleHost) ruleHost.innerHTML = rules.map(([k, v]) => `<div class="ruleitem"><b>${esc(k)}</b>${esc(v)}</div>`).join('');
+  const inscope = (sk.examples || []).filter(([, a]) => a !== 'OUT_OF_SCOPE');
+  renderPairList($('guidedList'), inscope, { limit: 5 });
+  renderPairList($('evalList'), sk.eval || [], { limit: 4, compact: true });
+  renderPairList($('guardList'), guards, { limit: 4, compact: true });
+  const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  set('guidedSummary', `${inscope.length} train`);
+  set('evalSummary', `${(sk.eval || []).length} held out`);
+  set('guardSummary', `${guards.length} OOS`);
 }
 function selectSkill(key) {
   const sk = skillByKey(key) || SKILLS[0];
   selectedSkillKey = sk.key;
   document.querySelectorAll('#skillPicker .skillpick__btn').forEach((b) =>
     b.classList.toggle('on', b.dataset.key === sk.key));
-  const title = $('skillTitle'); if (title) title.innerHTML = `${sk.icon} ${esc(sk.label)} skill`;
+  const title = $('skillTitle'); if (title) title.innerHTML = `${sk.icon} ${esc(sk.label)} surface`;
   const desc = $('skillDesc'); if (desc) desc.textContent = sk.desc;
-  const list = $('guidedList');
-  if (list) list.innerHTML = sk.examples.map(([q, a]) =>
-    `<li><span class="skill-req">${esc(q)}</span><pre class="skill-macro">${esc(a)}</pre></li>`).join('');
+  renderSurfacePlan(sk);
 }
 async function applyRun(id) {
   const meta = store.getRun(id);
   if (!meta) return;
-  if (!state.loaded) { log('Load VibeThinker-3B first (Step 1), then tap a fine-tune to use it.'); switchTab('infer'); return; }
+  if (!state.loaded) { log('Boot the engine first, then equip a surface.'); closeTrainer(); return; }
   if (state.busy) return;
   state.busy = 'apply'; gateButtons();
   try {
@@ -695,11 +932,14 @@ async function applyRun(id) {
     addAdapterOption(meta.name);
     state.tuned = { name: meta.name, kind: meta.kind, base: meta.base, build: buildFromMeta(meta), suggest: meta.suggest };
     state.activeRunId = id;
+    justEquippedId = id; // trigger the one-shot equip flourish on the lead slot
     $('adapterSel').value = meta.name;
     setMacroCheck(null);
-    setBadge(); renderHistory();
+    sfx.equip();
+    setBadge(); renderHistory(); renderEquipPanel();
     switchTab('infer');
     if (meta.suggest) $('prompt').value = meta.suggest;
+    stageMsg(`Equipped “${meta.name}”. Pick a drill or write request.`);
     log(`Now serving fine-tune "${meta.name}". Ask away.`);
   } catch (e) {
     log('Could not apply: ' + e.message); console.error(e);
@@ -755,6 +995,28 @@ function applyLayout() {
   document.body.dataset.layout = fold ? 'foldable' : mobile ? 'mobile' : 'desktop';
 }
 
+function repaintIconSurfaces() {
+  renderHistory();
+  renderSkillPicker();
+  renderEquipPanel();
+  renderStage();
+}
+
+function initIconTheme() {
+  const sel = $('iconTheme');
+  if (!sel) return;
+  sel.innerHTML = Object.entries(ICON_THEME_PRESETS)
+    .filter(([k]) => k !== 'locked')
+    .map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`)
+    .join('');
+  sel.value = iconTheme();
+  document.documentElement.dataset.iconTheme = iconTheme();
+  sel.onchange = () => {
+    setIconTheme(sel.value);
+    repaintIconSurfaces();
+  };
+}
+
 // ── File System Access: connect a folder for import + export/save ─────────────
 async function initFs() {
   if (!store.fsSupported) { $('fsBlock').hidden = true; return; }
@@ -791,12 +1053,19 @@ async function initFs() {
 
 // ── wiring ────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  // render the skill picker + the selected knife's example macros
+  // render the surface picker + the selected surface's example macros
   renderSkillPicker();
   selectSkill(selectedSkillKey);
 
-  $('tabInfer').onclick = () => switchTab('infer');
-  $('tabTrain').onclick = () => switchTab('train');
+  // open the train surface menu from the Atlas header or empty-state CTA
+  $('learnBtn')?.addEventListener('click', () => openTrainer());
+  $('learnCta')?.addEventListener('click', () => openTrainer());
+  $('jobBoardBtn')?.addEventListener('click', () => stageMsg('Job Board will compare trained surfaces, evals, levels, and export status.'));
+  $('worldMapBtn')?.addEventListener('click', () => stageMsg('World Map will show account roots, segmented app surfaces, and workflow handoffs.'));
+  $('trainerClose')?.addEventListener('click', () => closeTrainer());
+  // click the dimmed backdrop (outside the menu window) to dismiss
+  $('trainer')?.addEventListener('click', (e) => { if (e.target.id === 'trainer') closeTrainer(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTrainer(); });
   $('gear').onclick = () => {
     const open = $('settings').hidden;
     $('settings').hidden = !open;
@@ -821,19 +1090,55 @@ window.addEventListener('DOMContentLoaded', () => {
   $('run').onclick = runInference;
   $('prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runInference(); });
 
-  // FPS-style quick-equip: number keys 1..9 equip the Nth forged knife
+  // Quick-switch surfaces the way workflow software does it: ⌘/Ctrl-K opens the
+  // switcher (Slack's quick-switcher convention; also VS Code / Linear / Notion),
+  // and 1–9 are direct hotkeys. No game-style hold-to-open.
   document.addEventListener('keydown', (e) => {
+    // ⌘K / Ctrl-K — works anywhere, even from a text field (like Slack)
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      wheelOn ? closeWheel(true) : openWheel(false);
+      return;
+    }
+    // switcher navigation takes priority while it's open
+    if (wheelOn) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setWheelSel(wheelSel + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setWheelSel(wheelSel - 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); commitWheel(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeWheel(false); }
+      else if (e.key >= '1' && e.key <= '9') { e.preventDefault(); setWheelSel(+e.key - 1); commitWheel(); }
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
-    if (e.key >= '1' && e.key <= '9') equipByIndex(+e.key - 1);
+    if (e.key >= '1' && e.key <= '9') equipByIndex(+e.key - 1); // direct hotkey
   });
+  // flick selection + click-out-to-cancel on the wheel overlay
+  const wheelEl = $('wheel');
+  if (wheelEl) {
+    wheelEl.addEventListener('pointermove', wheelPointerMove);
+    wheelEl.addEventListener('pointerdown', (e) => { if (e.target === wheelEl || e.target.id === 'wheelHub') closeWheel(false); });
+  }
+  // sound mute toggle
+  const mute = $('mute');
+  if (mute) {
+    const paint = () => { mute.textContent = sfx.muted ? '🔇' : '🔊'; mute.classList.toggle('on', !sfx.muted); mute.setAttribute('aria-label', sfx.muted ? 'Unmute sounds' : 'Mute sounds'); };
+    paint();
+    mute.onclick = () => { sfx.toggle(); paint(); };
+  }
 
   $('trainGuided').onclick = () => {
     const sk = skillByKey(selectedSkillKey) || SKILLS[0];
+    // Each surface ships 40-64 spec-valid pairs; sample a balanced subset per run so
+    // in-browser training stays responsive, then scale epochs to ~hit a step budget.
+    const pool = sampleExamples(sk.examples, 32);
+    const ex = pool.map(([q, a]) => ({ messages: [{ role: 'system', content: sk.system }, { role: 'user', content: q }], completion: ' ' + a }));
+    const windows = Math.ceil(ex.length / 2);
     runTraining({
-      examples: sk.examples.map(([q, a]) => ({ messages: [{ role: 'system', content: sk.system }, { role: 'user', content: q }], completion: ' ' + a })),
-      lr: 3e-4, epochs: 14, accum: 2, base: sk.key, kind: 'guided', system: sk.system,
+      examples: ex,
+      lr: 3e-4, epochs: Math.max(6, Math.min(14, Math.round(280 / windows))), accum: 2,
+      base: sk.key, kind: 'guided', system: sk.system,
       build: (u) => [{ role: 'system', content: sk.system }, { role: 'user', content: u }],
       suggest: sk.suggest,
     });
@@ -880,11 +1185,14 @@ window.addEventListener('DOMContentLoaded', () => {
     try { window.matchMedia(q).addEventListener('change', applyLayout); } catch {}
   }
   window.__layout = (m) => { document.body.dataset.layout = m; }; // test/devtools hook
-  window.__eg = { store, renderHistory, renderKnife, applyRun, exportRun, delRun, state, // devtools/test surface
-    SKILLS, selectSkill, verifyMacro, setMacroCheck, equipByIndex, skillByKey,
+  window.__eg = { store, renderHistory, renderDock, renderStage, stageMsg, renderEquipPanel, humanizePlan, applyRun, exportRun, delRun, state, // devtools/test surface
+    openTrainer, closeTrainer, openWheel, closeWheel, commitWheel, setWheelSel, sfx, SKILLS, POPULAR_2026, selectSkill, renderSkillPicker, verifyMacro, setMacroCheck, equipByIndex, skillByKey, sampleExamples,
+    setIconTheme: (theme) => { const t = setIconTheme(theme); const sel = $('iconTheme'); if (sel) sel.value = t; repaintIconSurfaces(); return t; },
+    get iconTheme() { return iconTheme(); },
     get selectedSkillKey() { return selectedSkillKey; }, get lastEquipIntent() { return lastEquipIntent; } };
 
   initFs();
+  initIconTheme();
   renderHistory();
   switchTab('infer'); setBadge(); refreshOwn(); gateButtons();
 });

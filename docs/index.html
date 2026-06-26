@@ -79,7 +79,29 @@
     background:#c8c4b5; border:2px solid; border-color:var(--hi) var(--lo) var(--lo) var(--hi); border-radius:7px 7px 0 0; user-select:none; }
   .iconbtn:hover{ filter:brightness(1.04); }
   .iconbtn.on{ background:var(--tab); color:#3a2a00; }
+  .apptitle{ flex:1; align-self:center; font:600 12px Verdana,sans-serif; color:#5a5440; padding:6px 10px; letter-spacing:.2px; }
+  .apptitle b{ color:var(--primary-edge); }
   .winbody{ border-top:2px solid var(--lo); padding:var(--s5); }
+
+  /* ── atlas train affordances ── */
+  .history__learn{ margin-left:auto; align-self:center; padding:3px 9px; font:700 11px Verdana,sans-serif; }
+  .history__empty p{ margin:0 0 10px; }
+  .history__empty button.primary{ width:100%; }
+  .atlasnav{ margin-top:10px; padding-top:10px; border-top:1px dashed #0002; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .atlasnav__btn{ height:30px; padding:0 8px; font:700 11px Verdana,sans-serif; }
+
+  /* ── LEARN menu (training overlay) — opened like an RPG menu, not a tab ── */
+  body.modal-open{ overflow:hidden; }
+  .trainer{ position:fixed; inset:0; z-index:60; background:#1a1712cc; display:grid; place-items:center; padding:18px; animation:fade var(--dur) var(--ease); }
+  .trainer[hidden]{ display:none; }
+  .trainer__win{ width:min(880px,96vw); max-height:90vh; display:flex; flex-direction:column; background:var(--surface);
+    border:2px solid; border-color:var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi); border-radius:var(--r-lg);
+    box-shadow:0 18px 50px #000a; overflow:hidden; }
+  .trainer__bar{ display:flex; align-items:center; justify-content:space-between; padding:9px 12px;
+    background:linear-gradient(#efece0,#dcd7c7); border-bottom:2px solid var(--bevel-lo); font:700 13px Verdana,sans-serif; color:#3a2a00; }
+  .trainer__bar .iconbtn{ width:30px; height:28px; border-radius:6px; }
+  .trainer__body{ padding:var(--s5); overflow:auto; }
+  @keyframes fade{ from{ opacity:0 } to{ opacity:1 } }
 
   /* ── settings drawer (advanced; clean labeled form) ── */
   .settings{ border-top:2px solid var(--bevel-lo); background:#cfccbd; padding:var(--s5); animation:drop var(--dur) var(--ease); }
@@ -95,6 +117,18 @@
   .field-row .field{ flex:1; min-width:160px; }
   .lbl{ font-size:12px; color:var(--text-dim); }
   @media (max-width:760px){ .settings__grid{ grid-template-columns:1fr; } }
+
+  /* ── skill icon pipeline: one renderer, many skins ── */
+  .skill-icon{ position:relative; overflow:hidden; isolation:isolate; display:grid; place-items:center;
+    background:var(--skill-icon-bg,#6b6256); color:var(--skill-icon-fg,#fff); }
+  .skill-icon__fallback{ display:grid; place-items:center; width:100%; height:100%; line-height:1; font:inherit; color:inherit; }
+  .skill-icon > svg,.skill-icon__img,.skill-icon__mask{ display:block; width:72%; height:72%; object-fit:contain; }
+  .skill-icon > svg{ filter:drop-shadow(0 1px 1px #0003); }
+  .skill-icon__mask{ background:var(--skill-icon-fg,#ffd24a); }
+  .skill-icon--mask{ box-shadow:inset 0 1px 0 #ffffff38, inset 0 -2px 4px #00000038, 0 1px 2px #0003; }
+  .skill-icon--pixel .skill-icon__img{ width:74%; height:74%; image-rendering:pixelated; image-rendering:crisp-edges; }
+  .skill-icon--locked{ filter:saturate(.7); }
+  .skill-icon--locked .skill-icon__img,.skill-icon--locked .skill-icon__mask{ opacity:.72; }
 
   /* ── app layout (shell) — 3 modes via body[data-layout] ── */
   .layout{ display:grid; gap:var(--s5); grid-template-columns:var(--rail-w) minmax(0,1fr); align-items:start; }
@@ -165,7 +199,7 @@
   .rail__adapter[hidden]{ display:none; }
   @keyframes pulse{ 50%{ opacity:.55; } }
 
-  /* ── inventory (left): each forged knife drops here as a loot item ── */
+  /* ── atlas (left): each trained surface drops here as an equipable page ── */
   .history{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; align-self:stretch; }
   .history__head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; }
   .history__head h2{ font:700 12px Verdana,sans-serif; letter-spacing:.6px; text-transform:uppercase; color:#5a5440; margin:0; }
@@ -181,7 +215,7 @@
   .item__frame{ grid-row:1/3; position:relative; width:42px; height:42px; display:flex; align-items:center; justify-content:center;
     background:radial-gradient(circle at 50% 32%, #fff, #efe6d2); border:2px solid var(--rar,#b9a374);
     border-radius:8px; box-shadow:inset 0 0 0 1px #fff8, 0 1px 0 var(--lo); }
-  .item__icon{ font-size:21px; line-height:1; }
+  .item__icon{ width:30px; height:30px; border-radius:7px; font-size:21px; line-height:1; }
   .item__lv{ position:absolute; right:-5px; bottom:-6px; min-width:17px; height:15px; padding:0 3px; display:flex; align-items:center;
     justify-content:center; font:800 9px ui-monospace,monospace; color:#fff; background:var(--rar,#7a4a16);
     border:1px solid #fff9; border-radius:4px; }
@@ -205,21 +239,98 @@
   .item[data-rarity=epic]     { --rar:#8a4fc0; }
   .item[data-rarity=legendary]{ --rar:#e2641a; }
 
-  /* skill list (Train pane) — request → emitted macro */
+  /* surface drill list (Train pane) — request → emitted macro */
   .skill-req{ display:block; font:600 12px Verdana,sans-serif; color:#2a2620; }
   .skill-macro{ margin:3px 0 0; padding:6px 8px; background:#fff7ee; border:1px solid var(--line);
     border-radius:var(--r-sm); font:11px/1.5 ui-monospace,SFMono-Regular,monospace; color:#5a3b18;
     white-space:pre-wrap; overflow-x:auto; }
 
-  /* skill picker (Train pane) — choose which knife to forge */
-  .skillpick{ display:flex; flex-wrap:wrap; gap:var(--s2); margin:0 0 var(--s3); }
-  .skillpick__btn{ display:inline-flex; align-items:center; gap:6px; padding:7px 12px; cursor:pointer;
+  /* surface picker (Train pane) — choose which account/app surface to train */
+  .skillpick{ display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:var(--s2); margin:0 0 var(--s3); }
+  .skillpick__btn{ position:relative; display:flex; align-items:center; gap:9px; padding:8px 10px; cursor:pointer; text-align:left;
     font:700 12px Verdana,sans-serif; color:#3a382e; background:var(--panel);
     border:2px solid var(--bevel-hi); box-shadow:1px 1px 0 var(--lo); border-radius:var(--r-sm);
     transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease); }
   .skillpick__btn:hover{ transform:translateY(-1px); box-shadow:2px 3px 0 var(--lo); border-color:#caa36e; }
-  .skillpick__btn.on{ border-color:var(--ember); background:#fff6ee; box-shadow:0 0 0 2px #ff7a3c55; color:#7a4a16; }
-  .skillpick__icon{ font-size:15px; }
+  .skillpick__btn.on{ border-color:var(--ember); background:#fff6ee; box-shadow:0 0 0 2px #ff7a3c55; }
+  .skillpick__icon{ flex:0 0 auto; width:32px; height:32px; display:grid; place-items:center; border-radius:9px;
+    font-weight:800; color:#fff; box-shadow:inset 0 1px 0 #ffffff55, inset 0 -2px 3px #00000030, 0 1px 2px #0003; }
+  .skillpick__txt{ display:flex; flex-direction:column; min-width:0; line-height:1.25; }
+  .skillpick__txt b{ font-size:12.5px; color:#2a2820; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .skillpick__txt i{ font-style:normal; font-size:10px; color:var(--text-dim); }
+  .skillpick__lv{ position:absolute; top:-7px; right:-7px; min-width:20px; height:18px; padding:0 4px; display:grid; place-items:center;
+    font:800 10px Verdana,sans-serif; color:#3a1a06; background:linear-gradient(#ffd24a,#f3a82a);
+    border:1.5px solid #fff; border-radius:9px; box-shadow:0 1px 2px #0004; }
+  .skill-more{ list-style:none; margin-top:6px; padding:5px 9px; font:600 11px Verdana,sans-serif; color:var(--text-dim);
+    background:#00000008; border:1px dashed var(--line); border-radius:var(--r-sm); }
+  .surfaceplan{ margin-bottom:var(--s3); }
+  .surfaceplan__head{ display:grid; grid-template-columns:42px minmax(0,1fr); gap:10px; align-items:center; }
+  .surfaceplan__icon{ width:42px; height:42px; display:grid; place-items:center; border-radius:10px; font:800 18px Verdana,sans-serif; color:#fff;
+    box-shadow:inset 0 1px 0 #ffffff55, inset 0 -2px 4px #00000033, 0 2px 5px #0004; }
+  .surfaceplan__id{ min-width:0; }
+  .surfaceplan__id b{ display:block; font:800 14px Verdana,sans-serif; color:#2a2620; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .surfaceplan__id p{ margin:2px 0 0; }
+  .surfaceplan__chips{ display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0; }
+  .surfacechip{ font:800 10px ui-monospace,monospace; color:#5a3b18; background:#fff7ee; border:1px solid var(--line); border-radius:999px; padding:3px 8px; }
+  .surfaceplan__grid{ display:grid; grid-template-columns:1.1fr .9fr; gap:var(--s3); margin-top:var(--s3); }
+  .surfacebox{ background:#fbfaf4; border:1px solid var(--line); border-radius:var(--radius); padding:var(--s3); min-width:0; }
+  .surfacebox h3{ margin:0 0 8px; font:800 11px Verdana,sans-serif; color:#5a3b18; text-transform:uppercase; letter-spacing:.5px; }
+  .contractops{ display:grid; gap:5px; max-height:260px; overflow:auto; padding-right:2px; }
+  .contractop{ display:grid; grid-template-columns:1fr; gap:3px; align-items:start;
+    padding:5px 7px; border:1px solid #ded9ca; border-radius:var(--r-sm); background:#fff; }
+  .contractop code{ display:block; font:11px ui-monospace,monospace; color:#4f2607; background:#fff2df; white-space:pre-wrap; }
+  .contractop span{ font:11px ui-monospace,monospace; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; }
+  .rulelist{ display:grid; gap:6px; max-height:260px; overflow:auto; padding-right:2px; }
+  .ruleitem{ padding:6px 8px; border-left:3px solid #d49a3a; background:#fff7ee; border-radius:var(--r-sm);
+    font:11px/1.45 Verdana,sans-serif; color:#5a3b18; }
+  .ruleitem b{ display:block; font:800 10px ui-monospace,monospace; color:#7a4a16; text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px; }
+  .surfacepreview{ display:grid; grid-template-columns:minmax(0,1.15fr) minmax(180px,.75fr) minmax(180px,.7fr); gap:var(--s3); align-items:start; }
+  .surfacepreview__head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:7px; }
+  .surfacepreview__head b{ font:800 12px Verdana,sans-serif; color:#5a3b18; text-transform:uppercase; letter-spacing:.5px; }
+  .surfacepreview__head span{ font:10px ui-monospace,monospace; color:var(--text-dim); white-space:nowrap; }
+  .surfaceexamples{ margin:0; padding-left:18px; font-size:12px; color:#3a382e; max-height:210px; overflow:auto; }
+  .surfaceexamples.compact{ max-height:180px; }
+  .surfaceexamples li{ margin:5px 0; }
+  .surfaceexamples .skill-macro{ max-height:72px; overflow:auto; }
+  @media (max-width:900px){ .surfaceplan__grid,.surfacepreview{ grid-template-columns:1fr; } }
+
+  /* ── the stage: a Sierra-style adventure scene (you roam "the web") ── */
+  .stage{ position:relative; margin:8px 8px 0; border:2px solid;
+    border-color:var(--hi) var(--lo) var(--lo) var(--hi); border-radius:8px; overflow:hidden;
+    display:grid; grid-template-columns:1fr 188px; grid-template-rows:auto auto; background:#0a1416;
+    box-shadow:inset 0 1px 0 #ffffff10, 0 2px 4px #0005; }
+  .stage__scene{ --scene:#1d6f6a; position:relative; height:128px; overflow:hidden;
+    background:radial-gradient(130% 95% at 50% 130%, var(--scene), #08110f 72%); transition:--scene .4s var(--ease); }
+  .stage__far{ position:absolute; left:0; right:0; bottom:44%; height:30px; opacity:.45; filter:blur(.3px);
+    background:repeating-linear-gradient(90deg,#000a 0 12px,transparent 12px 20px,#0008 20px 30px,transparent 30px 46px,#000a 46px 58px,transparent 58px 74px); }
+  .stage__floor{ position:absolute; left:-20%; right:-20%; bottom:0; height:46%; transform:perspective(200px) rotateX(60deg); transform-origin:bottom; opacity:.5;
+    background:repeating-linear-gradient(90deg,#ffffff26 0 1px,transparent 1px 38px), repeating-linear-gradient(0deg,#ffffff22 0 1px,transparent 1px 24px), linear-gradient(#0000,#00000055); }
+  .stage__scene::after{ content:""; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 60px #000a; }
+  .stage__sign{ position:absolute; right:22px; bottom:22px; display:flex; flex-direction:column; align-items:center; gap:4px; z-index:2; }
+  .stage__icon{ width:42px; height:42px; display:grid; place-items:center; border-radius:10px; font:800 18px Verdana,sans-serif; color:#fff;
+    box-shadow:inset 0 1px 0 #ffffff55, inset 0 -2px 4px #00000033, 0 3px 8px #0009; }
+  .stage__icon.hasvg{ padding:0; }
+  .stage__place{ font:700 11px Verdana,sans-serif; color:#eafffb; background:#000000bb; border:1px solid #ffffff22;
+    padding:2px 9px; border-radius:11px; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .stage__actor{ position:absolute; left:22px; bottom:18px; font-size:34px; z-index:2; filter:drop-shadow(0 5px 1px #0007);
+    animation:bob 1.7s var(--ease) infinite; }
+  .stage__actor::after{ content:""; position:absolute; left:50%; bottom:-7px; width:30px; height:7px; transform:translateX(-50%); background:#0006; border-radius:50%; filter:blur(2px); }
+  @keyframes bob{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-4px);} }
+  .stage__panel{ background:linear-gradient(#efe6d2,#e0d4ba); border-left:2px solid #0006; padding:10px 13px;
+    display:flex; flex-direction:column; gap:7px; justify-content:center; }
+  .stage__score{ display:flex; align-items:baseline; gap:8px; }
+  .stage__k{ font:800 10px Verdana,sans-serif; letter-spacing:1.2px; color:#8a5a13; }
+  .stage__score b{ font:800 22px ui-monospace,monospace; color:#5a3b18; }
+  .stage__rank{ display:flex; align-items:center; gap:8px; font:700 11px Verdana,sans-serif; color:#6a4a1e; }
+  .stage__lv b{ color:#3a1a06; }
+  .stage__xpbar{ height:6px; border-radius:4px; background:#0000001f; overflow:hidden; box-shadow:inset 0 1px 1px #0006; }
+  .stage__xpbar span{ display:block; height:100%; background:linear-gradient(90deg,#ff7a3c,#ffb37a); transition:width .4s var(--ease); }
+  .stage__msg{ grid-column:1 / -1; font:600 12px ui-monospace,SFMono-Regular,monospace; color:#ffd9a0;
+    background:#0a0f10; border-top:2px solid #000; padding:7px 12px; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body[data-layout=mobile] .stage{ grid-template-columns:1fr; }
+  body[data-layout=mobile] .stage__panel{ flex-direction:row; align-items:center; justify-content:space-between; border-left:none; border-top:2px solid #0006; }
+  body[data-layout=mobile] .stage__xpbar{ flex:1; min-width:80px; }
+  @media (prefers-reduced-motion: reduce){ .stage__actor{ animation:none; } }
 
   /* macro verifier readout (Inference HUD) — the "does what we say" gate */
   .macrochk{ margin-top:var(--s3); padding:8px 11px; border-radius:var(--r-sm);
@@ -228,34 +339,108 @@
   .macrochk[data-state=ok]{ background:#e9f6ea; border-color:#7fbf86; color:#1f6b2c; }
   .macrochk[data-state=oos]{ background:#fff4e2; border-color:#e0a94a; color:#8a5a13; }
   .macrochk[data-state=bad]{ background:#fdecea; border-color:#e08a82; color:#9b2f25; }
+  .macrochk__plan{ margin:7px 0 0; padding:0 0 0 20px; font:600 11.5px Verdana,sans-serif; color:#27532f; }
+  .macrochk__plan li{ margin:2px 0; }
 
-  /* ── the Swiss army knife: trained skills as equippable slots ───────────── */
-  .knife{ display:flex; align-items:center; gap:var(--s3); padding:8px var(--s5);
-    border-top:2px solid var(--hi); background:linear-gradient(#efe6d2,#e4d8bf); }
-  .knife__brand{ font:800 12px Verdana,sans-serif; letter-spacing:.08em; color:#7a4a16;
-    text-shadow:0 1px 0 #fff7; white-space:nowrap; }
-  .knife__slots{ display:flex; gap:8px; overflow-x:auto; padding:2px; flex:1; }
-  .kslot{ flex:0 0 auto; min-width:118px; display:grid; grid-template-columns:auto 1fr; gap:0 7px;
-    align-items:center; padding:6px 9px; cursor:pointer; background:var(--panel);
-    border:2px solid; border-color:var(--bevel-hi); box-shadow:1px 1px 0 var(--lo); border-radius:var(--r-sm);
-    transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
-  .kslot:hover{ transform:translateY(-1px); box-shadow:2px 3px 0 var(--lo); border-color:#caa36e; }
-  .kslot:active{ transform:translateY(1px); box-shadow:0 0 0 var(--lo); }
-  .kslot.equipped{ border-color:var(--ember); box-shadow:0 0 0 2px #ff7a3c55; background:#fff6ee; }
-  .kslot__icon{ grid-row:1/3; font-size:18px; position:relative; }
-  .kslot__key{ position:absolute; top:-5px; left:-6px; min-width:13px; height:13px; padding:0 2px;
-    display:flex; align-items:center; justify-content:center; font:800 9px ui-monospace,monospace;
-    color:#fff; background:#7a4a16; border-radius:3px; box-shadow:0 1px 0 #0003; }
-  .kslot__name{ font:700 12px Verdana,sans-serif; color:#2a2620; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; max-width:130px; }
-  .kslot__lv{ font:10px ui-monospace,monospace; color:var(--text-dim); }
-  .kslot__xp{ grid-column:2; height:4px; margin-top:2px; background:#d8c8a8; border-radius:3px; overflow:hidden; }
-  .kslot__xp > i{ display:block; height:100%; background:linear-gradient(90deg,#ff9a3c,#e2641a); }
-  .kslot--locked{ border-style:dashed; border-color:#b9a374; background:#0000; box-shadow:none; color:var(--text-dim); }
-  .kslot--locked .kslot__name{ color:var(--text-dim); }
-  .knife__empty{ font:12px Verdana,sans-serif; color:var(--text-dim); }
-  body[data-layout=mobile] .knife{ padding:8px 12px; }
-  body[data-layout=mobile] .knife__brand{ display:none; }
+  /* equipped surface panel (Inference) — writes + one-tap drills */
+  .equip{ margin:0 0 var(--s3); padding:9px 11px; border:2px solid var(--bevel-hi);
+    background:linear-gradient(#fff7ec,#f6ecd8); box-shadow:1px 1px 0 var(--lo); border-radius:var(--r-sm); }
+  .equip__head{ display:flex; align-items:center; gap:9px; }
+  .equip__icon{ width:30px; height:30px; flex:0 0 auto; display:grid; place-items:center; border-radius:8px; font-size:16px;
+    background:linear-gradient(#ff8a52,#c0461a); color:#fff; box-shadow:inset 0 1px 0 #ffd9c4, 0 1px 2px #0005; }
+  .equip__icon.hasvg{ padding:0; }
+  .equip__id{ display:flex; flex-direction:column; line-height:1.2; }
+  .equip__id b{ font-size:13px; color:#5a3b18; }
+  .equip__scope{ font-size:10.5px; color:var(--text-dim); }
+  .equip__tag{ margin-left:auto; font:800 9px Verdana,sans-serif; letter-spacing:.5px; color:#3a1a06;
+    background:linear-gradient(#ffd24a,#f3a82a); padding:2px 7px; border-radius:8px; border:1px solid #fff8; }
+  .equip__row{ display:flex; align-items:flex-start; gap:8px; margin-top:8px; }
+  .equip__lbl{ flex:0 0 42px; font:800 10px Verdana,sans-serif; letter-spacing:.4px; color:var(--text-dim); padding-top:3px; text-transform:uppercase; }
+  .equip__ops, .equip__drills{ display:flex; flex-wrap:wrap; gap:5px; min-width:0; }
+  .equip__op{ font:600 10.5px ui-monospace,monospace; color:#6a4a1e; background:#fff; border:1px solid var(--line);
+    padding:1px 6px; border-radius:4px; }
+  .drill{ cursor:pointer; font:600 11px Verdana,sans-serif; color:#5a3b18; background:var(--panel);
+    border:1.5px solid var(--bevel-hi); box-shadow:1px 1px 0 var(--lo); border-radius:13px; padding:4px 10px; max-width:100%;
+    text-align:left; transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+  .drill:hover{ transform:translateY(-1px); border-color:var(--ember); box-shadow:0 0 0 2px #ff7a3c33, 1px 2px 0 var(--lo); }
+  .drill:active{ transform:translateY(0); }
+
+  /* ── the dock: a bottom-anchored armory of square service tiles ─────────── */
+  .dock{ position:sticky; bottom:0; z-index:20; display:flex; justify-content:center;
+    padding:10px var(--s5) 12px; border-top:2px solid var(--hi); background:linear-gradient(#efe6d2,#e4d8bf); }
+  .dock__tray{ display:flex; align-items:flex-end; gap:9px; padding:9px 13px; max-width:100%; overflow-x:auto; overflow-y:visible;
+    background:#ffffff55; border:1px solid var(--bevel-hi); border-radius:18px;
+    box-shadow:inset 0 1px 0 #fff9, 0 2px 4px #0000001a; }
+  .dock__sep{ flex:0 0 auto; align-self:stretch; width:1px; margin:6px 3px; background:#00000022; }
+  .dock__tile{ position:relative; flex:0 0 auto; width:52px; height:52px; cursor:pointer; outline:none;
+    transition:transform var(--dur) var(--ease); }
+  .dock__glyph{ width:52px; height:52px; display:flex; align-items:center; justify-content:center;
+    border-radius:14px; font:800 21px Verdana,sans-serif; color:#fff; letter-spacing:-.02em;
+    box-shadow:inset 0 1px 0 #ffffff55, inset 0 -2px 4px #0000002e, 0 1px 2px #0003; }
+  .dock__glyph--svg{ padding:0; }
+  .dock__tile:hover, .dock__tile:focus-visible{ transform:translateY(-9px) scale(1.1); z-index:2; }
+  .dock__tile:active{ transform:translateY(-3px) scale(1.04); }
+  /* state rings + badges */
+  .dock__tile::after{ content:""; position:absolute; inset:-3px; border-radius:17px; pointer-events:none; }
+  /* equipped = the "lead" slot: pinned leftmost, enlarged, shimmering gold (the live LoRA) */
+  .dock__tile[data-state=equipped]{ order:-1; width:64px; height:64px; margin-right:13px; }
+  .dock__tile[data-state=equipped] .dock__glyph{ width:64px; height:64px; border-radius:17px; }
+  .dock__tile[data-state=equipped]::after{ inset:-4px; border-radius:20px;
+    box-shadow:0 0 0 2px #ffd76a, 0 0 0 3px #b9831f, 0 0 18px 2px #ffcf5fcc; animation:equipGlow 1.9s ease-in-out infinite; }
+  .dock__tile[data-state=equipped]::before{ content:""; position:absolute; inset:-7px; border-radius:23px; pointer-events:none; z-index:-1;
+    background:conic-gradient(from 0deg,#ffe9a8,#d99a28,#fff3c4,#c9821e,#ffe9a8); filter:blur(6px); opacity:.6; animation:equipSpin 4.6s linear infinite; }
+  @keyframes equipGlow{ 0%,100%{ box-shadow:0 0 0 2px #ffd76a,0 0 0 3px #b9831f,0 0 14px 1px #ffcf5fb0; }
+    50%{ box-shadow:0 0 0 2px #fff0c0,0 0 0 3px #cf9626,0 0 24px 4px #ffd45ff0; } }
+  @keyframes equipSpin{ to{ transform:rotate(360deg); } }
+  /* one-shot equip flourish (pop) when a surface snaps into the lead slot */
+  .dock__tile--pop .dock__glyph{ animation:equipPop .42s var(--ease); }
+  @keyframes equipPop{ 0%{ transform:scale(.82); } 55%{ transform:scale(1.12); } 100%{ transform:scale(1); } }
+  .dock__tile[data-state=soon] .dock__glyph{ filter:grayscale(.9) opacity(.5); }
+  .dock__tile[data-state=soon]:hover .dock__glyph{ filter:grayscale(.35) opacity(.9); }
+  .dock__lv{ position:absolute; left:-4px; bottom:-5px; min-width:16px; height:15px; padding:0 3px; display:flex;
+    align-items:center; justify-content:center; font:800 9px ui-monospace,monospace; color:#fff; background:#7a4a16;
+    border:1.5px solid #fff; border-radius:5px; box-shadow:0 1px 2px #0004; }
+  .dock__key{ position:absolute; right:-4px; bottom:-5px; min-width:15px; height:15px; display:flex; align-items:center;
+    justify-content:center; font:800 9px ui-monospace,monospace; color:#7a4a16; background:#fff;
+    border:1px solid var(--bevel-hi); border-radius:5px; box-shadow:0 1px 2px #0003; }
+  .dock__forge{ position:absolute; right:-4px; top:-4px; width:17px; height:17px; display:flex; align-items:center;
+    justify-content:center; font:800 12px Verdana,sans-serif; color:#fff; background:#1f7a35; border:1.5px solid #fff;
+    border-radius:50%; box-shadow:0 1px 2px #0004; }
+  .dock__lock{ position:absolute; right:-4px; top:-4px; font-size:11px; opacity:.7; }
+  .dock__tip{ position:absolute; bottom:calc(100% + 9px); left:50%; transform:translateX(-50%) translateY(5px);
+    opacity:0; pointer-events:none; white-space:nowrap; font:700 11px Verdana,sans-serif; color:#fff;
+    background:#2a2620; padding:4px 9px; border-radius:7px; box-shadow:0 2px 6px #0005;
+    transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+  .dock__tip::after{ content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+    border:5px solid transparent; border-top-color:#2a2620; }
+  .dock__tile:hover .dock__tip, .dock__tile:focus-visible .dock__tip{ opacity:1; transform:translateX(-50%) translateY(0); }
+  @media (prefers-reduced-motion: reduce){ .dock__tile, .dock__tile:hover, .dock__tile:focus-visible{ transform:none; }
+    .dock__tile[data-state=equipped]::after, .dock__tile[data-state=equipped]::before, .dock__tile--pop .dock__glyph{ animation:none; } }
+  /* ── BotW radial quick-swap wheel ───────────────────────────────────────── */
+  .wheel{ position:fixed; inset:0; z-index:70; display:grid; place-items:center;
+    background:radial-gradient(circle at center, #0b0f1799 0%, #070b12e0 70%); animation:fade var(--dur) var(--ease); }
+  .wheel[hidden]{ display:none; }
+  .wheel__ring{ position:relative; width:1px; height:1px; }
+  .wheel__hub{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:96px; height:96px; border-radius:50%;
+    display:grid; place-items:center; text-align:center; padding:0 8px; font:800 12px Verdana,sans-serif; color:#ffe9b0;
+    background:radial-gradient(circle at 50% 38%, #2a2118, #14100b); border:2px solid #b9831f;
+    box-shadow:0 0 0 4px #00000055, 0 0 26px #ffcf5f55, inset 0 2px 6px #0008; pointer-events:none; }
+  .wheel__hint{ position:absolute; left:50%; bottom:-150px; transform:translateX(-50%); white-space:nowrap;
+    font:700 11px ui-monospace,monospace; letter-spacing:.4px; color:#cdeeea; opacity:.8; }
+  .wheel__node{ position:absolute; left:50%; top:50%; width:74px; height:90px; display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:none; border:none; cursor:pointer; transition:transform .14s var(--ease); will-change:transform; }
+  .wheel__nicon{ width:60px; height:60px; display:grid; place-items:center; border-radius:16px; font:800 22px Verdana,sans-serif; color:#fff;
+    box-shadow:inset 0 1px 0 #ffffff55, inset 0 -2px 5px #0000003a, 0 4px 12px #000a; transition:transform .14s var(--ease), box-shadow .14s var(--ease); }
+  .wheel__nicon.hasvg{ padding:0; }
+  .wheel__nname{ font:700 11px Verdana,sans-serif; color:#eafffb; text-shadow:0 1px 3px #000; max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wheel__nkey{ position:absolute; top:-6px; right:6px; min-width:16px; height:16px; padding:0 3px; display:grid; place-items:center;
+    font:800 9px ui-monospace,monospace; color:#7a4a16; background:#fff; border-radius:5px; box-shadow:0 1px 2px #0006; }
+  .wheel__node.on{ transform:translate(-50%,-50%) scale(1.18); z-index:2; }
+  .wheel__node.on .wheel__nicon{ box-shadow:0 0 0 3px #ffd76a, 0 0 22px 3px #ffcf5fcc, inset 0 1px 0 #ffffff66; }
+  .wheel__node:not(.on){ opacity:.82; }
+  @media (prefers-reduced-motion: reduce){ .wheel, .wheel__node{ animation:none; transition:none; } }
+  body[data-layout=mobile] .dock{ padding:8px; }
+  body[data-layout=mobile] .dock__tray{ width:100%; justify-content:flex-start; border-radius:14px; }
 
   /* ── panels & output ── */
   .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:var(--s4); }
@@ -389,15 +574,14 @@
      flipping — both are on screen, split across the hinge.)
      ============================================================ */
   body[data-layout=foldable] .desk{ max-width:none; }
-  body[data-layout=foldable] .tabs{ display:none; }            /* both panes show; tabs not needed */
+  body[data-layout=foldable] .apptitle{ display:none; }        /* its own header label below */
   body[data-layout=foldable] .tabbar{ justify-content:flex-end; }
-  body[data-layout=foldable] .tabbar::before{ content:"FOLDABLE · DUAL-PANE"; flex:1; align-self:center; padding-left:6px;
+  body[data-layout=foldable] .tabbar::before{ content:"FOLDABLE"; flex:1; align-self:center; padding-left:6px;
     font:700 11px ui-monospace,monospace; letter-spacing:1px; color:#7a7563; }
   body[data-layout=foldable] .layout{
     grid-template-columns:minmax(0,1fr) var(--hinge) minmax(0,1fr);
     grid-template-rows:auto auto; column-gap:0; }
-  body[data-layout=foldable] .history{ grid-column:1; grid-row:1; }
-  body[data-layout=foldable] #paneTrain{ grid-column:1; grid-row:2; display:block; padding-right:14px; }
+  body[data-layout=foldable] .history{ grid-column:1; grid-row:1/3; padding-right:14px; }
   body[data-layout=foldable] #paneInfer{ grid-column:3; grid-row:1/3; display:block; padding-left:14px; }
   body[data-layout=foldable] .seg-divider{ display:block; }
   /* the hinge gutter — a soft seam between the two panels */
@@ -419,10 +603,8 @@
 
   <div class="win">
     <div class="tabbar">
-      <div class="tabs">
-        <div class="tab on" id="tabInfer">▶ Inference</div>
-        <div class="tab" id="tabTrain">✦ Train (LoRA)</div>
-      </div>
+      <div class="apptitle">⚔ Account Atlas — train surfaces, equip chains, execute writes.</div>
+      <div class="iconbtn" id="mute" title="Toggle sounds" aria-label="Mute sounds">🔊</div>
       <div class="iconbtn" id="gear" title="Model source, workspace &amp; settings" aria-label="Settings">⚙</div>
     </div>
 
@@ -442,6 +624,8 @@
           </div>
           <label class="field"><span>Local model folder</span>
             <input id="modelFiles" type="file" webkitdirectory multiple></label>
+          <label class="field"><span>Surface icon style</span>
+            <select id="iconTheme"></select></label>
         </div>
 
         <div class="set-group" id="fsBlock" hidden>
@@ -455,23 +639,50 @@
       </div>
     </div>
 
+    <!-- the stage: a Sierra-style atlas scene — train account surfaces, equip & act -->
+    <div class="stage" id="stage" data-where="out">
+      <div class="stage__scene" id="stageScene">
+        <div class="stage__far"></div>
+        <div class="stage__floor"></div>
+        <div class="stage__actor" id="stageActor">🧍</div>
+        <div class="stage__sign">
+          <span class="stage__icon" id="stageSignIcon">🌐</span>
+          <span class="stage__place" id="stageSignName">The open web</span>
+        </div>
+      </div>
+      <aside class="stage__panel">
+        <div class="stage__score"><span class="stage__k">SURFACES</span><b id="stageScore">0 / 0</b></div>
+        <div class="stage__rank"><span class="stage__lv">LVL <b id="stageLv">1</b></span><span id="stageRank">Initiate</span></div>
+        <div class="stage__xpbar"><span id="stageXp" style="width:0%"></span></div>
+      </aside>
+      <div class="stage__msg" id="stageMsg">» Account Atlas — train an account surface, then equip it into a workflow chain.</div>
+    </div>
+
     <div class="winbody">
       <div class="layout">
 
         <!-- ───────────── HISTORY RAIL (left) ───────────── -->
         <aside class="history">
           <div class="history__head">
-            <h2>Inventory</h2>
+            <h2>Atlas</h2>
             <span class="history__count" id="historyCount">0</span>
+            <button id="learnBtn" class="ghost history__learn" title="Train an account surface">＋ Train</button>
           </div>
           <ul class="history__list" id="historyList"></ul>
-          <div class="history__empty" id="historyEmpty">Your inventory is empty. Forge a knife in the Train tab — each trained skill drops here as an item you can equip, export, or scrap, and survives reloads.</div>
+          <div class="history__empty" id="historyEmpty">
+            <p>No trained surfaces yet. Start with an account surface like Gmail, Pipedrive, or Gong; each local LoRA becomes a page you can equip into a workflow chain.</p>
+            <button id="learnCta" class="primary">🗺 Train first surface</button>
+          </div>
+          <div class="atlasnav" aria-label="Planned atlas screens">
+            <button id="jobBoardBtn" class="ghost atlasnav__btn" title="Review trained surfaces">Job Board</button>
+            <button id="worldMapBtn" class="ghost atlasnav__btn" title="Explore account progression">World Map</button>
+          </div>
         </aside>
 
         <!-- ───────────── INFERENCE PANE ───────────── -->
         <section class="pane active" id="paneInfer">
           <div class="lockwrap">
-            <div id="inferLock">⚙ Inference is paused while VibeThinker-3B is learning in the Train tab…</div>
+            <div id="inferLock">⚙ Paused while VibeThinker-3B trains an account surface…</div>
 
             <div class="rail" id="rail" data-state="idle">
               <div class="rail__top">
@@ -494,7 +705,7 @@
             </div>
 
             <div class="sec">
-              <div class="sec__title">Step 1 · Install the model</div>
+              <div class="sec__title">① Boot the engine</div>
               <div class="row">
                 <button id="loadHF" class="primary big">⤓ Load VibeThinker-3B</button>
                 <span class="muted">~6&nbsp;GB, one-time — streamed from Hugging Face &amp; cached in your browser. Other sources under&nbsp;⚙.</span>
@@ -502,8 +713,18 @@
             </div>
 
             <div class="sec" id="askSection" hidden>
-              <div class="sec__title">Step 2 · Ask it something</div>
-              <textarea id="prompt" rows="4" placeholder="Ask VibeThinker-3B anything… (⌘/Ctrl+Enter to run)">Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.</textarea>
+              <div class="sec__title">Action request — produce writes</div>
+              <!-- equipped surface panel: actions + one-tap drills -->
+              <div class="equip" id="equipBar" hidden>
+                <div class="equip__head">
+                  <span class="equip__icon" id="equipIcon">⚔</span>
+                  <div class="equip__id"><b id="equipName">—</b><span class="equip__scope" id="equipScope"></span></div>
+                  <span class="equip__tag">EQUIPPED SURFACE</span>
+                </div>
+                <div class="equip__row"><span class="equip__lbl">Writes</span><span class="equip__ops" id="equipOps"></span></div>
+                <div class="equip__row"><span class="equip__lbl">Drills</span><span class="equip__drills" id="equipDrills"></span></div>
+              </div>
+              <textarea id="prompt" rows="4" placeholder="Ask for a write over the equipped surface… (⌘/Ctrl+Enter to run)">Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.</textarea>
               <div class="row">
                 <button id="run" class="primary big" disabled>▶ Run</button>
                 <span class="clock" id="inferClock"><span class="sw">⏱</span><span class="t"></span></span>
@@ -523,23 +744,63 @@
           </div>
         </section>
 
-        <!-- ───────────── TRAIN PANE ───────────── -->
-        <section class="pane" id="paneTrain">
-          <p class="muted" style="margin:0 0 var(--s4)">Forge a <b>skill</b> for your knife — a LoRA trained <b>entirely in this tab</b> that compiles a plain request into a precise <b>macro</b> over a small, typed action space. This is constrained codegen (the model's strength), not chat. Pick a blade to forge:</p>
+      </div><!-- /.layout -->
+    </div><!-- /.winbody -->
+
+    <div class="dock" id="dockBar" aria-label="Account surface dock — trained services">
+      <div class="dock__tray" id="dockSlots"></div>
+    </div>
+
+    <!-- ───────────── TRAIN SURFACE — a menu you open, never a tab ───────────── -->
+    <div class="trainer" id="trainer" hidden>
+      <div class="trainer__win" role="dialog" aria-label="Train an account surface">
+        <div class="trainer__bar"><b>🗺 Train an account surface</b><button class="iconbtn" id="trainerClose" aria-label="Close">✕</button></div>
+        <div class="trainer__body">
+          <p class="muted" style="margin:0 0 var(--s4)">🗺 Pick an account or segmented app surface. Each one is a LoRA trained <b>entirely in this tab</b> that compiles a plain request into precise <b>writes</b> over a small, typed action space — constrained codegen (the model's strength), not chat.</p>
 
           <div class="skillpick" id="skillPicker"></div>
 
-          <div class="panel">
-            <b id="skillTitle">⚔ Inbox &amp; Calendar skill</b>
-            <p class="muted" id="skillDesc" style="margin:var(--s2) 0 var(--s3)"></p>
-            <ul id="guidedList"></ul>
+          <div class="panel surfaceplan">
+            <div class="surfaceplan__head">
+              <span class="surfaceplan__icon" id="surfacePlanIcon">✉</span>
+              <div class="surfaceplan__id">
+                <b id="skillTitle">⚔ Inbox &amp; Calendar surface</b>
+                <p class="muted" id="skillDesc"></p>
+              </div>
+            </div>
+            <div class="surfaceplan__chips" id="surfacePlanChips"></div>
+            <div class="surfaceplan__grid">
+              <section class="surfacebox">
+                <h3>Write contract</h3>
+                <div class="contractops" id="writeContract"></div>
+              </section>
+              <section class="surfacebox">
+                <h3>Training rules</h3>
+                <div class="rulelist" id="surfaceRules"></div>
+              </section>
+            </div>
           </div>
-          <div class="row" style="margin-top:var(--s4)"><button id="trainGuided" class="primary big" disabled>✦ Train this skill</button></div>
+
+          <div class="surfacepreview">
+            <section class="panel surfacepreview__main">
+              <div class="surfacepreview__head"><b>Training drills</b><span id="guidedSummary"></span></div>
+              <ul class="surfaceexamples" id="guidedList"></ul>
+            </section>
+            <section class="panel">
+              <div class="surfacepreview__head"><b>Held-out eval</b><span id="evalSummary"></span></div>
+              <ul class="surfaceexamples compact" id="evalList"></ul>
+            </section>
+            <section class="panel">
+              <div class="surfacepreview__head"><b>Refusal guards</b><span id="guardSummary"></span></div>
+              <ul class="surfaceexamples compact" id="guardList"></ul>
+            </section>
+          </div>
+          <div class="row" style="margin-top:var(--s4)"><button id="trainGuided" class="primary big" disabled>✦ Train this surface</button></div>
 
           <details class="cfg">
-            <summary>Forge a custom skill from your own text</summary>
+            <summary>Train a custom surface from your own text</summary>
             <div class="cfgbody">
-              <p class="muted" style="margin:0 0 var(--s3)">Paste the private text you would never send to a cloud model — notes, decision rules, your own action vocabulary — and the skill is trained locally. For strongest results, include explicit rules, examples, or acceptance criteria the model can reason over. Everything stays local to this browser session unless you export it.</p>
+              <p class="muted" style="margin:0 0 var(--s3)">Paste private account rules, notes, examples, decision rules, or action vocabulary. The surface is trained locally; everything stays local to this browser session unless you export it.</p>
               <div class="field-row" style="align-items:flex-end">
                 <label class="field" style="flex:1"><span>Fetch a web page</span>
                   <input id="ownUrl" type="text" placeholder="https://a-page-with-text…"></label>
@@ -552,7 +813,7 @@
               </div>
               <textarea id="ownText" rows="7" style="margin-top:var(--s3)" placeholder="Paste private notes here: DMs, journals, goals, names, project facts, draft docs, decisions, preferences, scoring rules, checklists. Guardrails: up to 12,000 chars / 24 snippets, capped steps — this is a fast local demo, not a full training run."></textarea>
               <div class="muted" id="ownStats" style="margin-top:var(--s2)"></div>
-              <div class="row" style="margin-top:var(--s4)"><button id="trainOwn" class="primary big" disabled>✦ Train on my data</button></div>
+              <div class="row" style="margin-top:var(--s4)"><button id="trainOwn" class="primary big" disabled>✦ Train custom surface</button></div>
             </div>
           </details>
 
@@ -585,19 +846,21 @@
           </div>
 
           <div id="tryIt" class="done-banner">
-            <span>✅ <b>Done.</b> The tuned adapter is live and saved to your fine-tunes. Open it in Inference.</span>
-            <button id="tryItBtn" class="primary">▶ Try it in Inference</button>
+            <span>✅ <b>Done.</b> Surface trained — it was added to your Atlas and is live.</span>
+            <button id="tryItBtn" class="primary">▶ Equip &amp; act</button>
             <button id="downloadAdapter" class="secondary" style="display:none">⬇ Download adapter (.safetensors)</button>
           </div>
-        </section>
+        </div><!-- /.trainer__body -->
+      </div><!-- /.trainer__win -->
+    </div><!-- /.trainer -->
 
-      </div>
+    <!-- ───────────── radial quick-swap wheel (BotW-style) ───────────── -->
+    <div class="wheel" id="wheel" hidden aria-hidden="true" role="dialog" aria-label="Quick-swap surface wheel">
+      <div class="wheel__ring" id="wheelRing"></div>
+      <div class="wheel__hub" id="wheelHub">SWAP</div>
+      <div class="wheel__hint">point / ◀ ▶ / 1–9 · Enter equips · Esc cancels</div>
     </div>
-    <div class="knife" id="knifeBar" aria-label="Your Swiss army knife — trained skills">
-      <span class="knife__brand">⚔&nbsp;KNIFE</span>
-      <div class="knife__slots" id="knifeSlots"></div>
-    </div>
-  </div>
+  </div><!-- /.win -->
 
   <div class="muted" style="color:#bfe; text-align:center">
     Built the hard way, on purpose. 🜂 · <a href="https://github.com/maceip/vibethinker-webgpu-lora" style="color:#cff">source</a>

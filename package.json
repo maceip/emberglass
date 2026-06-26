@@ -18,6 +18,7 @@
     "build": "node esbuild.config.mjs",
     "build:prod": "node esbuild.config.mjs --minify --metafile",
     "build:analyze": "node esbuild.config.mjs --minify --metafile --analyze",
+    "typecheck": "npx --yes --package typescript@5 tsc -p tsconfig.json",
     "kernels:generate": "node scripts/generate_kernel_modules.mjs",
     "kernels:check": "node scripts/generate_kernel_modules.mjs --check",
     "serve": "npx http-server . -p 8013 -c-1 --cors",
@@ -33,6 +34,7 @@
     "test:deep-kernels": "node esbuild.config.mjs --entry test/deep_kernel_diff.js --outfile test/deepkernels_bundle.js && node test/run_deepkernels.mjs",
     "test:backward-cpu": "node test/backward_cpu_check.mjs",
     "test:prompt": "node test/prompt_mask_check.mjs",
+    "test:icons": "node test/icon_pipeline_check.mjs",
     "test:backward": "node esbuild.config.mjs --entry test/backward_validate.js --outfile test/backward_bundle.js && node test/run_backward_validate.mjs"
   }
 }

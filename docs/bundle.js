@@ -6665,6 +6665,1335 @@ async function writeFileToDir(handle, name, data) {
 }
 __name(writeFileToDir, "writeFileToDir");
 
+// src/skills/inbox-calendar/port.ts
+var DOMAIN = "an Inbox & Calendar operator";
+var SCOPE = "inbox or calendar";
+var CONTEXT = "Assume today is Monday 2026-06-29, local time. Express every date and time as ISO 8601 (YYYY-MM-DDTHH:MM) and always set end = start + the requested duration.";
+var OPS = [
+  { name: "find_email", params: ["query"], ret: "thread" },
+  { name: "compose_email", params: ["to", "subject", "body"] },
+  { name: "reply_email", params: ["thread", "body"] },
+  { name: "forward_email", params: ["thread", "to", "note"] },
+  { name: "archive_email", params: ["thread"] },
+  { name: "label_email", params: ["thread", "label"] },
+  { name: "schedule_send", params: ["to", "subject", "body", "when"] },
+  { name: "create_event", params: ["title", "start", "end", "remind_min"] },
+  { name: "set_reminder", params: ["text", "when"] },
+  { name: "find_slot", params: ["duration_min", "after", "before"], ret: "slot" },
+  { name: "rsvp", params: ["event", "response"] }
+];
+var META = {
+  key: "inbox-calendar",
+  label: "Inbox & Calendar",
+  icon: "\u2709",
+  desc: "Compiles requests like \u201Cemail my mom and book a reminder to respond\u201D into a verifiable macro over a fixed set of inbox/calendar actions; bounces anything else.",
+  suggest: "Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning."
+};
+
+// src/skills/inbox-calendar/contract.ts
+var ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+var lines = /* @__PURE__ */ __name((m) => String(m).split("\n"), "lines");
+var CALENDAR_CONTRACT = {
+  assertions: [
+    {
+      id: "iso-times",
+      describe: "start/end/when/after/before literals are ISO 8601 (YYYY-MM-DDTHH:MM)",
+      holds: /* @__PURE__ */ __name((m) => lines(m).every(
+        (ln) => [...ln.matchAll(/(?:start|end|when|after|before)="([^"]+)"/g)].every((x) => ISO_RE.test(x[1]))
+      ), "holds")
+    }
+  ],
+  forbidden: [
+    {
+      id: "zero-duration-event",
+      describe: "create_event must not have start == end",
+      violatedBy: /* @__PURE__ */ __name((m) => lines(m).some((ln) => {
+        const c = ln.match(/create_event\(.*start="([^"]+)".*end="([^"]+)"/);
+        return !!c && c[1] === c[2];
+      }), "violatedBy")
+    },
+    {
+      id: "unordered-slot-window",
+      describe: "find_slot must have after < before",
+      violatedBy: /* @__PURE__ */ __name((m) => lines(m).some((ln) => {
+        const f = ln.match(/find_slot\(.*after="([^"]+)".*before="([^"]+)"/);
+        return !!f && !(f[1] < f[2]);
+      }), "violatedBy")
+    }
+  ]
+};
+
+// src/skills/inbox-calendar/providers/google.ts
+var GOOGLE_PROFILE = {
+  provider: "google",
+  label: "Google (Gmail + Calendar)",
+  discovery: {
+    source: [
+      "https://gmail.googleapis.com/$discovery/rest?version=v1",
+      "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"
+    ],
+    revision: "2026-06-26-curated",
+    note: "Curated subset. Times normalized to YYYY-MM-DDTHH:MM for the macro; Google uses RFC3339 (start.dateTime + timeZone). schedule_send/set_reminder have no clean public method \u2014 see opMap notes."
+  },
+  conventions: {
+    timeFormat: "RFC3339",
+    // events use start.dateTime/end.dateTime + timeZone; macro emits YYYY-MM-DDTHH:MM
+    searchSyntax: "gmail-q"
+    // from:, subject:, label:, after:, before:, has:
+  },
+  // canonical PORT op -> Google Discovery method id (write-layer target; not emitted in macros)
+  opMap: {
+    find_email: "gmail.users.messages.list",
+    // q= search operators
+    compose_email: "gmail.users.messages.send",
+    reply_email: "gmail.users.messages.send",
+    // threadId + In-Reply-To header
+    forward_email: "gmail.users.messages.send",
+    archive_email: "gmail.users.messages.modify",
+    // removeLabelIds: [INBOX]
+    label_email: "gmail.users.messages.modify",
+    // addLabelIds: [<labelId>]
+    schedule_send: "gmail.users.drafts.create",
+    // no public scheduled-send method; client schedules the send
+    create_event: "calendar.events.insert",
+    set_reminder: "calendar.events.insert",
+    // popup reminder override; Reminders API is not public
+    find_slot: "calendar.freebusy.query",
+    rsvp: "calendar.events.patch"
+    // attendees[].responseStatus
+  },
+  pools: {
+    people: ["mom", "Sarah", "Alex", "the design team", "my manager", "Priya", "John", "the landlord", "accounting", "Dana", "Marcus", "the recruiter"],
+    topics: ["the Q3 roadmap", "the launch", "the budget", "onboarding", "the API redesign", "the offsite", "the bug report", "the contract", "the renewal", "the demo"],
+    // each "when" carries the natural phrasing (for the request) + its ISO start (for the macro)
+    whens: [
+      { nat: "today at 5pm", iso: "2026-06-29T17:00" },
+      { nat: "tomorrow at 9am", iso: "2026-06-30T09:00" },
+      { nat: "Wednesday at 2pm", iso: "2026-07-01T14:00" },
+      { nat: "Thursday at 4:30pm", iso: "2026-07-02T16:30" },
+      { nat: "Friday at 11am", iso: "2026-07-03T11:00" },
+      { nat: "next Monday at 10am", iso: "2026-07-06T10:00" },
+      { nat: "tonight at 7pm", iso: "2026-06-29T19:00" }
+    ],
+    // search windows for find_slot — after STRICTLY before before
+    windows: [
+      { nat: "tomorrow afternoon", after: "2026-06-30T13:00", before: "2026-06-30T18:00" },
+      { nat: "Wednesday morning", after: "2026-07-01T09:00", before: "2026-07-01T12:00" },
+      { nat: "Friday afternoon", after: "2026-07-03T13:00", before: "2026-07-03T17:00" },
+      { nat: "sometime Thursday", after: "2026-07-02T09:00", before: "2026-07-02T18:00" }
+    ],
+    labels: ["housing", "urgent", "finance", "travel", "follow-up", "receipts"],
+    durations: [30, 45, 60],
+    rsvps: [
+      { resp: "yes", verb: "rsvp yes to" },
+      { resp: "no", verb: "decline" },
+      { resp: "maybe", verb: "tentatively accept" }
+    ]
+  }
+};
+
+// src/skills/inbox-calendar/intents.ts
+var INTENTS = [
+  {
+    n: 8,
+    draw: ["person", "topic"],
+    phrasings: [
+      "email ${person} about ${topic}",
+      "ping ${person} about ${topic}",
+      "shoot ${person} a quick note on ${topic}",
+      "draft a message to ${person} re ${topic}"
+    ],
+    macro: 'compose_email(to="${person}", subject="${topic}", body="Quick note about ${topic} \u2014 let me know your thoughts.")'
+  },
+  {
+    n: 7,
+    draw: ["person", "topic"],
+    phrasings: [
+      "find the email from ${person} about ${topic}",
+      "pull up ${person}'s message on ${topic}",
+      "search my inbox for ${topic} from ${person}"
+    ],
+    macro: 'find_email(query="from:${person} ${topic}")'
+  },
+  {
+    n: 7,
+    draw: ["person", "topic", "when"],
+    phrasings: [
+      "reply to ${person}'s email about ${topic} that I'll review it by ${when.nat}",
+      "tell ${person} in the ${topic} thread I'll get back by ${when.nat}"
+    ],
+    macro: 't = find_email(query="from:${person} ${topic}")\nreply_email(thread=t, body="Thanks \u2014 I\'ll review this by ${when.iso}.")'
+  },
+  {
+    n: 6,
+    draw: ["person", "topic"],
+    phrasings: [
+      "forward the ${topic} email to ${person}",
+      "send ${person} the ${topic} thread for their records"
+    ],
+    macro: 't = find_email(query="${topic}")\nforward_email(thread=t, to="${person}", note="FYI \u2014 for your records.")'
+  },
+  {
+    n: 6,
+    draw: ["topic"],
+    phrasings: [
+      "archive the emails about ${topic}",
+      "clear out the ${topic} threads",
+      "archive everything about ${topic}"
+    ],
+    macro: 't = find_email(query="${topic}")\narchive_email(thread=t)'
+  },
+  {
+    n: 6,
+    draw: ["person", "label"],
+    phrasings: [
+      "label ${person}'s email as ${label}",
+      "tag the message from ${person} ${label}",
+      "mark ${person}'s thread ${label}"
+    ],
+    macro: 't = find_email(query="from:${person}")\nlabel_email(thread=t, label="${label}")'
+  },
+  {
+    n: 6,
+    draw: ["person", "topic", "when"],
+    phrasings: [
+      "schedule a thank-you to ${person} for ${topic}, send it ${when.nat}",
+      "queue a note to ${person} about ${topic} to go out ${when.nat}"
+    ],
+    macro: 'schedule_send(to="${person}", subject="Thank you", body="Thanks for ${topic}.", when="${when.iso}")'
+  },
+  {
+    n: 9,
+    draw: ["person", "topic", "when", "dur"],
+    phrasings: [
+      "set up a ${dur}-minute meeting about ${topic} with ${person} ${when.nat}",
+      "book ${dur} minutes with ${person} on ${topic} ${when.nat}",
+      "put a ${dur}-min ${topic} sync with ${person} on my calendar ${when.nat}"
+    ],
+    macro: 'create_event(title="${topic} with ${person}", start="${when.iso}", end="${end}", remind_min=10)'
+  },
+  {
+    n: 6,
+    draw: ["topic", "when"],
+    phrasings: [
+      "remind me to follow up on ${topic} ${when.nat}",
+      "set a reminder about ${topic} for ${when.nat}"
+    ],
+    macro: 'set_reminder(text="Follow up on ${topic}", when="${when.iso}")'
+  },
+  {
+    n: 8,
+    draw: ["topic", "window", "dur"],
+    phrasings: [
+      "find a ${dur}-minute slot ${window.nat} and book ${topic}",
+      "grab ${dur} minutes ${window.nat} for ${topic}"
+    ],
+    macro: 's = find_slot(duration_min=${dur}, after="${window.after}", before="${window.before}")\ncreate_event(title="${topic}", start=s.start, end=s.end, remind_min=10)'
+  },
+  {
+    n: 7,
+    draw: ["topic", "rsvp"],
+    phrasings: [
+      "${rsvp.verb} the ${topic} invite",
+      "respond ${rsvp.resp} to the ${topic} meeting invite"
+    ],
+    macro: 't = find_email(query="${topic} invite")\nrsvp(event=t, response="${rsvp.resp}")'
+  }
+];
+var OOS = [
+  "order me a pizza",
+  "what is the capital of France?",
+  "play some jazz",
+  "book me a flight to Tokyo",
+  "summarize my entire inbox",
+  "translate this email to French",
+  "unsubscribe me from all newsletters",
+  "what's the weather tomorrow?"
+].map((q) => [q, "OUT_OF_SCOPE"]);
+
+// src/skills/inbox-calendar/generate.ts
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+__name(hashStr, "hashStr");
+function mulberry32(a) {
+  return function() {
+    a |= 0;
+    a = a + 1831565813 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+__name(mulberry32, "mulberry32");
+function isoAdd(iso, mins) {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  const t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) + mins * 6e4);
+  const p = /* @__PURE__ */ __name((n) => String(n).padStart(2, "0"), "p");
+  return `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())}T${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
+}
+__name(isoAdd, "isoAdd");
+function fill(tpl, ctx) {
+  return tpl.replace(/\$\{([^}]+)\}/g, (_, k) => k in ctx ? ctx[k] : `\${${k}}`);
+}
+__name(fill, "fill");
+function poolFor(slot, profile) {
+  const p = profile.pools;
+  switch (slot) {
+    case "person":
+      return p.people;
+    case "topic":
+      return p.topics;
+    case "when":
+      return p.whens;
+    case "window":
+      return p.windows;
+    case "label":
+      return p.labels;
+    case "dur":
+      return p.durations;
+    case "rsvp":
+      return p.rsvps;
+  }
+}
+__name(poolFor, "poolFor");
+function generateCorpus(seed, profile, intents, oos) {
+  const rng = mulberry32(hashStr(seed));
+  const pick = /* @__PURE__ */ __name((a) => a[Math.floor(rng() * a.length)], "pick");
+  const makeOne = /* @__PURE__ */ __name((intent) => {
+    const raw = {};
+    for (const slot of intent.draw) raw[slot] = pick(poolFor(slot, profile));
+    const ctx = {};
+    if ("person" in raw) ctx.person = raw.person;
+    if ("topic" in raw) ctx.topic = raw.topic;
+    if ("label" in raw) ctx.label = raw.label;
+    if ("dur" in raw) ctx.dur = String(raw.dur);
+    if ("when" in raw) {
+      ctx["when.nat"] = raw.when.nat;
+      ctx["when.iso"] = raw.when.iso;
+    }
+    if ("window" in raw) {
+      ctx["window.nat"] = raw.window.nat;
+      ctx["window.after"] = raw.window.after;
+      ctx["window.before"] = raw.window.before;
+    }
+    if ("rsvp" in raw) {
+      ctx["rsvp.resp"] = raw.rsvp.resp;
+      ctx["rsvp.verb"] = raw.rsvp.verb;
+    }
+    if ("when" in raw && "dur" in raw) ctx.end = isoAdd(raw.when.iso, raw.dur);
+    const request = fill(pick(intent.phrasings), ctx);
+    return [request, fill(intent.macro, ctx)];
+  }, "makeOne");
+  const seen = /* @__PURE__ */ new Set();
+  const all = [];
+  for (const intent of intents) {
+    let made = 0, tries = 0;
+    while (made < intent.n && tries < intent.n * 16) {
+      tries++;
+      const pair = makeOne(intent);
+      if (seen.has(pair[0])) continue;
+      seen.add(pair[0]);
+      all.push(pair);
+      made++;
+    }
+  }
+  const examples = [], evals = [];
+  all.forEach((p, i) => (i % 5 === 4 ? evals : examples).push(p));
+  oos.forEach((q, i) => (i % 4 === 3 ? evals : examples).push(q));
+  return { examples, eval: evals };
+}
+__name(generateCorpus, "generateCorpus");
+
+// src/skills/inbox-calendar/adapters/google.ts
+var SEED = "inbox-calendar:v2-iso";
+function genCalendar() {
+  return generateCorpus(SEED, GOOGLE_PROFILE, INTENTS, OOS);
+}
+__name(genCalendar, "genCalendar");
+
+// src/skills/inbox-calendar/index.ts
+var calendarDef = {
+  key: META.key,
+  label: META.label,
+  icon: META.icon,
+  domain: DOMAIN,
+  scope: SCOPE,
+  desc: META.desc,
+  suggest: META.suggest,
+  ops: OPS,
+  context: CONTEXT,
+  examplesFn: genCalendar,
+  contract: CALENDAR_CONTRACT
+};
+
+// src/skills.js
+function specSig(spec) {
+  return spec.ops.map((o) => `${o.name}(${(o.params || []).join(", ")})${o.ret ? " -> " + o.ret : ""}`).join("; ");
+}
+__name(specSig, "specSig");
+function skillSystem(domain, spec, context) {
+  return `You are ${domain}. Convert the request into a macro using ONLY these operations:
+` + specSig(spec) + ".\n" + (context ? context + "\n" : "") + `Output ONLY the macro, one call per line, no prose. If the request is outside ${spec.scope}, output exactly: OUT_OF_SCOPE.`;
+}
+__name(skillSystem, "skillSystem");
+function parseMacroCalls(text) {
+  const out = [];
+  for (const raw of String(text).split("\n")) {
+    const line = raw.trim();
+    if (!line || line === "OUT_OF_SCOPE") continue;
+    const m = line.match(/^(?:[A-Za-z_]\w*\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
+    if (!m) continue;
+    const keys = [...m[2].matchAll(/(?:^|,)\s*([A-Za-z_]\w*)\s*=/g)].map((k) => k[1]);
+    out.push({ op: m[1], keys });
+  }
+  return out;
+}
+__name(parseMacroCalls, "parseMacroCalls");
+function verifyMacro(text, spec) {
+  const t = String(text);
+  const calls = parseMacroCalls(t);
+  const bounced = /(^|\n)\s*OUT_OF_SCOPE\s*($|\n)/.test(t) && calls.length === 0;
+  if (bounced) return { status: "oos", calls: [], issues: [], n: 0 };
+  if (!calls.length) return { status: "empty", calls: [], issues: [], n: 0 };
+  const byName = new Map(spec.ops.map((o) => [o.name, o]));
+  const issues = [];
+  const detail = [];
+  for (const c of calls) {
+    const op = byName.get(c.op);
+    if (!op) {
+      issues.push(`unknown op: ${c.op}`);
+      detail.push({ op: c.op, ok: false });
+      continue;
+    }
+    const allowed = new Set(op.params || []);
+    const bad = c.keys.filter((k) => !allowed.has(k));
+    if (bad.length) {
+      issues.push(`${c.op}: unexpected arg ${bad.join(", ")}`);
+      detail.push({ op: c.op, ok: false });
+    } else detail.push({ op: c.op, ok: true });
+  }
+  return { status: issues.length ? "bad" : "ok", calls: detail, issues, n: calls.length };
+}
+__name(verifyMacro, "verifyMacro");
+var BASE_ASSERTIONS = [{
+  id: "spec-valid",
+  describe: "every call uses a spec op with only that op\u2019s params, or the macro is a clean OUT_OF_SCOPE bounce",
+  holds: /* @__PURE__ */ __name((m, spec) => {
+    const r = verifyMacro(m, spec);
+    return r.status === "ok" || r.status === "oos";
+  }, "holds")
+}];
+function buildContract(def) {
+  const extra = def.contract || {};
+  return {
+    block: def.key,
+    assertions: [...BASE_ASSERTIONS, ...extra.assertions || []],
+    forbidden: [...extra.forbidden || []]
+  };
+}
+__name(buildContract, "buildContract");
+function hashStr2(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+__name(hashStr2, "hashStr");
+function mulberry322(a) {
+  return function() {
+    a |= 0;
+    a = a + 1831565813 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+__name(mulberry322, "mulberry32");
+function fill2(tpl, choice) {
+  return tpl.replace(/\{(\w+)\}/g, (_, k) => k in choice ? choice[k] : "{" + k + "}");
+}
+__name(fill2, "fill");
+function expand(def, perTemplate) {
+  const rnd = mulberry322(hashStr2(def.key));
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const t of def.templates || []) {
+    const slots = [...new Set([...t.req.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))];
+    let made = 0, tries = 0;
+    const cap = perTemplate * 8;
+    while (made < perTemplate && tries < cap) {
+      tries++;
+      const choice = {};
+      for (const s of slots) {
+        const arr = def.vocab[s] || ["x"];
+        choice[s] = arr[Math.floor(rnd() * arr.length)];
+      }
+      const req = fill2(t.req, choice);
+      if (seen.has(req)) continue;
+      seen.add(req);
+      out.push([req, fill2(t.macro, choice)]);
+      made++;
+    }
+  }
+  return out;
+}
+__name(expand, "expand");
+function buildSkill(def, perTemplate = 6) {
+  const spec = { scope: def.scope, ops: def.ops };
+  let examples, evals = [];
+  if (typeof def.examplesFn === "function") {
+    const g = def.examplesFn();
+    examples = g.examples;
+    evals = g.eval || [];
+  } else {
+    examples = [
+      ...def.fixed || [],
+      ...expand(def, perTemplate),
+      ...(def.oos || []).map((r) => [r, "OUT_OF_SCOPE"])
+    ];
+  }
+  return {
+    key: def.key,
+    label: def.label,
+    icon: def.icon,
+    desc: def.desc,
+    domain: def.domain,
+    spec,
+    context: def.context || "",
+    system: skillSystem(def.domain, spec, def.context),
+    suggest: def.suggest,
+    examples,
+    eval: evals,
+    contract: buildContract(def)
+  };
+}
+__name(buildSkill, "buildSkill");
+var WHENS = ["today 17:00", "tomorrow 09:00", "Friday 14:00", "next Monday 10:00", "Thursday 16:30", "tonight 19:00"];
+var DEFS = [
+  calendarDef,
+  // flagship block: src/skills/inbox-calendar/{port,contract,adapters/google,manifest}.ts
+  {
+    key: "music",
+    label: "Music",
+    icon: "\u266A",
+    domain: "a music player operator",
+    scope: "music playback",
+    desc: "Turns \u201Cplay some lo-fi and turn it down\u201D into a macro over a music action space \u2014 find/play/queue/volume/playlist \u2014 and bounces non-music asks.",
+    suggest: "Play something upbeat for cooking and add it to a new playlist called Dinner.",
+    ops: [
+      { name: "find_track", params: ["query"], ret: "track" },
+      { name: "play_track", params: ["track"] },
+      { name: "queue_track", params: ["track"] },
+      { name: "pause", params: [] },
+      { name: "skip", params: [] },
+      { name: "previous", params: [] },
+      { name: "set_volume", params: ["level"] },
+      { name: "create_playlist", params: ["name"] },
+      { name: "add_to_playlist", params: ["playlist", "track"] },
+      { name: "shuffle", params: ["on"] },
+      { name: "repeat", params: ["mode"] }
+    ],
+    fixed: [
+      ["skip this song", "skip()"],
+      ["pause the music", "pause()"],
+      ["go back to the previous song", "previous()"]
+    ],
+    templates: [
+      { req: "play some {genre}", macro: 't = find_track(query="{genre}")\nplay_track(track=t)' },
+      { req: "queue up {artist} after this", macro: 't = find_track(query="{artist}")\nqueue_track(track=t)' },
+      { req: "set the volume to {vol}", macro: "set_volume(level={vol})" },
+      { req: "make a playlist called {name}", macro: 'create_playlist(name="{name}")' },
+      { req: "add {artist} to my {name} playlist", macro: 't = find_track(query="{artist}")\nadd_to_playlist(playlist="{name}", track=t)' },
+      { req: "shuffle my {name} playlist", macro: 'shuffle(on=true)\nt = find_track(query="playlist:{name}")\nplay_track(track=t)' },
+      { req: "put on {artist} and turn it up", macro: 't = find_track(query="{artist}")\nplay_track(track=t)\nset_volume(level=80)' },
+      { req: "repeat this {mode}", macro: 'repeat(mode="{mode}")' }
+    ],
+    vocab: {
+      genre: ["lo-fi beats", "deep house", "classic jazz", "pop hits", "ambient", "classical", "90s hip hop", "indie rock"],
+      artist: ["Taylor Swift", "The Beatles", "Daft Punk", "Miles Davis", "Radiohead", "Bad Bunny", "Fleetwood Mac"],
+      name: ["Focus", "Workout", "Dinner", "Chill", "Road Trip", "Sleep"],
+      vol: ["10", "25", "40", "60", "75", "90"],
+      mode: ["one", "all"]
+    },
+    oos: ["email my boss", "what is the weather today?", "open an issue on the repo"]
+  },
+  {
+    key: "github",
+    label: "GitHub",
+    icon: "\u{1F419}",
+    domain: "a GitHub operator",
+    scope: "GitHub repositories, issues, and pull requests",
+    desc: "Compiles dev requests into a macro over issues, pull requests, and repos; bounces anything that isn\u2019t GitHub.",
+    suggest: 'Open an issue on the api repo titled "fix login redirect", then assign it to Dana.',
+    ops: [
+      { name: "find_issue", params: ["query"], ret: "issue" },
+      { name: "create_issue", params: ["repo", "title", "body"] },
+      { name: "comment_issue", params: ["issue", "body"] },
+      { name: "close_issue", params: ["issue"] },
+      { name: "assign_issue", params: ["issue", "assignee"] },
+      { name: "label_issue", params: ["issue", "label"] },
+      { name: "find_pr", params: ["query"], ret: "pr" },
+      { name: "open_pr", params: ["repo", "title", "branch"] },
+      { name: "review_pr", params: ["pr", "verdict"] },
+      { name: "merge_pr", params: ["pr"] },
+      { name: "create_repo", params: ["name", "visibility"] },
+      { name: "star_repo", params: ["repo"] }
+    ],
+    fixed: [
+      [
+        "open an issue on the api repo titled fix login redirect and assign it to Dana",
+        'i = create_issue(repo="api", title="fix login redirect", body="The login flow redirects to the wrong page.")\nassign_issue(issue=i, assignee="Dana")'
+      ]
+    ],
+    templates: [
+      { req: "open an issue on {repo} titled {title}", macro: 'create_issue(repo="{repo}", title="{title}", body="{title}.")' },
+      { req: "close the {topic} issue", macro: 'i = find_issue(query="{topic}")\nclose_issue(issue=i)' },
+      { req: "comment {comment} on the {topic} issue", macro: 'i = find_issue(query="{topic}")\ncomment_issue(issue=i, body="{comment}")' },
+      { req: "assign the {topic} issue to {user}", macro: 'i = find_issue(query="{topic}")\nassign_issue(issue=i, assignee="{user}")' },
+      { req: "label the {topic} issue as {label}", macro: 'i = find_issue(query="{topic}")\nlabel_issue(issue=i, label="{label}")' },
+      { req: "open a pull request on {repo} from {branch} titled {title}", macro: 'open_pr(repo="{repo}", title="{title}", branch="{branch}")' },
+      { req: "approve the {topic} pull request", macro: 'p = find_pr(query="{topic}")\nreview_pr(pr=p, verdict="approve")' },
+      { req: "merge the {topic} PR", macro: 'p = find_pr(query="{topic}")\nmerge_pr(pr=p)' },
+      { req: "create a private repo called {repo}", macro: 'create_repo(name="{repo}", visibility="private")' },
+      { req: "star the {repo} repo", macro: 'star_repo(repo="{repo}")' }
+    ],
+    vocab: {
+      repo: ["api", "frontend", "docs", "infra", "mobile-app", "design-system"],
+      title: ["fix login redirect", "add dark mode", "update README", "flaky test fix", "bump dependencies", "improve error logs"],
+      topic: ["login", "dark mode", "flaky test", "memory leak", "rate limiting", "docs typo"],
+      comment: ["looks good to me", "can you add a test?", "I will pick this up", "reproduced on main", "duplicate of #42"],
+      user: ["Dana", "Alex", "Priya", "the on-call", "Sam"],
+      label: ["bug", "enhancement", "good first issue", "p1", "docs", "wontfix"],
+      branch: ["feature/auth", "fix/cache", "chore/deps", "feat/ui", "hotfix/crash"]
+    },
+    oos: ["play some music", "email my mom", "what is 2 + 2?"]
+  },
+  {
+    key: "slack",
+    label: "Slack",
+    icon: "\u{1F4AC}",
+    domain: "a Slack operator",
+    scope: "Slack messaging",
+    desc: "Compiles team-chat requests into a macro over channels, DMs, threads, and reminders; bounces non-Slack asks.",
+    suggest: "Post the release notes in #launch and DM Dana to review them.",
+    ops: [
+      { name: "find_message", params: ["query"], ret: "message" },
+      { name: "send_message", params: ["channel", "text"] },
+      { name: "dm", params: ["user", "text"] },
+      { name: "reply_thread", params: ["message", "text"] },
+      { name: "react", params: ["message", "emoji"] },
+      { name: "set_status", params: ["text", "emoji"] },
+      { name: "create_channel", params: ["name"] },
+      { name: "invite", params: ["user", "channel"] },
+      { name: "remind", params: ["text", "when"] },
+      { name: "pin", params: ["message"] }
+    ],
+    fixed: [
+      [
+        "post the release notes in #launch and dm Dana to review them",
+        'send_message(channel="launch", text="Release notes are up \u2014 please review.")\ndm(user="Dana", text="Can you review the release notes I posted in #launch?")'
+      ]
+    ],
+    templates: [
+      { req: "post {text} in #{channel}", macro: 'send_message(channel="{channel}", text="{text}")' },
+      { req: "dm {user} {text}", macro: 'dm(user="{user}", text="{text}")' },
+      { req: "reply {text} to the {topic} thread", macro: 'm = find_message(query="{topic}")\nreply_thread(message=m, text="{text}")' },
+      { req: "react {emoji} to the {topic} message", macro: 'm = find_message(query="{topic}")\nreact(message=m, emoji="{emoji}")' },
+      { req: "set my status to {text}", macro: 'set_status(text="{text}", emoji="{emoji}")' },
+      { req: "create a channel called {channel}", macro: 'create_channel(name="{channel}")' },
+      { req: "invite {user} to #{channel}", macro: 'invite(user="{user}", channel="{channel}")' },
+      { req: "remind the team to {task} {when}", macro: 'remind(text="{task}", when="{when}")' },
+      { req: "pin the {topic} message", macro: 'm = find_message(query="{topic}")\npin(message=m)' }
+    ],
+    vocab: {
+      channel: ["launch", "general", "engineering", "design", "random", "incidents"],
+      user: ["Dana", "Alex", "Priya", "Sam", "the team lead"],
+      text: ["standup in 5", "PR is ready for review", "deploy is green", "lunch at noon?", "great work today"],
+      topic: ["deploy", "incident", "roadmap", "lunch", "release"],
+      emoji: [":eyes:", ":white_check_mark:", ":tada:", ":fire:", ":+1:"],
+      task: ["submit timesheets", "join the retro", "review the doc", "update the board"],
+      when: WHENS
+    },
+    oos: ["play a song", "order groceries", "what time is it in Tokyo?"]
+  },
+  {
+    key: "notion",
+    label: "Notion",
+    icon: "\u{1F4DD}",
+    domain: "a Notion operator",
+    scope: "Notion pages, notes, and tasks",
+    desc: "Compiles note-taking requests into a macro over pages, blocks, tasks, and databases; bounces anything else.",
+    suggest: 'Create a page titled "Trip plan" and add a task to book flights due Friday.',
+    ops: [
+      { name: "find_page", params: ["query"], ret: "page" },
+      { name: "create_page", params: ["title", "body"] },
+      { name: "append_block", params: ["page", "text"] },
+      { name: "create_task", params: ["title", "due"] },
+      { name: "complete_task", params: ["task"] },
+      { name: "find_task", params: ["query"], ret: "task" },
+      { name: "add_to_database", params: ["database", "name"] },
+      { name: "set_property", params: ["page", "key", "value"] },
+      { name: "create_database", params: ["name"] }
+    ],
+    fixed: [
+      [
+        "create a page titled Trip plan and add a task to book flights due Friday",
+        'create_page(title="Trip plan", body="Planning notes.")\ncreate_task(title="Book flights", due="Friday")'
+      ]
+    ],
+    templates: [
+      { req: "create a page titled {title}", macro: 'create_page(title="{title}", body="{title} \u2014 notes.")' },
+      { req: "add a note {text} to the {topic} page", macro: 'p = find_page(query="{topic}")\nappend_block(page=p, text="{text}")' },
+      { req: "add a task to {task} due {when}", macro: 'create_task(title="{task}", due="{when}")' },
+      { req: "mark the {task} task done", macro: 't = find_task(query="{task}")\ncomplete_task(task=t)' },
+      { req: "add {name} to my {database} database", macro: 'add_to_database(database="{database}", name="{name}")' },
+      { req: "set the status of the {topic} page to {value}", macro: 'p = find_page(query="{topic}")\nset_property(page=p, key="status", value="{value}")' },
+      { req: "create a database called {database}", macro: 'create_database(name="{database}")' }
+    ],
+    vocab: {
+      title: ["Trip plan", "Q3 goals", "Reading list", "Meeting notes", "Project brief", "Recipes"],
+      text: ["remember to confirm the budget", "add the agenda", "link the spec", "note the blockers"],
+      topic: ["trip", "goals", "project", "meeting", "reading"],
+      task: ["book flights", "draft the brief", "email the vendor", "review the PR", "pay the invoice"],
+      when: ["today", "tomorrow", "Friday", "next week", "end of month"],
+      name: ["Acme Co", "Q3 launch", "Vendor X", "Idea: dark mode"],
+      database: ["Projects", "CRM", "Tasks", "Reading", "Inventory"],
+      value: ["in progress", "done", "blocked", "todo", "review"]
+    },
+    oos: ["play music", "navigate home", "send a tweet"]
+  },
+  {
+    key: "x",
+    label: "X",
+    icon: "\u{1D54F}",
+    domain: "an X (Twitter) operator",
+    scope: "posting and engagement on X",
+    desc: "Compiles social requests into a macro over posts, replies, reposts, follows, and DMs; bounces anything off-platform.",
+    suggest: 'Post "shipping something fun today \u{1F680}" and schedule a follow-up for 5pm.',
+    ops: [
+      { name: "find_post", params: ["query"], ret: "post" },
+      { name: "post", params: ["text"] },
+      { name: "reply", params: ["post", "text"] },
+      { name: "repost", params: ["post"] },
+      { name: "like", params: ["post"] },
+      { name: "follow", params: ["user"] },
+      { name: "dm", params: ["user", "text"] },
+      { name: "schedule_post", params: ["text", "when"] },
+      { name: "bookmark", params: ["post"] }
+    ],
+    fixed: [
+      [
+        "post shipping something fun today and schedule a follow up for 5pm",
+        'post(text="shipping something fun today \u{1F680}")\nschedule_post(text="more details soon \u2014 stay tuned", when="today 17:00")'
+      ]
+    ],
+    templates: [
+      { req: "post {text}", macro: 'post(text="{text}")' },
+      { req: "reply {text} to the {topic} post", macro: 'p = find_post(query="{topic}")\nreply(post=p, text="{text}")' },
+      { req: "repost the {topic} tweet", macro: 'p = find_post(query="{topic}")\nrepost(post=p)' },
+      { req: "like the {topic} post", macro: 'p = find_post(query="{topic}")\nlike(post=p)' },
+      { req: "follow {user}", macro: 'follow(user="{user}")' },
+      { req: "dm {user} {text}", macro: 'dm(user="{user}", text="{text}")' },
+      { req: "schedule a post {when} saying {text}", macro: 'schedule_post(text="{text}", when="{when}")' },
+      { req: "bookmark the {topic} thread", macro: 'p = find_post(query="{topic}")\nbookmark(post=p)' }
+    ],
+    vocab: {
+      text: ["gm", "big news coming", "loved this talk", "hot take: tabs > spaces", "thanks for 10k followers"],
+      topic: ["the launch", "the keynote", "the meme", "the thread on AI", "the announcement"],
+      user: ["@levelsio", "@naval", "@swyx", "@dhh", "@karpathy"],
+      when: WHENS
+    },
+    oos: ["archive my inbox", "play a playlist", "open a GitHub issue"]
+  },
+  {
+    key: "instagram",
+    label: "Instagram",
+    icon: "\u{1F4F7}",
+    domain: "an Instagram operator",
+    scope: "Instagram posts, stories, and DMs",
+    desc: "Compiles requests into a macro over photo posts, stories, comments, and DMs; bounces anything off-platform.",
+    suggest: 'Post a photo with caption "sunset run \u{1F305}" and share it to my story.',
+    ops: [
+      { name: "find_post", params: ["query"], ret: "post" },
+      { name: "post_photo", params: ["caption", "media"] },
+      { name: "post_story", params: ["media"] },
+      { name: "reply_dm", params: ["user", "text"] },
+      { name: "like_post", params: ["post"] },
+      { name: "comment", params: ["post", "text"] },
+      { name: "follow", params: ["user"] },
+      { name: "save_post", params: ["post"] }
+    ],
+    fixed: [
+      [
+        "post a photo with caption sunset run and share it to my story",
+        'post_photo(caption="sunset run \u{1F305}", media="latest")\npost_story(media="latest")'
+      ]
+    ],
+    templates: [
+      { req: "post a photo with caption {caption}", macro: 'post_photo(caption="{caption}", media="latest")' },
+      { req: "share {media} to my story", macro: 'post_story(media="{media}")' },
+      { req: "comment {text} on the {topic} post", macro: 'p = find_post(query="{topic}")\ncomment(post=p, text="{text}")' },
+      { req: "like the {topic} post", macro: 'p = find_post(query="{topic}")\nlike_post(post=p)' },
+      { req: "reply {text} to {user} in DMs", macro: 'reply_dm(user="{user}", text="{text}")' },
+      { req: "follow {user}", macro: 'follow(user="{user}")' },
+      { req: "save the {topic} post", macro: 'p = find_post(query="{topic}")\nsave_post(post=p)' }
+    ],
+    vocab: {
+      caption: ["sunset run \u{1F305}", "weekend vibes", "new kicks \u{1F45F}", "homemade pasta \u{1F35D}", "trail day"],
+      media: ["latest", "the beach photo", "the reel", "the carousel"],
+      text: ["love this!", "where is this?", "so good \u{1F525}", "congrats!", "need the recipe"],
+      topic: ["the travel", "the food", "the fit check", "the puppy", "the launch"],
+      user: ["@natgeo", "@nike", "@a_friend", "@the_chef"]
+    },
+    oos: ["merge the pull request", "set a reminder", "navigate to work"]
+  },
+  {
+    key: "youtube",
+    label: "YouTube",
+    icon: "\u25B6",
+    domain: "a YouTube operator",
+    scope: "YouTube playback and library",
+    desc: "Compiles requests into a macro over search, playback, playlists, and subscriptions; bounces anything else.",
+    suggest: "Play a 10-minute beginner yoga video and add it to my Morning playlist.",
+    ops: [
+      { name: "find_video", params: ["query"], ret: "video" },
+      { name: "play_video", params: ["video"] },
+      { name: "queue_video", params: ["video"] },
+      { name: "subscribe", params: ["channel"] },
+      { name: "like_video", params: ["video"] },
+      { name: "add_to_playlist", params: ["playlist", "video"] },
+      { name: "create_playlist", params: ["name"] },
+      { name: "comment", params: ["video", "text"] }
+    ],
+    fixed: [
+      [
+        "play a beginner yoga video and add it to my Morning playlist",
+        'v = find_video(query="beginner yoga 10 minutes")\nplay_video(video=v)\nadd_to_playlist(playlist="Morning", video=v)'
+      ]
+    ],
+    templates: [
+      { req: "play a video about {query}", macro: 'v = find_video(query="{query}")\nplay_video(video=v)' },
+      { req: "queue a video about {query}", macro: 'v = find_video(query="{query}")\nqueue_video(video=v)' },
+      { req: "subscribe to {channel}", macro: 'subscribe(channel="{channel}")' },
+      { req: "like the {query} video", macro: 'v = find_video(query="{query}")\nlike_video(video=v)' },
+      { req: "add a {query} video to my {name} playlist", macro: 'v = find_video(query="{query}")\nadd_to_playlist(playlist="{name}", video=v)' },
+      { req: "make a playlist called {name}", macro: 'create_playlist(name="{name}")' },
+      { req: "comment {text} on the {query} video", macro: 'v = find_video(query="{query}")\ncomment(video=v, text="{text}")' }
+    ],
+    vocab: {
+      query: ["lo-fi study mix", "rust tutorial", "marathon training", "pasta recipe", "guitar lesson", "space documentary"],
+      channel: ["Veritasium", "Fireship", "MKBHD", "Kurzgesagt", "NileRed"],
+      name: ["Morning", "Watch Later", "Cooking", "Workouts", "Learning"],
+      text: ["great explanation!", "first", "this helped a lot", "please do a part 2"]
+    },
+    oos: ["email the team", "open a PR", "set my Slack status"]
+  },
+  {
+    key: "maps",
+    label: "Maps",
+    icon: "\u{1F4CD}",
+    domain: "a Maps operator",
+    scope: "navigation and places",
+    desc: "Compiles requests into a macro over places, directions, and navigation; bounces anything off-map.",
+    suggest: "Find the nearest coffee shop and start navigation, then share my ETA with Alex.",
+    ops: [
+      { name: "search_place", params: ["query"], ret: "place" },
+      { name: "find_nearby", params: ["category"], ret: "place" },
+      { name: "directions", params: ["to", "mode"] },
+      { name: "start_navigation", params: ["place"] },
+      { name: "save_place", params: ["place", "list"] },
+      { name: "share_eta", params: ["place", "contact"] }
+    ],
+    fixed: [
+      [
+        "find the nearest coffee shop and start navigation then share my eta with Alex",
+        'p = find_nearby(category="coffee shop")\nstart_navigation(place=p)\nshare_eta(place=p, contact="Alex")'
+      ]
+    ],
+    templates: [
+      { req: "navigate to {place}", macro: 'p = search_place(query="{place}")\nstart_navigation(place=p)' },
+      { req: "directions to {place} by {mode}", macro: 'directions(to="{place}", mode="{mode}")' },
+      { req: "find a {category} near me", macro: 'find_nearby(category="{category}")' },
+      { req: "find the nearest {category} and navigate there", macro: 'p = find_nearby(category="{category}")\nstart_navigation(place=p)' },
+      { req: "save {place} to my {list} list", macro: 'p = search_place(query="{place}")\nsave_place(place=p, list="{list}")' },
+      { req: "share my ETA to {place} with {contact}", macro: 'p = search_place(query="{place}")\nshare_eta(place=p, contact="{contact}")' }
+    ],
+    vocab: {
+      place: ["the airport", "downtown", "the office", "Central Park", "the train station", "the stadium"],
+      mode: ["driving", "walking", "transit", "cycling"],
+      category: ["coffee shop", "gas station", "pharmacy", "grocery store", "ATM", "parking"],
+      list: ["Favorites", "Want to go", "Trip", "Restaurants"],
+      contact: ["Alex", "mom", "Dana", "the group"]
+    },
+    oos: ["post a tweet", "play a song", "create a GitHub repo"]
+  },
+  {
+    key: "amazon",
+    label: "Shopping",
+    icon: "\u{1F6D2}",
+    domain: "a shopping operator",
+    scope: "shopping cart and orders",
+    desc: "Compiles requests into a macro over product search, cart, orders, and lists; bounces anything that isn\u2019t shopping.",
+    suggest: "Add two packs of AA batteries to my cart and track my last order.",
+    ops: [
+      { name: "search_product", params: ["query"], ret: "product" },
+      { name: "add_to_cart", params: ["product", "qty"] },
+      { name: "buy_now", params: ["product"] },
+      { name: "find_order", params: ["query"], ret: "order" },
+      { name: "track_order", params: ["order"], ret: "status" },
+      { name: "reorder", params: ["query"] },
+      { name: "add_to_list", params: ["product", "list"] }
+    ],
+    fixed: [
+      [
+        "add two packs of AA batteries to my cart and track my last order",
+        'p = search_product(query="AA batteries 2 pack")\nadd_to_cart(product=p, qty=2)\no = find_order(query="last order")\ntrack_order(order=o)'
+      ]
+    ],
+    templates: [
+      { req: "add {qty} {product} to my cart", macro: 'p = search_product(query="{product}")\nadd_to_cart(product=p, qty={qty})' },
+      { req: "buy {product} now", macro: 'p = search_product(query="{product}")\nbuy_now(product=p)' },
+      { req: "reorder {product}", macro: 'reorder(query="{product}")' },
+      { req: "track my {product} order", macro: 'o = find_order(query="{product}")\ntrack_order(order=o)' },
+      { req: "add {product} to my {list} list", macro: 'p = search_product(query="{product}")\nadd_to_list(product=p, list="{list}")' },
+      { req: "search for {product}", macro: 'search_product(query="{product}")' }
+    ],
+    vocab: {
+      product: ["AA batteries", "USB-C cable", "olive oil", "running shoes", "paper towels", "a coffee grinder", "phone case"],
+      qty: ["1", "2", "3", "4"],
+      list: ["Wishlist", "Subscribe & Save", "Home", "Gifts"]
+    },
+    oos: ["send an email", "play a video", "navigate to the office"]
+  },
+  {
+    key: "reddit",
+    label: "Reddit",
+    icon: "\u{1F47D}",
+    domain: "a Reddit operator",
+    scope: "Reddit posts and comments",
+    desc: "Compiles requests into a macro over submissions, comments, votes, and subscriptions; bounces anything off-platform.",
+    suggest: 'Post "What mechanical keyboard should I buy?" to r/keyboards and subscribe.',
+    ops: [
+      { name: "find_post", params: ["query"], ret: "post" },
+      { name: "submit_post", params: ["subreddit", "title", "body"] },
+      { name: "comment", params: ["post", "text"] },
+      { name: "upvote", params: ["post"] },
+      { name: "reply_comment", params: ["comment", "text"] },
+      { name: "subscribe", params: ["subreddit"] },
+      { name: "save_post", params: ["post"] }
+    ],
+    fixed: [
+      [
+        "post what mechanical keyboard should I buy to r/keyboards and subscribe",
+        'submit_post(subreddit="keyboards", title="What mechanical keyboard should I buy?", body="Budget is flexible \u2014 looking for recommendations.")\nsubscribe(subreddit="keyboards")'
+      ]
+    ],
+    templates: [
+      { req: "post {title} to r/{subreddit}", macro: 'submit_post(subreddit="{subreddit}", title="{title}", body="{title}")' },
+      { req: "comment {text} on the {topic} post", macro: 'p = find_post(query="{topic}")\ncomment(post=p, text="{text}")' },
+      { req: "upvote the {topic} post", macro: 'p = find_post(query="{topic}")\nupvote(post=p)' },
+      { req: "subscribe to r/{subreddit}", macro: 'subscribe(subreddit="{subreddit}")' },
+      { req: "save the {topic} post", macro: 'p = find_post(query="{topic}")\nsave_post(post=p)' }
+    ],
+    vocab: {
+      subreddit: ["keyboards", "programming", "AskReddit", "buildapc", "cooking", "fitness"],
+      title: ["What keyboard should I buy?", "Best beginner setup?", "How do I start running?", "Favorite pasta recipe?"],
+      text: ["this is the way", "underrated take", "source?", "thanks for sharing", "happy cake day"],
+      topic: ["the keyboard", "the build", "the recipe", "the AMA", "the discussion"]
+    },
+    oos: ["email my mom", "play a song", "navigate home"]
+  },
+  {
+    key: "linkedin",
+    label: "LinkedIn",
+    icon: "\u{1F4BC}",
+    domain: "a LinkedIn operator",
+    scope: "LinkedIn networking and posts",
+    desc: "Compiles requests into a macro over posts, connections, messages, and endorsements; bounces anything off-platform.",
+    suggest: "Connect with Priya with a note, then endorse her for product management.",
+    ops: [
+      { name: "find_person", params: ["query"], ret: "person" },
+      { name: "post_update", params: ["text"] },
+      { name: "connect", params: ["user", "note"] },
+      { name: "message", params: ["user", "text"] },
+      { name: "endorse", params: ["person", "skill"] },
+      { name: "find_post", params: ["query"], ret: "post" },
+      { name: "comment", params: ["post", "text"] }
+    ],
+    fixed: [
+      [
+        "connect with Priya with a note then endorse her for product management",
+        'connect(user="Priya", note="Great working with you \u2014 let us stay in touch!")\np = find_person(query="Priya")\nendorse(person=p, skill="product management")'
+      ]
+    ],
+    templates: [
+      { req: "post an update saying {text}", macro: 'post_update(text="{text}")' },
+      { req: "connect with {user} and add a note {note}", macro: 'connect(user="{user}", note="{note}")' },
+      { req: "message {user} {text}", macro: 'message(user="{user}", text="{text}")' },
+      { req: "endorse {user} for {skill}", macro: 'p = find_person(query="{user}")\nendorse(person=p, skill="{skill}")' },
+      { req: "comment {text} on the {topic} post", macro: 'p = find_post(query="{topic}")\ncomment(post=p, text="{text}")' }
+    ],
+    vocab: {
+      text: ["excited to share I started a new role", "we are hiring engineers", "grateful for a great quarter", "thoughts on remote work"],
+      user: ["Priya", "Alex", "a recruiter", "Dana", "my former manager"],
+      note: ["Great working with you!", "Loved your talk", "Let us connect", "Fellow alum here"],
+      skill: ["product management", "leadership", "TypeScript", "design", "data science"],
+      topic: ["the hiring", "the milestone", "the article", "the announcement"]
+    },
+    oos: ["play music", "open a github issue", "navigate to the airport"]
+  }
+];
+var SKILLS = DEFS.map((d) => buildSkill(d, 6));
+var CALENDAR_SVG = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="4" width="19" height="17" rx="3.4" fill="#ffffff"/><path d="M2.5 7.4a3.4 3.4 0 0 1 3.4-3.4h12.2a3.4 3.4 0 0 1 3.4 3.4v2.1H2.5z" fill="#ea4d3d"/><rect x="6" y="2.1" width="2.5" height="4.4" rx="1.25" fill="#b23528"/><rect x="15.5" y="2.1" width="2.5" height="4.4" rx="1.25" fill="#b23528"/><g fill="#cfd4dc"><rect x="5" y="11.6" width="3" height="2.7" rx=".7"/><rect x="10.5" y="11.6" width="3" height="2.7" rx=".7"/><rect x="16" y="11.6" width="3" height="2.7" rx=".7"/><rect x="5" y="15.7" width="3" height="2.7" rx=".7"/><rect x="16" y="15.7" width="3" height="2.7" rx=".7"/></g><rect x="10.5" y="15.7" width="3" height="2.7" rx=".7" fill="#2f72c4"/><rect x="2.5" y="4" width="19" height="17" rx="3.4" fill="none" stroke="#0000001f"/></svg>';
+var POPULAR_2026 = [
+  { key: "inbox-calendar", name: "Inbox & Calendar", skill: "inbox-calendar", cat: "productivity", logo: "google-calendar", bg: "linear-gradient(#fdfaf2,#efe7d4)", svg: CALENDAR_SVG, glyph: "\u2709", fs: 22 },
+  { key: "music", name: "Music", skill: "music", cat: "media", logo: "spotify", bg: "#1db954", glyph: "\u266A", fs: 24 },
+  { key: "github", name: "GitHub", skill: "github", cat: "developer", logo: "github", logoBg: "#f7f3e7", bg: "#181717", glyph: "GH", fs: 15 },
+  { key: "youtube", name: "YouTube", skill: "youtube", cat: "media", logo: "youtube", bg: "#FF0000", glyph: "\u25B6", fs: 18 },
+  { key: "instagram", name: "Instagram", skill: "instagram", cat: "social", logo: "instagram", bg: "linear-gradient(135deg,#feda75,#d62976 48%,#4f5bd5)", glyph: "\u{1F4F7}", fs: 20 },
+  { key: "x", name: "X", skill: "x", cat: "social", logo: "twitter", bg: "#000000", glyph: "\u{1D54F}", fs: 23 },
+  { key: "slack", name: "Slack", skill: "slack", cat: "work", logo: "slack", bg: "#4A154B", glyph: "S", fs: 24 },
+  { key: "notion", name: "Notion", skill: "notion", cat: "productivity", logo: "notion", logoBg: "#f7f3e7", bg: "#0f0f0f", glyph: "N", fs: 24 },
+  { key: "maps", name: "Maps", skill: "maps", cat: "navigation", logo: "google-maps", bg: "#34A853", glyph: "\u{1F4CD}", fs: 20 },
+  { key: "amazon", name: "Amazon", skill: "amazon", cat: "shopping", bg: "#FF9900", fg: "#232F3E", glyph: "a", fs: 27 },
+  { key: "reddit", name: "Reddit", skill: "reddit", cat: "social", logo: "reddit", bg: "#FF4500", glyph: "\u{1F47D}", fs: 20 },
+  { key: "linkedin", name: "LinkedIn", skill: "linkedin", cat: "work", logo: "linkedin", bg: "#0A66C2", glyph: "in", fs: 17 },
+  // ── the broader armory (coming soon) ──
+  { key: "google", name: "Google", cat: "productivity", logo: "google", bg: "#4285F4", glyph: "G", fs: 25 },
+  { key: "whatsapp", name: "WhatsApp", cat: "social", logo: "whatsapp", bg: "#25D366", glyph: "\u2706", fs: 22 },
+  { key: "tiktok", name: "TikTok", cat: "social", logo: "tiktok", bg: "#010101", glyph: "\u266B", fs: 22 },
+  { key: "facebook", name: "Facebook", cat: "social", logo: "facebook", bg: "#1877F2", glyph: "f", fs: 27 },
+  { key: "snapchat", name: "Snapchat", cat: "social", bg: "#FFFC00", fg: "#111", glyph: "\u{1F47B}", fs: 22 },
+  { key: "messenger", name: "Messenger", cat: "social", logo: "messenger", bg: "#0084FF", glyph: "\u2726", fs: 22 },
+  { key: "discord", name: "Discord", cat: "social", logo: "discord", bg: "#5865F2", glyph: "D", fs: 24 },
+  { key: "telegram", name: "Telegram", cat: "social", logo: "telegram", bg: "#229ED9", glyph: "\u2708", fs: 20 },
+  { key: "netflix", name: "Netflix", cat: "media", logo: "netflix", bg: "#E50914", glyph: "NF", fs: 15 },
+  { key: "twitch", name: "Twitch", cat: "media", logo: "twitch", bg: "#9146FF", glyph: "tw", fs: 16 },
+  { key: "spotify", name: "Spotify", cat: "media", logo: "spotify", bg: "#1DB954", glyph: "\u25C9", fs: 20 },
+  { key: "pinterest", name: "Pinterest", cat: "social", logo: "pinterest", bg: "#E60023", glyph: "P", fs: 24 },
+  { key: "threads", name: "Threads", cat: "social", logo: "threads", logoBg: "#f7f3e7", bg: "#000000", glyph: "@", fs: 24 },
+  { key: "uber", name: "Uber", cat: "travel", bg: "#000000", glyph: "U", fs: 24 },
+  { key: "doordash", name: "DoorDash", cat: "food", bg: "#FF3008", glyph: "DD", fs: 14 },
+  { key: "airbnb", name: "Airbnb", cat: "travel", logo: "airbnb", bg: "#FF5A5F", glyph: "A", fs: 24 },
+  { key: "paypal", name: "PayPal", cat: "finance", logo: "paypal", bg: "#003087", glyph: "P", fs: 23 },
+  { key: "venmo", name: "Venmo", cat: "finance", bg: "#3D95CE", glyph: "V", fs: 24 },
+  { key: "chatgpt", name: "ChatGPT", cat: "ai", logo: "openai", bg: "#10A37F", glyph: "\u2738", fs: 20 },
+  { key: "gemini", name: "Gemini", cat: "ai", logo: "google-gemini", bg: "#1C69FF", glyph: "\u2726", fs: 20 },
+  { key: "perplexity", name: "Perplexity", cat: "ai", logo: "perplexity", bg: "#1FB8CD", glyph: "\u273A", fs: 20 },
+  { key: "cursor", name: "Cursor", cat: "developer", bg: "#0b0b0b", glyph: "\u25AE", fs: 18 }
+];
+
+// src/icon_pipeline.js
+var DEFAULT_BASE_PATHS = ["/vendor/logos", "./vendor/logos", "../vendor/logos"];
+var ICON_THEME_PRESETS = {
+  brand: { mode: "brand", label: "Brand", bg: null, fg: null },
+  gold: { mode: "mono", label: "Gold monochrome", bg: "#2b220b", fg: "#ffd24a" },
+  cyan: { mode: "mono", label: "Cyan monochrome", bg: "#082a2e", fg: "#61f2ff" },
+  pixel: { mode: "pixel", label: "8-bit brand", bg: null, fg: null, pixelSize: 18 },
+  pixelGold: { mode: "pixel-mono", label: "8-bit gold", bg: "#201806", fg: "#ffd24a", pixelSize: 18 },
+  locked: { mode: "mono", label: "Locked", bg: "#d7d2c2", fg: "#7d7768" }
+};
+var LOGO_ALIASES = {
+  "inbox-calendar": ["google-calendar", "google-gmail"],
+  music: ["spotify"],
+  github: ["github"],
+  youtube: ["youtube"],
+  instagram: ["instagram"],
+  x: ["twitter"],
+  slack: ["slack"],
+  notion: ["notion"],
+  maps: ["google-maps"],
+  reddit: ["reddit"],
+  linkedin: ["linkedin"],
+  google: ["google"],
+  whatsapp: ["whatsapp"],
+  tiktok: ["tiktok"],
+  facebook: ["facebook"],
+  messenger: ["messenger"],
+  discord: ["discord"],
+  telegram: ["telegram"],
+  netflix: ["netflix"],
+  twitch: ["twitch"],
+  spotify: ["spotify"],
+  pinterest: ["pinterest"],
+  threads: ["threads"],
+  airbnb: ["airbnb"],
+  paypal: ["paypal"],
+  chatgpt: ["openai"],
+  gemini: ["google-gemini"],
+  perplexity: ["perplexity"]
+};
+var catalogPromise = null;
+var activeTheme = safeStorageGet("eg_icon_theme") || "brand";
+var paintVersions = /* @__PURE__ */ new WeakMap();
+var rasterCache = /* @__PURE__ */ new Map();
+function safeStorageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+__name(safeStorageGet, "safeStorageGet");
+function safeStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+  }
+}
+__name(safeStorageSet, "safeStorageSet");
+function slug(s) {
+  return String(s || "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+__name(slug, "slug");
+function trimSlash(s) {
+  return String(s || "").replace(/\/+$/, "");
+}
+__name(trimSlash, "trimSlash");
+function cssUrl(src) {
+  return `url("${String(src).replace(/"/g, '\\"')}")`;
+}
+__name(cssUrl, "cssUrl");
+function svgDataUrl(svg) {
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(String(svg));
+}
+__name(svgDataUrl, "svgDataUrl");
+function firstColor(bg) {
+  if (!bg) return null;
+  const m = String(bg).match(/#[0-9a-f]{3,8}/i);
+  return m ? m[0] : String(bg).startsWith("#") ? bg : null;
+}
+__name(firstColor, "firstColor");
+function iconTheme() {
+  return activeTheme in ICON_THEME_PRESETS ? activeTheme : "brand";
+}
+__name(iconTheme, "iconTheme");
+function iconThemePreset(theme = iconTheme()) {
+  return ICON_THEME_PRESETS[theme] || ICON_THEME_PRESETS.brand;
+}
+__name(iconThemePreset, "iconThemePreset");
+function setIconTheme(theme) {
+  activeTheme = theme in ICON_THEME_PRESETS ? theme : "brand";
+  safeStorageSet("eg_icon_theme", activeTheme);
+  try {
+    document.documentElement.dataset.iconTheme = activeTheme;
+  } catch {
+  }
+  try {
+    window.dispatchEvent(new CustomEvent("eg-icon-theme", { detail: { theme: activeTheme } }));
+  } catch {
+  }
+  return activeTheme;
+}
+__name(setIconTheme, "setIconTheme");
+function createLogoIndex(entries, basePath = "/vendor/logos") {
+  const byShortname = /* @__PURE__ */ new Map();
+  const byFileStem = /* @__PURE__ */ new Map();
+  const byName = /* @__PURE__ */ new Map();
+  for (const entry of entries || []) {
+    const record = { ...entry, basePath: trimSlash(basePath) };
+    byShortname.set(slug(entry.shortname), record);
+    byName.set(slug(entry.name), record);
+    for (const f of entry.files || []) byFileStem.set(slug(f.replace(/\.svg$/i, "")), record);
+  }
+  return { basePath: trimSlash(basePath), entries: entries || [], byShortname, byFileStem, byName };
+}
+__name(createLogoIndex, "createLogoIndex");
+async function fetchCatalog(basePath) {
+  const base = trimSlash(basePath);
+  const resp = await fetch(`${base}/logos.json`, { cache: "force-cache" });
+  if (!resp.ok) throw new Error(`logos catalog not found at ${base}`);
+  const entries = await resp.json();
+  return createLogoIndex(entries, base);
+}
+__name(fetchCatalog, "fetchCatalog");
+async function loadLogoCatalog(basePaths = DEFAULT_BASE_PATHS) {
+  if (!catalogPromise) {
+    catalogPromise = (async () => {
+      let lastErr = null;
+      for (const base of basePaths) {
+        try {
+          return await fetchCatalog(base);
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error("logo catalog unavailable");
+    })();
+  }
+  return catalogPromise;
+}
+__name(loadLogoCatalog, "loadLogoCatalog");
+function logoCandidates(tile = {}) {
+  const keys = [];
+  const add = /* @__PURE__ */ __name((v) => {
+    if (!v) return;
+    if (Array.isArray(v)) {
+      for (const x of v) add(x);
+      return;
+    }
+    const k = slug(v);
+    if (k && !keys.includes(k)) keys.push(k);
+  }, "add");
+  add(tile.logo);
+  add(LOGO_ALIASES[slug(tile.key)]);
+  add(tile.key);
+  add(tile.shortname);
+  add(tile.name);
+  add(tile.label);
+  return keys;
+}
+__name(logoCandidates, "logoCandidates");
+function chooseFile(entry, preferred) {
+  const files = entry?.files || [];
+  if (!files.length) return null;
+  if (preferred) {
+    const exact = files.find((f) => f === preferred || slug(f.replace(/\.svg$/i, "")) === slug(preferred));
+    if (exact) return exact;
+  }
+  return files.find((f) => /-icon\.svg$/i.test(f) && !/monochrome/i.test(f)) || files.find((f) => !/monochrome/i.test(f)) || files[0];
+}
+__name(chooseFile, "chooseFile");
+function resolveLogoFromIndex(index, tile = {}) {
+  if (!index) return null;
+  for (const c of logoCandidates(tile)) {
+    const entry = index.byShortname.get(c) || index.byFileStem.get(c) || index.byName.get(c);
+    if (!entry) continue;
+    const file = chooseFile(entry, tile.logoFile);
+    if (!file) continue;
+    return {
+      name: entry.name,
+      shortname: entry.shortname,
+      file,
+      src: `${entry.basePath}/logos/${file}`
+    };
+  }
+  return null;
+}
+__name(resolveLogoFromIndex, "resolveLogoFromIndex");
+async function resolveLogo(tile) {
+  if (tile?.svg) return { name: tile.name || tile.key, shortname: tile.key, file: "inline.svg", src: svgDataUrl(tile.svg), inline: tile.svg };
+  const index = await loadLogoCatalog();
+  return resolveLogoFromIndex(index, tile);
+}
+__name(resolveLogo, "resolveLogo");
+function prepareTile(el, tile, preset, fallbackGlyph, fsScale, state2) {
+  el.classList.remove("hasvg", "skill-icon--svg", "skill-icon--mask", "skill-icon--pixel", "skill-icon--chip", "skill-icon--locked");
+  el.classList.add("skill-icon");
+  el.classList.toggle("skill-icon--chip", state2 === "chip");
+  el.classList.toggle("skill-icon--locked", state2 === "soon" || state2 === "locked");
+  el.dataset.iconTheme = preset.mode;
+  const tileBg = preset.bg || tile?.bg || "#6b6256";
+  const tileFg = preset.fg || tile?.fg || "#fff";
+  el.style.background = tileBg;
+  el.style.color = tileFg;
+  el.style.setProperty("--skill-icon-bg", tileBg);
+  el.style.setProperty("--skill-icon-fg", tileFg);
+  el.style.fontSize = Math.round((tile && tile.fs || 18) * fsScale) + "px";
+  el.textContent = "";
+  const fallback = document.createElement("span");
+  fallback.className = "skill-icon__fallback";
+  fallback.textContent = tile?.glyph || fallbackGlyph || "\u25C6";
+  el.appendChild(fallback);
+}
+__name(prepareTile, "prepareTile");
+function installBrand(el, logo, tile) {
+  el.classList.add("hasvg", "skill-icon--svg");
+  el.textContent = "";
+  if (logo.inline) {
+    el.innerHTML = logo.inline;
+  } else {
+    const img = document.createElement("img");
+    img.className = "skill-icon__img";
+    img.alt = "";
+    img.decoding = "async";
+    img.loading = "lazy";
+    img.src = logo.src;
+    el.appendChild(img);
+  }
+  el.style.background = tile?.logoBg || tile?.bg || "#fff";
+}
+__name(installBrand, "installBrand");
+function installMask(el, logo, preset) {
+  el.classList.add("hasvg", "skill-icon--mask");
+  el.textContent = "";
+  const mark = document.createElement("span");
+  mark.className = "skill-icon__mask";
+  mark.style.background = preset.fg || "#ffd24a";
+  mark.style.webkitMask = `${cssUrl(logo.src)} center / contain no-repeat`;
+  mark.style.mask = `${cssUrl(logo.src)} center / contain no-repeat`;
+  el.appendChild(mark);
+}
+__name(installMask, "installMask");
+async function rasterizeLogo(logo, preset) {
+  const key = `${logo.src}|${preset.mode}|${preset.fg || ""}|${preset.pixelSize || 18}`;
+  if (rasterCache.has(key)) return rasterCache.get(key);
+  const p = new Promise((resolve, reject) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      const s = Math.max(8, Math.min(32, preset.pixelSize || 18));
+      const c = document.createElement("canvas");
+      c.width = s;
+      c.height = s;
+      const ctx = c.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, s, s);
+      ctx.drawImage(img, 0, 0, s, s);
+      if (preset.mode === "pixel-mono") {
+        ctx.globalCompositeOperation = "source-in";
+        ctx.fillStyle = preset.fg || "#ffd24a";
+        ctx.fillRect(0, 0, s, s);
+      }
+      resolve(c.toDataURL("image/png"));
+    };
+    img.onerror = () => reject(new Error(`could not rasterize icon ${logo.src}`));
+    img.src = logo.src;
+  });
+  rasterCache.set(key, p);
+  return p;
+}
+__name(rasterizeLogo, "rasterizeLogo");
+async function installPixel(el, logo, preset) {
+  el.classList.add("hasvg", "skill-icon--pixel");
+  el.textContent = "";
+  const img = document.createElement("img");
+  img.className = "skill-icon__img skill-icon__img--pixel";
+  img.alt = "";
+  img.decoding = "async";
+  img.src = await rasterizeLogo(logo, preset);
+  el.appendChild(img);
+}
+__name(installPixel, "installPixel");
+function paintSkillIcon(el, tile = {}, options = {}) {
+  if (!el) return;
+  const preset = iconThemePreset(options.theme || iconTheme());
+  const version = (paintVersions.get(el) || 0) + 1;
+  paintVersions.set(el, version);
+  prepareTile(el, tile, preset, options.fallbackGlyph, options.fsScale || 1, options.state);
+  resolveLogo(tile).then(async (logo) => {
+    if (!logo || paintVersions.get(el) !== version) return;
+    if (preset.mode === "mono") installMask(el, logo, preset);
+    else if (preset.mode === "pixel" || preset.mode === "pixel-mono") await installPixel(el, logo, preset);
+    else installBrand(el, logo, tile);
+  }).catch(() => {
+  });
+}
+__name(paintSkillIcon, "paintSkillIcon");
+function themedTileColor(tile, theme = iconTheme()) {
+  const preset = iconThemePreset(theme);
+  return preset.bg || firstColor(tile?.bg) || tile?.bg || "#6b6256";
+}
+__name(themedTileColor, "themedTileColor");
+
 // src/main.js
 var $ = /* @__PURE__ */ __name((id) => document.getElementById(id), "$");
 var log = /* @__PURE__ */ __name((m) => {
@@ -6726,181 +8055,19 @@ var state = {
   // File System Access workspace folder
 };
 var GEN = { maxTokens: 2048, temperature: 0.6, topP: 0.95, topK: 64 };
-function specSig(spec) {
-  return spec.ops.map((o) => `${o.name}(${(o.params || []).join(", ")})${o.ret ? " -> " + o.ret : ""}`).join("; ");
-}
-__name(specSig, "specSig");
-function skillSystem(domain, spec) {
-  return `You are ${domain}. Convert the request into a macro using ONLY these operations:
-` + specSig(spec) + `.
-Output ONLY the macro, one call per line, no prose. If the request is outside ${spec.scope}, output exactly: OUT_OF_SCOPE.`;
-}
-__name(skillSystem, "skillSystem");
-var SKILLS = [
-  {
-    key: "inbox-calendar",
-    label: "Inbox & Calendar",
-    icon: "\u2709",
-    desc: "Turns requests like \u201Cemail my mom and book a reminder to respond\u201D into a verifiable macro over a fixed set of inbox/calendar blades, and bounces anything else with OUT_OF_SCOPE.",
-    domain: "an Inbox & Calendar operator",
-    spec: {
-      scope: "inbox or calendar",
-      ops: [
-        { name: "find_email", params: ["query"], ret: "thread" },
-        { name: "compose_email", params: ["to", "subject", "body"] },
-        { name: "reply_email", params: ["thread", "body"] },
-        { name: "forward_email", params: ["thread", "to", "note"] },
-        { name: "archive_email", params: ["thread"] },
-        { name: "label_email", params: ["thread", "label"] },
-        { name: "schedule_send", params: ["to", "subject", "body", "when"] },
-        { name: "create_event", params: ["title", "start", "end", "remind_min"] },
-        { name: "set_reminder", params: ["text", "when"] },
-        { name: "find_slot", params: ["duration_min", "after", "before"], ret: "slot" },
-        { name: "rsvp", params: ["event", "response"] }
-      ]
-    },
-    suggest: "Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.",
-    examples: [
-      [
-        "email my mom and book a calendar event to remind me to respond",
-        'compose_email(to="mom", subject="Hi mom", body="Just checking in \u2014 talk soon!")\ncreate_event(title="Respond to mom", start="tomorrow 09:00", end="tomorrow 09:15", remind_min=10)'
-      ],
-      [
-        "reply to the thread from Sarah declining the meeting, then remind me Friday to follow up",
-        `t = find_email(query="from:Sarah meeting")
-reply_email(thread=t, body="Thanks for the invite \u2014 I can't make this one, but let's find another time.")
-set_reminder(text="Follow up with Sarah", when="Friday 09:00")`
-      ],
-      [
-        "forward the invoice email from billing to my accountant",
-        't = find_email(query="from:billing invoice")\nforward_email(thread=t, to="accountant", note="For the books \u2014 thanks!")'
-      ],
-      [
-        "schedule a 30 minute focus block tomorrow afternoon",
-        's = find_slot(duration_min=30, after="tomorrow 13:00", before="tomorrow 18:00")\ncreate_event(title="Focus block", start=s.start, end=s.end, remind_min=5)'
-      ],
-      [
-        "draft a thank-you note to the team and send it at 8am tomorrow",
-        'schedule_send(to="team", subject="Thank you", body="Great work this week \u2014 thank you all.", when="tomorrow 08:00")'
-      ],
-      [
-        "archive all the newsletters in my inbox",
-        't = find_email(query="category:newsletters")\narchive_email(thread=t)'
-      ],
-      [
-        "set up a 1:1 with Alex next Tuesday at 2pm for 25 minutes",
-        'create_event(title="1:1 with Alex", start="next Tuesday 14:00", end="next Tuesday 14:25", remind_min=10)'
-      ],
-      [
-        "reply yes to the standup invite and add it to my calendar",
-        't = find_email(query="standup invite")\nrsvp(event=t, response="yes")'
-      ],
-      [
-        "find John's last email and reply that I'll review it by Thursday",
-        `t = find_email(query="from:John")
-reply_email(thread=t, body="Thanks \u2014 I'll review this and get back to you by Thursday.")`
-      ],
-      [
-        "label the email from the landlord as housing and remind me to respond tonight",
-        't = find_email(query="from:landlord")\nlabel_email(thread=t, label="housing")\nset_reminder(text="Respond to landlord", when="today 19:00")'
-      ],
-      [
-        "book lunch with Priya Thursday noon and email her the invite",
-        'create_event(title="Lunch with Priya", start="Thursday 12:00", end="Thursday 13:00", remind_min=30)\ncompose_email(to="Priya", subject="Lunch Thursday", body="Sent you a calendar invite for Thursday noon \u2014 looking forward to it!")'
-      ],
-      [
-        "clear my unread promotions and remind me to check email after lunch",
-        't = find_email(query="is:unread category:promotions")\narchive_email(thread=t)\nset_reminder(text="Check email", when="today 13:30")'
-      ],
-      ["order me a pizza", "OUT_OF_SCOPE"],
-      ["what is the capital of France?", "OUT_OF_SCOPE"]
-    ]
-  },
-  {
-    key: "music",
-    label: "Music",
-    icon: "\u266A",
-    desc: "Turns requests like \u201Cplay some lo-fi and turn it down\u201D into a macro over a music-player action space \u2014 find/play/queue/volume/playlist \u2014 and bounces anything non-music.",
-    domain: "a music player operator",
-    spec: {
-      scope: "music playback",
-      ops: [
-        { name: "find_track", params: ["query"], ret: "track" },
-        { name: "play_track", params: ["track"] },
-        { name: "queue_track", params: ["track"] },
-        { name: "pause", params: [] },
-        { name: "skip", params: [] },
-        { name: "previous", params: [] },
-        { name: "set_volume", params: ["level"] },
-        { name: "create_playlist", params: ["name"] },
-        { name: "add_to_playlist", params: ["playlist", "track"] },
-        { name: "shuffle", params: ["on"] },
-        { name: "repeat", params: ["mode"] }
-      ]
-    },
-    suggest: "Play something upbeat for cooking and add it to a new playlist called Dinner.",
-    examples: [
-      ["play some lo-fi beats", 't = find_track(query="lo-fi beats")\nplay_track(track=t)'],
-      ["queue up the new Taylor Swift single after this", 't = find_track(query="Taylor Swift latest single")\nqueue_track(track=t)'],
-      ["turn it down a bit", "set_volume(level=30)"],
-      [
-        "make a playlist called Focus and add some ambient music",
-        'create_playlist(name="Focus")\nt = find_track(query="ambient")\nadd_to_playlist(playlist="Focus", track=t)'
-      ],
-      ["skip this song", "skip()"],
-      ["pause the music", "pause()"],
-      ["shuffle my workout playlist", 'shuffle(on=true)\nt = find_track(query="playlist:Workout")\nplay_track(track=t)'],
-      ["put on the Beatles and turn it up", 't = find_track(query="The Beatles")\nplay_track(track=t)\nset_volume(level=80)'],
-      ["repeat this track", 'repeat(mode="one")'],
-      ["go back to the previous song", "previous()"],
-      ["email my boss", "OUT_OF_SCOPE"],
-      ["what is the weather today?", "OUT_OF_SCOPE"]
-    ]
-  }
-];
-for (const s of SKILLS) s.system = skillSystem(s.domain, s.spec);
 var skillByKey = /* @__PURE__ */ __name((key) => SKILLS.find((s) => key && (key === s.key || String(key).startsWith(s.key + " "))), "skillByKey");
 var selectedSkillKey = SKILLS[0].key;
 var trainLosses = [];
-function parseMacroCalls(text) {
-  const out = [];
-  for (let raw of String(text).split("\n")) {
-    const line = raw.trim();
-    if (!line || line === "OUT_OF_SCOPE") continue;
-    const m = line.match(/^(?:[A-Za-z_]\w*\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
-    if (!m) continue;
-    const keys = [...m[2].matchAll(/(?:^|,)\s*([A-Za-z_]\w*)\s*=/g)].map((k) => k[1]);
-    out.push({ op: m[1], keys });
-  }
-  return out;
+function sampleExamples(all, n) {
+  const oos = all.filter(([, a]) => a === "OUT_OF_SCOPE");
+  const inscope = all.filter(([, a]) => a !== "OUT_OF_SCOPE");
+  const keep = Math.max(0, n - oos.length);
+  const stride = Math.max(1, Math.floor(inscope.length / Math.max(1, keep)));
+  const picked = [];
+  for (let i = 0; i < inscope.length && picked.length < keep; i += stride) picked.push(inscope[i]);
+  return [...picked, ...oos];
 }
-__name(parseMacroCalls, "parseMacroCalls");
-function verifyMacro(text, spec) {
-  const t = String(text);
-  const calls = parseMacroCalls(t);
-  const bounced = /(^|\n)\s*OUT_OF_SCOPE\s*($|\n)/.test(t) && calls.length === 0;
-  if (bounced) return { status: "oos", calls: [], issues: [], n: 0 };
-  if (!calls.length) return { status: "empty", calls: [], issues: [], n: 0 };
-  const byName = new Map(spec.ops.map((o) => [o.name, o]));
-  const issues = [];
-  const detail = [];
-  for (const c of calls) {
-    const op = byName.get(c.op);
-    if (!op) {
-      issues.push(`unknown op: ${c.op}`);
-      detail.push({ op: c.op, ok: false });
-      continue;
-    }
-    const allowed = new Set(op.params || []);
-    const bad = c.keys.filter((k) => !allowed.has(k));
-    if (bad.length) {
-      issues.push(`${c.op}: unexpected arg ${bad.join(", ")}`);
-      detail.push({ op: c.op, ok: false });
-    } else detail.push({ op: c.op, ok: true });
-  }
-  return { status: issues.length ? "bad" : "ok", calls: detail, issues, n: calls.length };
-}
-__name(verifyMacro, "verifyMacro");
+__name(sampleExamples, "sampleExamples");
 function setBadge() {
   const rail = $("rail"), chip = $("railChip");
   if (!rail || !chip) return;
@@ -6953,7 +8120,7 @@ async function loadWith(reader, label) {
   try {
     await session.loadWith(reader, label);
     state.loaded = true;
-    log("Model ready. Ask it anything below \u2014 or hit Train to teach it something new.");
+    log("Model ready. Train an account surface or equip a chain to execute writes.");
   } catch (e) {
     state.err = e.message;
     log("Load error: " + e.message);
@@ -7022,10 +8189,14 @@ async function runInference() {
     cap.textContent = `Done \u2014 ${sel === "none" ? "base model" : 'tuned adapter "' + sel + '"'}.`;
     const skill = sel !== "none" && state.tuned && state.tuned.name === sel ? skillByKey(state.tuned.base) : null;
     if (skill) {
-      setMacroCheck(verifyMacro(acc, skill.spec), skill);
+      const res = verifyMacro(acc, skill.spec);
+      setMacroCheck(res, skill, acc);
+      if (res.status === "ok") stageMsg(`Write resolved \u2014 compiled a ${res.n}-step plan on ${skill.label}.`);
+      else if (res.status === "oos") stageMsg(`That request is outside the ${skill.label} surface. Try one of its writes.`);
+      else stageMsg(`The plan didn't validate \u2014 adjust the request and try again.`);
       if (state.activeRunId) {
         bumpUses(state.activeRunId);
-        renderKnife();
+        renderDock();
       }
     }
     log(`done (${sel === "none" ? "base model" : "tuned adapter"}).`);
@@ -7043,8 +8214,8 @@ async function runInference() {
 __name(runInference, "runInference");
 async function runTraining({ examples, lr, epochs, accum, base, kind, system, build, suggest }) {
   if (!state.loaded) {
-    log("load the model first (INFERENCE pane).");
-    switchTab("infer");
+    log("Boot the engine first, then train a surface.");
+    closeTrainer();
     return;
   }
   if (state.busy) return;
@@ -7128,7 +8299,7 @@ async function runTraining({ examples, lr, epochs, accum, base, kind, system, bu
     } catch (e) {
       console.warn("[history] save failed", e);
     }
-    log(`Trained "${name}" in ${dt}s. Saved to your fine-tunes; switch to Inference to try it.`);
+    log(`Trained "${name}" in ${dt}s. Saved to your Atlas; equip it to try the write surface.`);
   } catch (e) {
     st.loop(["fwd", "bwd", "opt"], false);
     trainProgress(0, total, null, "training error: " + e.message);
@@ -7174,12 +8345,25 @@ function refreshOwn() {
   gateButtons();
 }
 __name(refreshOwn, "refreshOwn");
+function openTrainer() {
+  const t = $("trainer");
+  if (!t) return;
+  renderSkillPicker();
+  selectSkill(selectedSkillKey);
+  t.hidden = false;
+  document.body.classList.add("modal-open");
+  $("gear")?.classList.remove("on");
+  $("settings") && ($("settings").hidden = true);
+}
+__name(openTrainer, "openTrainer");
+function closeTrainer() {
+  const t = $("trainer");
+  if (t) t.hidden = true;
+  document.body.classList.remove("modal-open");
+}
+__name(closeTrainer, "closeTrainer");
 function switchTab(which) {
-  const infer = which === "infer";
-  $("paneInfer").classList.toggle("active", infer);
-  $("paneTrain").classList.toggle("active", !infer);
-  $("tabInfer").classList.toggle("on", infer);
-  $("tabTrain").classList.toggle("on", !infer);
+  which === "train" ? openTrainer() : closeTrainer();
 }
 __name(switchTab, "switchTab");
 function addAdapterOption(name) {
@@ -7266,8 +8450,74 @@ function showTryIt(suggest) {
     $("prompt").value = suggest;
     runInference();
   };
+  renderEquipPanel();
+  if (state.tuned?.name) stageMsg(`New surface trained: \u201C${state.tuned.name}\u201D \u2014 it was added to your Atlas. Equip it into a chain to act.`);
 }
 __name(showTryIt, "showTryIt");
+function renderEquipPanel() {
+  const bar = $("equipBar");
+  if (!bar) return;
+  const skill = state.tuned ? skillByKey(state.tuned.base) : null;
+  if (!skill || !skill.spec) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  const set = /* @__PURE__ */ __name((id, v) => {
+    const e = $(id);
+    if (e) e.textContent = v;
+  }, "set");
+  paintIcon($("equipIcon"), dockOf(skill.key), skill.icon, 0.85);
+  set("equipName", `${skill.label} surface`);
+  set("equipScope", `surface: ${skill.spec.scope}`);
+  const ops = $("equipOps");
+  if (ops) {
+    ops.innerHTML = "";
+    for (const op of skill.spec.ops) {
+      const c = document.createElement("span");
+      c.className = "equip__op";
+      c.textContent = op.name;
+      c.title = `${op.name}(${(op.params || []).join(", ")})`;
+      ops.appendChild(c);
+    }
+  }
+  const host = $("equipDrills");
+  if (host) {
+    host.innerHTML = "";
+    const inscope = skill.examples.filter(([, a]) => a !== "OUT_OF_SCOPE");
+    const step = Math.max(1, Math.floor(inscope.length / 4));
+    const picks = [];
+    for (let i = 0; i < inscope.length && picks.length < 4; i += step) picks.push(inscope[i][0]);
+    for (const q of picks) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "drill";
+      b.textContent = q;
+      b.title = "Fire this drill";
+      b.onclick = () => {
+        $("prompt").value = q;
+        runInference();
+      };
+      host.appendChild(b);
+    }
+  }
+}
+__name(renderEquipPanel, "renderEquipPanel");
+function humanizePlan(text) {
+  const out = [];
+  for (const raw of String(text).split("\n")) {
+    const line = raw.trim();
+    if (!line || line === "OUT_OF_SCOPE") continue;
+    const m = line.match(/^(?:[A-Za-z_]\w*\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
+    if (!m) continue;
+    const op = m[1].replace(/_/g, " ");
+    const args = [...m[2].matchAll(/([A-Za-z_]\w*)\s*=\s*"([^"]*)"/g)].map((x) => x[2]).filter(Boolean);
+    const summary = args.slice(0, 2).join(" \xB7 ");
+    out.push(summary ? `${op} \u2014 ${summary}` : op);
+  }
+  return out;
+}
+__name(humanizePlan, "humanizePlan");
 function uniqueName(base) {
   const taken = new Set(listRuns().map((r) => r.name));
   if (!taken.has(base)) return base;
@@ -7308,7 +8558,8 @@ function renderHistory() {
     li.dataset.kind = m.kind || "own";
     li.dataset.rarity = rar.key;
     li.title = `${m.name} \u2014 click to equip`;
-    li.innerHTML = `<div class="item__frame"><span class="item__icon">${runIcon(m)}</span><span class="item__lv">L${lv}</span></div><div class="item__body"><div class="item__name">${esc(m.name)}</div><div class="item__rar">${rar.label} \xB7 ${esc(itemTypeLabel(m))}</div><div class="item__meta">${esc(fmtRunMeta(m))}</div><div class="item__xp"><i style="width:${xp}%"></i></div></div>` + (active ? `<div class="item__tag">EQUIPPED</div>` : "") + `<div class="item__acts"><button data-act="apply" class="tiny primary">${active ? "\u2713 Equipped" : "\u25B6 Equip"}</button><button data-act="export" class="tiny secondary" title="Export adapter">\u2B07</button><button data-act="del" class="tiny danger" title="Scrap">\u2715</button></div>`;
+    li.innerHTML = `<div class="item__frame"><span class="item__icon"></span><span class="item__lv">L${lv}</span></div><div class="item__body"><div class="item__name">${esc(m.name)}</div><div class="item__rar">${rar.label} \xB7 ${esc(itemTypeLabel(m))}</div><div class="item__meta">${esc(fmtRunMeta(m))}</div><div class="item__xp"><i style="width:${xp}%"></i></div></div>` + (active ? `<div class="item__tag">EQUIPPED</div>` : "") + `<div class="item__acts"><button data-act="apply" class="tiny primary">${active ? "\u2713 Equipped" : "\u25B6 Equip"}</button><button data-act="export" class="tiny secondary" title="Export adapter">\u2B07</button><button data-act="del" class="tiny danger" title="Scrap">\u2715</button></div>`;
+    paintIcon(li.querySelector(".item__icon"), runTile(m), runIcon(m), 0.76);
     li.querySelector("[data-act=apply]").onclick = (e) => {
       e.stopPropagation();
       applyRun(m.id);
@@ -7324,7 +8575,8 @@ function renderHistory() {
     li.onclick = () => applyRun(m.id);
     ul.appendChild(li);
   }
-  renderKnife();
+  renderDock();
+  renderStage();
 }
 __name(renderHistory, "renderHistory");
 var SKILL_ICON = { guided: "\u2694", own: "\u{1F4DC}" };
@@ -7338,6 +8590,11 @@ function runIcon(m) {
   return sk ? sk.icon : SKILL_ICON[m.kind] || "\u{1F5E1}";
 }
 __name(runIcon, "runIcon");
+function runTile(m) {
+  const sk = skillByKey(m.base);
+  return sk ? dockOf(sk.key) : { ...BYOD_TILE, name: m.name, glyph: SKILL_ICON[m.kind] || "\u{1F5E1}" };
+}
+__name(runTile, "runTile");
 function skillLevel(m) {
   const lv = Math.max(1, Math.min(9, Math.round((m.steps || 12) / 12)));
   const loss = m.finalLoss == null ? 1.5 : Number(m.finalLoss);
@@ -7356,55 +8613,340 @@ __name(rarityOf, "rarityOf");
 function itemTypeLabel(m) {
   const sk = skillByKey(m.base);
   if (sk) return sk.label;
-  return m.kind === "guided" ? "Skill" : "Custom note";
+  return m.kind === "guided" ? "Surface" : "Custom surface";
 }
 __name(itemTypeLabel, "itemTypeLabel");
-function knifeRuns() {
-  return listRuns();
-}
-__name(knifeRuns, "knifeRuns");
-function renderKnife() {
-  const slots = $("knifeSlots");
-  if (!slots) return;
-  const runs = knifeRuns();
-  slots.innerHTML = "";
-  for (const sk of SKILLS) {
-    const forged = runs.some((r) => skillByKey(r.base)?.key === sk.key);
-    if (forged) continue;
-    const lock = document.createElement("div");
-    lock.className = "kslot kslot--locked";
-    lock.title = `Forge the ${sk.label} skill in the Train tab`;
-    lock.innerHTML = `<span class="kslot__icon">${sk.icon}</span><span class="kslot__name">${esc(sk.label)}</span><span class="kslot__lv">locked \xB7 train to forge</span>`;
-    lock.onclick = () => {
-      switchTab("train");
-      selectSkill(sk.key);
-    };
-    slots.appendChild(lock);
-  }
-  runs.forEach((m, i) => {
-    const { lv, xp } = skillLevel(m);
-    const uses = usesByRun.get(m.id) || 0;
-    const key = i < 9 ? i + 1 : null;
-    const equipped = m.id === state.activeRunId;
+var BYOD_TILE = { bg: "#6b6256", fg: "#fff", glyph: "\u{1F4DC}", fs: 20 };
+var SERVICES = POPULAR_2026;
+var dockRuns = [];
+var justEquippedId = null;
+var IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+var SWAP_KEY = IS_MAC ? "\u2318K" : "Ctrl+K";
+function renderDock() {
+  const tray = $("dockSlots");
+  if (!tray) return;
+  const runs = listRuns();
+  tray.innerHTML = "";
+  dockRuns = [];
+  const seen = /* @__PURE__ */ new Set();
+  const addTile = /* @__PURE__ */ __name((svc, opts) => {
     const el = document.createElement("div");
-    el.className = "kslot" + (equipped ? " equipped" : "");
-    el.dataset.runid = m.id;
-    el.title = `${m.name} \u2014 ${key ? "press " + key + " or " : ""}click to equip (hot-swap into inference)`;
-    el.innerHTML = (key ? `<span class="kslot__key">${key}</span>` : "") + `<span class="kslot__icon">${runIcon(m)}</span><span class="kslot__name">${esc(m.name)}</span><span class="kslot__lv">Lv ${lv}${equipped ? " \xB7 equipped" : ""}${uses ? " \xB7 " + uses + "\xD7" : ""}</span><span class="kslot__xp"><i style="width:${xp}%"></i></span>`;
-    el.onclick = () => applyRun(m.id);
-    slots.appendChild(el);
-  });
+    el.className = "dock__tile";
+    el.tabIndex = 0;
+    el.setAttribute("role", "button");
+    el.dataset.state = opts.state;
+    el.dataset.key = svc.key;
+    if (opts.runid) el.dataset.runid = opts.runid;
+    if (opts.pop) el.classList.add("dock__tile--pop");
+    const g = document.createElement("span");
+    g.className = "dock__glyph";
+    paintIcon(g, svc, svc.glyph, 1, { state: opts.state });
+    el.appendChild(g);
+    if (opts.lv != null) {
+      const b = document.createElement("span");
+      b.className = "dock__lv";
+      b.textContent = "L" + opts.lv;
+      el.appendChild(b);
+    }
+    if (opts.keyN != null) {
+      const k = document.createElement("span");
+      k.className = "dock__key";
+      k.textContent = opts.keyN;
+      el.appendChild(k);
+    }
+    if (opts.forge) {
+      const f = document.createElement("span");
+      f.className = "dock__forge";
+      f.textContent = "+";
+      el.appendChild(f);
+    }
+    if (opts.lock) {
+      const l = document.createElement("span");
+      l.className = "dock__lock";
+      l.textContent = "\u{1F512}";
+      el.appendChild(l);
+    }
+    const t = document.createElement("span");
+    t.className = "dock__tip";
+    if (opts.tipHtml) {
+      t.classList.add("dock__tip--rich");
+      t.innerHTML = opts.tipHtml;
+    } else t.textContent = opts.tip;
+    el.appendChild(t);
+    el.setAttribute("aria-label", opts.tip);
+    el.onclick = opts.onClick;
+    el.onmouseenter = () => sfx.hover();
+    el.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        opts.onClick();
+      }
+    };
+    tray.appendChild(el);
+  }, "addTile");
+  for (const svc of SERVICES) {
+    if (svc.skill) {
+      const run = runs.find((r) => skillByKey(r.base)?.key === svc.skill);
+      if (run) {
+        seen.add(run.id);
+        const { lv } = skillLevel(run);
+        const equipped = run.id === state.activeRunId;
+        dockRuns.push(run.id);
+        const keyN = dockRuns.length <= 9 ? dockRuns.length : null;
+        const uses = usesByRun.get(run.id) || 0;
+        const sk = skillByKey(svc.skill);
+        addTile(svc, {
+          state: equipped ? "equipped" : "owned",
+          runid: run.id,
+          lv,
+          keyN,
+          pop: equipped && justEquippedId === run.id,
+          tip: `${svc.name} \xB7 Lv ${lv}${equipped ? " \xB7 equipped" : ""}${uses ? " \xB7 " + uses + "\xD7" : ""}${keyN ? " \xB7 [" + keyN + "]" : ""}`,
+          tipHtml: dockTip(svc.name, { lv, rarity: rarityOf(lv), scope: sk?.spec?.scope, opsN: sk?.spec?.ops?.length, uses, keyN, equipped }),
+          // the equipped "lead" slot opens the radial quick-swap wheel (BotW-style)
+          onClick: /* @__PURE__ */ __name(() => equipped ? openWheel(false) : applyRun(run.id), "onClick")
+        });
+      } else {
+        addTile(svc, {
+          state: "forge",
+          forge: true,
+          tip: `${svc.name} \u2014 train this surface`,
+          onClick: /* @__PURE__ */ __name(() => {
+            selectSkill(svc.skill);
+            openTrainer();
+          }, "onClick")
+        });
+      }
+    } else {
+      addTile(svc, {
+        state: "soon",
+        lock: true,
+        tip: `${svc.name} \u2014 planned surface`,
+        onClick: /* @__PURE__ */ __name(() => stageMsg(`\u201C${svc.name}\u201D is not trainable yet \u2014 the Atlas grows as we add account surfaces.`), "onClick")
+      });
+    }
+  }
+  const extra = runs.filter((r) => !seen.has(r.id));
+  if (extra.length) {
+    const sep = document.createElement("div");
+    sep.className = "dock__sep";
+    tray.appendChild(sep);
+  }
+  for (const r of extra) {
+    const { lv } = skillLevel(r);
+    const equipped = r.id === state.activeRunId;
+    dockRuns.push(r.id);
+    const keyN = dockRuns.length <= 9 ? dockRuns.length : null;
+    addTile({ key: "byod-" + r.id, name: r.name, ...BYOD_TILE }, {
+      state: equipped ? "equipped" : "owned",
+      runid: r.id,
+      lv,
+      keyN,
+      pop: equipped && justEquippedId === r.id,
+      tip: `${r.name} \xB7 Lv ${lv}${equipped ? " \xB7 equipped" : ""}${keyN ? " \xB7 [" + keyN + "]" : ""}`,
+      tipHtml: dockTip(r.name, { lv, rarity: rarityOf(lv), scope: "your private notes", uses: usesByRun.get(r.id) || 0, keyN, equipped }),
+      onClick: /* @__PURE__ */ __name(() => equipped ? openWheel(false) : applyRun(r.id), "onClick")
+    });
+  }
+  justEquippedId = null;
 }
-__name(renderKnife, "renderKnife");
+__name(renderDock, "renderDock");
+function dockTip(name, { lv, rarity, scope, opsN, uses, keyN, equipped } = {}) {
+  const rows = [`<b class="dock__tipname">${esc(name)}</b>`];
+  if (lv != null) rows.push(`<span class="dock__tiprar" data-rar="${rarity && rarity.key || "common"}">Lv ${lv} \xB7 ${esc(rarity && rarity.label || "")}</span>`);
+  if (scope) rows.push(`<span class="dock__tipline">\u2694 ${esc(scope)}</span>`);
+  const bits = [];
+  if (opsN != null) bits.push(`${opsN} action${opsN === 1 ? "" : "s"}`);
+  if (uses) bits.push(`used ${uses}\xD7`);
+  if (bits.length) rows.push(`<span class="dock__tipline dim">${bits.join(" \xB7 ")}</span>`);
+  rows.push(`<span class="dock__tipkey">${equipped ? `\u25C6 equipped \u2014 ${SWAP_KEY} or click to switch` : keyN ? `press [${keyN}] \xB7 ${SWAP_KEY} to switch` : "tap to equip"}</span>`);
+  return rows.join("");
+}
+__name(dockTip, "dockTip");
 var lastEquipIntent = null;
 function equipByIndex(i) {
-  const runs = knifeRuns();
-  if (i < 0 || i >= runs.length) return;
-  lastEquipIntent = runs[i].id;
-  applyRun(runs[i].id);
+  if (i < 0 || i >= dockRuns.length) return;
+  lastEquipIntent = dockRuns[i];
+  applyRun(dockRuns[i]);
 }
 __name(equipByIndex, "equipByIndex");
-function setMacroCheck(res, skill) {
+var sfx = (() => {
+  let ctx = null, muted = false;
+  try {
+    muted = localStorage.getItem("eg_mute") === "1";
+  } catch {
+  }
+  const ac = /* @__PURE__ */ __name(() => {
+    if (!ctx) {
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch {
+      }
+    }
+    if (ctx && ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }, "ac");
+  const tone = /* @__PURE__ */ __name((freq, at, dur, type = "sine", gain = 0.05, slideTo = null) => {
+    const c = ac();
+    if (!c || muted) return;
+    const t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(1e-4, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
+    o.connect(g).connect(c.destination);
+    o.start(t);
+    o.stop(t + dur + 0.03);
+  }, "tone");
+  return {
+    get muted() {
+      return muted;
+    },
+    toggle() {
+      muted = !muted;
+      try {
+        localStorage.setItem("eg_mute", muted ? "1" : "0");
+      } catch {
+      }
+      if (!muted) this.equip();
+      return muted;
+    },
+    hover() {
+      tone(1100, 0, 0.035, "triangle", 0.018);
+    },
+    open() {
+      tone(360, 0, 0.14, "sawtooth", 0.035, 760);
+    },
+    move() {
+      tone(720, 0, 0.03, "square", 0.02);
+    },
+    equip() {
+      tone(523.25, 0, 0.08, "triangle", 0.05);
+      tone(783.99, 0.06, 0.1, "triangle", 0.05);
+      tone(1046.5, 0.13, 0.16, "sine", 0.045);
+    },
+    cancel() {
+      tone(380, 0, 0.12, "sine", 0.035, 240);
+    },
+    error() {
+      tone(170, 0, 0.18, "square", 0.045);
+    }
+  };
+})();
+var wheelOn = false;
+var wheelHeld = false;
+var wheelSel = 0;
+var wheelNodes = [];
+function ownedRunsInDockOrder() {
+  return dockRuns.map((id) => getRun(id)).filter(Boolean);
+}
+__name(ownedRunsInDockOrder, "ownedRunsInDockOrder");
+function openWheel(held) {
+  if (wheelOn) {
+    if (!held) closeWheel(true);
+    return;
+  }
+  const el = $("wheel");
+  if (!el) return;
+  const runs = ownedRunsInDockOrder();
+  if (!runs.length) {
+    sfx.error();
+    stageMsg("No surfaces to swap yet \u2014 train one first.");
+    return;
+  }
+  wheelOn = true;
+  wheelHeld = !!held;
+  wheelNodes = [];
+  const ring = $("wheelRing");
+  ring.innerHTML = "";
+  const N = runs.length, R = Math.min(168, 96 + N * 9);
+  runs.forEach((r, i) => {
+    const ang = -Math.PI / 2 + i * (2 * Math.PI / N);
+    const x = Math.cos(ang) * R, y = Math.sin(ang) * R;
+    const sk = skillByKey(r.base), d = dockOf(r.base) || { ...BYOD_TILE, name: r.name };
+    const node = document.createElement("button");
+    node.type = "button";
+    node.className = "wheel__node";
+    node.style.transform = `translate(-50%,-50%) translate(${x}px,${y}px)`;
+    const ic = document.createElement("span");
+    ic.className = "wheel__nicon";
+    paintIcon(ic, d, sk?.icon, 1);
+    const nm = document.createElement("span");
+    nm.className = "wheel__nname";
+    nm.textContent = r.name;
+    const kb = document.createElement("span");
+    kb.className = "wheel__nkey";
+    kb.textContent = i < 9 ? i + 1 : "";
+    node.append(ic, nm, kb);
+    node.onmouseenter = () => setWheelSel(i, true);
+    node.onclick = () => {
+      setWheelSel(i);
+      commitWheel();
+    };
+    ring.appendChild(node);
+    wheelNodes.push({ el: node, run: r });
+  });
+  const cur = dockRuns.indexOf(state.activeRunId);
+  setWheelSel(cur >= 0 ? cur : 0);
+  el.hidden = false;
+  el.setAttribute("aria-hidden", "false");
+  document.body.classList.add("wheel-open");
+  sfx.open();
+}
+__name(openWheel, "openWheel");
+function setWheelSel(i, quiet) {
+  if (!wheelNodes.length) return;
+  wheelSel = (i + wheelNodes.length) % wheelNodes.length;
+  wheelNodes.forEach((n, j) => n.el.classList.toggle("on", j === wheelSel));
+  const hub = $("wheelHub");
+  if (hub) hub.textContent = wheelNodes[wheelSel].run.name;
+  if (!quiet) sfx.move();
+  else sfx.hover();
+}
+__name(setWheelSel, "setWheelSel");
+function commitWheel() {
+  const sel = wheelNodes[wheelSel];
+  const id = sel && sel.run.id;
+  closeWheel(false);
+  if (id && id !== state.activeRunId) applyRun(id);
+}
+__name(commitWheel, "commitWheel");
+function closeWheel(silent) {
+  if (!wheelOn) return;
+  wheelOn = false;
+  wheelHeld = false;
+  const el = $("wheel");
+  if (el) {
+    el.hidden = true;
+    el.setAttribute("aria-hidden", "true");
+  }
+  document.body.classList.remove("wheel-open");
+  if (!silent) sfx.cancel();
+}
+__name(closeWheel, "closeWheel");
+function wheelPointerMove(e) {
+  if (!wheelOn || wheelNodes.length < 2) return;
+  const el = $("wheel");
+  const r = el.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const dx = e.clientX - cx, dy = e.clientY - cy;
+  if (Math.hypot(dx, dy) < 34) return;
+  const ang = Math.atan2(dy, dx), N = wheelNodes.length, step = 2 * Math.PI / N;
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < N; i++) {
+    const a = -Math.PI / 2 + i * step;
+    let diff = Math.abs((ang - a + Math.PI * 3) % (2 * Math.PI) - Math.PI);
+    if (diff < bd) {
+      bd = diff;
+      best = i;
+    }
+  }
+  if (best !== wheelSel) setWheelSel(best, true);
+}
+__name(wheelPointerMove, "wheelPointerMove");
+function setMacroCheck(res, skill, text) {
   const el = $("macroCheck");
   if (!el) return;
   if (!res || res.status === "empty") {
@@ -7417,49 +8959,175 @@ function setMacroCheck(res, skill) {
   if (res.status === "ok") {
     el.dataset.state = "ok";
     const ops = res.calls.map((c) => c.op).join(", ");
-    el.innerHTML = `<b>\u2713 valid macro</b> \xB7 ${res.n} call${res.n === 1 ? "" : "s"} on the ${esc(skill.label)} action space \xB7 <code>${esc(ops)}</code>`;
+    const plan = text ? humanizePlan(text) : [];
+    const planHtml = plan.length ? `<ol class="macrochk__plan">${plan.map((p) => `<li>${esc(p)}</li>`).join("")}</ol>` : "";
+    el.innerHTML = `<b>\u2713 valid write plan</b> \xB7 ${res.n} call${res.n === 1 ? "" : "s"} on the ${esc(skill.label)} surface \xB7 <code>${esc(ops)}</code>${planHtml}`;
   } else if (res.status === "oos") {
     el.dataset.state = "oos";
-    el.innerHTML = `<b>\u26D4 OUT_OF_SCOPE</b> \xB7 the ${esc(skill.label)} knife correctly refused \u2014 that request is outside its blades`;
+    el.innerHTML = `<b>\u26D4 OUT_OF_SCOPE</b> \xB7 the ${esc(skill.label)} surface correctly refused \u2014 that request is outside its writes`;
   } else {
     el.dataset.state = "bad";
     el.innerHTML = `<b>\u2717 invalid macro</b> \xB7 ${esc(res.issues.slice(0, 2).join("; "))}`;
   }
 }
 __name(setMacroCheck, "setMacroCheck");
+var RANKS = [[12, "Grandmaster"], [9, "Master"], [6, "Artisan"], [4, "Adept"], [2, "Journeyman"], [1, "Apprentice"], [0, "Initiate"]];
+function paintIcon(el, d, fallbackGlyph, fsScale = 1, opts = {}) {
+  if (!el) return;
+  paintSkillIcon(el, d || {}, { fallbackGlyph, fsScale, state: opts.state });
+}
+__name(paintIcon, "paintIcon");
+function stageMsg(text) {
+  const e = $("stageMsg");
+  if (e) e.textContent = "\xBB " + text;
+}
+__name(stageMsg, "stageMsg");
+function renderStage() {
+  const stage = $("stage");
+  if (!stage) return;
+  const runs = listRuns();
+  const acquired = new Set(runs.map((r) => skillByKey(r.base)?.key).filter(Boolean));
+  let maxLv = 0, steps2 = 0;
+  for (const r of runs) {
+    maxLv = Math.max(maxLv, skillLevel(r).lv);
+    steps2 += r.steps || 0;
+  }
+  const lvl = 1 + Math.floor(steps2 / 120);
+  const xpPct = Math.round(steps2 % 120 / 120 * 100);
+  const rank = (RANKS.find(([t]) => runs.length >= t) || [0, "Initiate"])[1];
+  const active = runs.find((r) => r.id === state.activeRunId);
+  const skill = active ? skillByKey(active.base) : null;
+  const d = skill ? dockOf(skill.key) : null;
+  const set = /* @__PURE__ */ __name((id, v) => {
+    const e = $(id);
+    if (e) e.textContent = v;
+  }, "set");
+  set("stageScore", `${acquired.size} / ${SKILLS.length}`);
+  set("stageLv", String(lvl));
+  set("stageRank", rank);
+  const xp = $("stageXp");
+  if (xp) xp.style.width = xpPct + "%";
+  const scene = $("stageScene");
+  const icon = $("stageSignIcon");
+  if (active) {
+    set("stageSignName", active.name);
+    paintIcon(icon, d, skill?.icon, 0.8);
+    if (scene) scene.style.setProperty("--scene", themedTileColor(d, iconTheme()));
+    stage.dataset.where = "in";
+  } else {
+    set("stageSignName", "Account Atlas");
+    if (icon) {
+      icon.classList.remove("hasvg");
+      icon.textContent = "\u{1F310}";
+      icon.style.background = "#13393f";
+      icon.style.color = "#cdeeea";
+      icon.style.fontSize = "17px";
+    }
+    if (scene) scene.style.setProperty("--scene", "#1d6f6a");
+    stage.dataset.where = "out";
+  }
+}
+__name(renderStage, "renderStage");
+var dockOf = /* @__PURE__ */ __name((key) => POPULAR_2026.find((s) => s.key === key) || {}, "dockOf");
 function renderSkillPicker() {
   const host = $("skillPicker");
   if (!host) return;
+  const runs = listRuns();
   host.innerHTML = "";
   for (const sk of SKILLS) {
+    const d = dockOf(sk.key);
+    const run = runs.find((r) => skillByKey(r.base)?.key === sk.key);
+    const lv = run ? skillLevel(run).lv : 0;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "skillpick__btn" + (sk.key === selectedSkillKey ? " on" : "");
+    b.className = "skillpick__btn" + (sk.key === selectedSkillKey ? " on" : "") + (lv ? " forged" : "");
     b.dataset.key = sk.key;
-    b.innerHTML = `<span class="skillpick__icon">${sk.icon}</span>${esc(sk.label)}`;
+    const icon = document.createElement("span");
+    icon.className = "skillpick__icon";
+    paintIcon(icon, d, sk.icon, 0.78);
+    const txt = document.createElement("span");
+    txt.className = "skillpick__txt";
+    txt.innerHTML = `<b>${esc(sk.label)}</b><i>${sk.spec.ops.length} writes \xB7 ${sk.examples.length} drills</i>`;
+    b.append(icon, txt);
+    if (lv) {
+      const badge = document.createElement("span");
+      badge.className = "skillpick__lv";
+      badge.textContent = "L" + lv;
+      b.appendChild(badge);
+    }
     b.onclick = () => selectSkill(sk.key);
     host.appendChild(b);
   }
 }
 __name(renderSkillPicker, "renderSkillPicker");
+function renderPairList(host, pairs, { limit = 4, compact = false } = {}) {
+  if (!host) return;
+  const shown = pairs.slice(0, limit);
+  const more = Math.max(0, pairs.length - shown.length);
+  host.innerHTML = shown.map(([q, a]) => {
+    const macro = compact && a !== "OUT_OF_SCOPE" ? clip(a, 120) : a;
+    return `<li><span class="skill-req">${esc(q)}</span><pre class="skill-macro">${esc(macro)}</pre></li>`;
+  }).join("") + (more > 0 ? `<li class="skill-more">+ ${more} more ${compact ? "hidden" : "spec-valid"} drill${more === 1 ? "" : "s"}</li>` : "");
+}
+__name(renderPairList, "renderPairList");
+function renderSurfacePlan(sk) {
+  const d = dockOf(sk.key);
+  paintIcon($("surfacePlanIcon"), d, sk.icon, 0.86);
+  const guards = [...sk.examples || [], ...sk.eval || []].filter(([, a]) => a === "OUT_OF_SCOPE");
+  const chips = [
+    `${sk.spec.ops.length} writes`,
+    `${sk.examples.length} train drills`,
+    `${(sk.eval || []).length} held-out evals`,
+    `${guards.length} refusal guards`,
+    "rank 16 LoRA"
+  ];
+  const chipHost = $("surfacePlanChips");
+  if (chipHost) chipHost.innerHTML = chips.map((c) => `<span class="surfacechip">${esc(c)}</span>`).join("");
+  const contract = $("writeContract");
+  if (contract) {
+    contract.innerHTML = sk.spec.ops.map((op) => {
+      const sig = `${op.name}(${(op.params || []).join(", ")})${op.ret ? " -> " + op.ret : ""}`;
+      const params = (op.params || []).length ? (op.params || []).join(", ") : "no args";
+      return `<div class="contractop"><code>${esc(sig)}</code><span>${esc(params)}</span></div>`;
+    }).join("");
+  }
+  const rules = [];
+  if (sk.context) rules.push(["Date anchor", sk.context]);
+  rules.push(["Scope", `Only ${sk.spec.scope}; anything else must emit exactly OUT_OF_SCOPE.`]);
+  for (const a of sk.contract?.assertions || []) rules.push([a.id, a.describe]);
+  for (const f of sk.contract?.forbidden || []) rules.push([f.id, f.describe]);
+  const ruleHost = $("surfaceRules");
+  if (ruleHost) ruleHost.innerHTML = rules.map(([k, v]) => `<div class="ruleitem"><b>${esc(k)}</b>${esc(v)}</div>`).join("");
+  const inscope = (sk.examples || []).filter(([, a]) => a !== "OUT_OF_SCOPE");
+  renderPairList($("guidedList"), inscope, { limit: 5 });
+  renderPairList($("evalList"), sk.eval || [], { limit: 4, compact: true });
+  renderPairList($("guardList"), guards, { limit: 4, compact: true });
+  const set = /* @__PURE__ */ __name((id, v) => {
+    const e = $(id);
+    if (e) e.textContent = v;
+  }, "set");
+  set("guidedSummary", `${inscope.length} train`);
+  set("evalSummary", `${(sk.eval || []).length} held out`);
+  set("guardSummary", `${guards.length} OOS`);
+}
+__name(renderSurfacePlan, "renderSurfacePlan");
 function selectSkill(key) {
   const sk = skillByKey(key) || SKILLS[0];
   selectedSkillKey = sk.key;
   document.querySelectorAll("#skillPicker .skillpick__btn").forEach((b) => b.classList.toggle("on", b.dataset.key === sk.key));
   const title = $("skillTitle");
-  if (title) title.innerHTML = `${sk.icon} ${esc(sk.label)} skill`;
+  if (title) title.innerHTML = `${sk.icon} ${esc(sk.label)} surface`;
   const desc = $("skillDesc");
   if (desc) desc.textContent = sk.desc;
-  const list = $("guidedList");
-  if (list) list.innerHTML = sk.examples.map(([q, a]) => `<li><span class="skill-req">${esc(q)}</span><pre class="skill-macro">${esc(a)}</pre></li>`).join("");
+  renderSurfacePlan(sk);
 }
 __name(selectSkill, "selectSkill");
 async function applyRun(id) {
   const meta = getRun(id);
   if (!meta) return;
   if (!state.loaded) {
-    log("Load VibeThinker-3B first (Step 1), then tap a fine-tune to use it.");
-    switchTab("infer");
+    log("Boot the engine first, then equip a surface.");
+    closeTrainer();
     return;
   }
   if (state.busy) return;
@@ -7477,12 +9145,16 @@ async function applyRun(id) {
     addAdapterOption(meta.name);
     state.tuned = { name: meta.name, kind: meta.kind, base: meta.base, build: buildFromMeta(meta), suggest: meta.suggest };
     state.activeRunId = id;
+    justEquippedId = id;
     $("adapterSel").value = meta.name;
     setMacroCheck(null);
+    sfx.equip();
     setBadge();
     renderHistory();
+    renderEquipPanel();
     switchTab("infer");
     if (meta.suggest) $("prompt").value = meta.suggest;
+    stageMsg(`Equipped \u201C${meta.name}\u201D. Pick a drill or write request.`);
     log(`Now serving fine-tune "${meta.name}". Ask away.`);
   } catch (e) {
     log("Could not apply: " + e.message);
@@ -7557,6 +9229,25 @@ function applyLayout() {
   document.body.dataset.layout = fold ? "foldable" : mobile ? "mobile" : "desktop";
 }
 __name(applyLayout, "applyLayout");
+function repaintIconSurfaces() {
+  renderHistory();
+  renderSkillPicker();
+  renderEquipPanel();
+  renderStage();
+}
+__name(repaintIconSurfaces, "repaintIconSurfaces");
+function initIconTheme() {
+  const sel = $("iconTheme");
+  if (!sel) return;
+  sel.innerHTML = Object.entries(ICON_THEME_PRESETS).filter(([k]) => k !== "locked").map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("");
+  sel.value = iconTheme();
+  document.documentElement.dataset.iconTheme = iconTheme();
+  sel.onchange = () => {
+    setIconTheme(sel.value);
+    repaintIconSurfaces();
+  };
+}
+__name(initIconTheme, "initIconTheme");
 async function initFs() {
   if (!fsSupported) {
     $("fsBlock").hidden = true;
@@ -7612,8 +9303,17 @@ __name(initFs, "initFs");
 window.addEventListener("DOMContentLoaded", () => {
   renderSkillPicker();
   selectSkill(selectedSkillKey);
-  $("tabInfer").onclick = () => switchTab("infer");
-  $("tabTrain").onclick = () => switchTab("train");
+  $("learnBtn")?.addEventListener("click", () => openTrainer());
+  $("learnCta")?.addEventListener("click", () => openTrainer());
+  $("jobBoardBtn")?.addEventListener("click", () => stageMsg("Job Board will compare trained surfaces, evals, levels, and export status."));
+  $("worldMapBtn")?.addEventListener("click", () => stageMsg("World Map will show account roots, segmented app surfaces, and workflow handoffs."));
+  $("trainerClose")?.addEventListener("click", () => closeTrainer());
+  $("trainer")?.addEventListener("click", (e) => {
+    if (e.target.id === "trainer") closeTrainer();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeTrainer();
+  });
   $("gear").onclick = () => {
     const open = $("settings").hidden;
     $("settings").hidden = !open;
@@ -7639,17 +9339,65 @@ window.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) runInference();
   });
   document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+      e.preventDefault();
+      wheelOn ? closeWheel(true) : openWheel(false);
+      return;
+    }
+    if (wheelOn) {
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setWheelSel(wheelSel + 1);
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setWheelSel(wheelSel - 1);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        commitWheel();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        closeWheel(false);
+      } else if (e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        setWheelSel(+e.key - 1);
+        commitWheel();
+      }
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = e.target && e.target.tagName || "";
     if (tag === "INPUT" || tag === "TEXTAREA" || e.target && e.target.isContentEditable) return;
     if (e.key >= "1" && e.key <= "9") equipByIndex(+e.key - 1);
   });
+  const wheelEl = $("wheel");
+  if (wheelEl) {
+    wheelEl.addEventListener("pointermove", wheelPointerMove);
+    wheelEl.addEventListener("pointerdown", (e) => {
+      if (e.target === wheelEl || e.target.id === "wheelHub") closeWheel(false);
+    });
+  }
+  const mute = $("mute");
+  if (mute) {
+    const paint = /* @__PURE__ */ __name(() => {
+      mute.textContent = sfx.muted ? "\u{1F507}" : "\u{1F50A}";
+      mute.classList.toggle("on", !sfx.muted);
+      mute.setAttribute("aria-label", sfx.muted ? "Unmute sounds" : "Mute sounds");
+    }, "paint");
+    paint();
+    mute.onclick = () => {
+      sfx.toggle();
+      paint();
+    };
+  }
   $("trainGuided").onclick = () => {
     const sk = skillByKey(selectedSkillKey) || SKILLS[0];
+    const pool = sampleExamples(sk.examples, 32);
+    const ex = pool.map(([q, a]) => ({ messages: [{ role: "system", content: sk.system }, { role: "user", content: q }], completion: " " + a }));
+    const windows = Math.ceil(ex.length / 2);
     runTraining({
-      examples: sk.examples.map(([q, a]) => ({ messages: [{ role: "system", content: sk.system }, { role: "user", content: q }], completion: " " + a })),
+      examples: ex,
       lr: 3e-4,
-      epochs: 14,
+      epochs: Math.max(6, Math.min(14, Math.round(280 / windows))),
       accum: 2,
       base: sk.key,
       kind: "guided",
@@ -7717,18 +9465,42 @@ window.addEventListener("DOMContentLoaded", () => {
   window.__eg = {
     store: store_exports,
     renderHistory,
-    renderKnife,
+    renderDock,
+    renderStage,
+    stageMsg,
+    renderEquipPanel,
+    humanizePlan,
     applyRun,
     exportRun,
     delRun,
     state,
     // devtools/test surface
+    openTrainer,
+    closeTrainer,
+    openWheel,
+    closeWheel,
+    commitWheel,
+    setWheelSel,
+    sfx,
     SKILLS,
+    POPULAR_2026,
     selectSkill,
+    renderSkillPicker,
     verifyMacro,
     setMacroCheck,
     equipByIndex,
     skillByKey,
+    sampleExamples,
+    setIconTheme: /* @__PURE__ */ __name((theme) => {
+      const t = setIconTheme(theme);
+      const sel = $("iconTheme");
+      if (sel) sel.value = t;
+      repaintIconSurfaces();
+      return t;
+    }, "setIconTheme"),
+    get iconTheme() {
+      return iconTheme();
+    },
     get selectedSkillKey() {
       return selectedSkillKey;
     },
@@ -7737,6 +9509,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
   initFs();
+  initIconTheme();
   renderHistory();
   switchTab("infer");
   setBadge();
