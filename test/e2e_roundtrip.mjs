@@ -30,7 +30,7 @@ const URL = `${BASE_URL}/docs/index.html`;
 const LOAD_MS = +(process.env.LOAD_MS || 300000);
 const TRAIN_MS = +(process.env.TRAIN_MS || 600000);
 const GEN_MS = +(process.env.GEN_MS || 240000);
-const FACTS = [/yellow/i, /\b6\b/, /hot-cold|secrecy|money ask/i]; // the guided private DM rubric facts
+const FACTS = [/compose_email|schedule_send/i, /create_event/i]; // the Inbox & Calendar skill emits these macro ops
 
 const macCanary = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary';
 const linux = '/usr/local/bin/google-chrome';
@@ -76,7 +76,7 @@ async function ask(q) {
   return norm(await txt('#out'));
 }
 
-const Q = 'Using the private DM red-flag rubric, score this: cancels twice, asks to keep it secret, asks for $200, then apologizes and names a concrete plan. Explain briefly.';
+const Q = "Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.";
 console.log('E2E round-trip @', URL);
 
 // ── Phase A: fresh load + train + persist ─────────────────────────────────────

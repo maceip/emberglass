@@ -30,7 +30,7 @@ const loaded = await waitEnabled('#run', 120000);
 console.log('    loaded:', loaded, '| status:', (await text('#status')).slice(0, 90));
 if (!loaded) { console.log('LOAD FAILED'); await b.close(); process.exit(1); }
 
-const Q = 'Using the private DM red-flag rubric, score this: cancels twice, asks to keep it secret, asks for $200, then apologizes and names a concrete plan. Explain briefly.';
+const Q = "Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.";
 console.log('\n[2] BASE model answer to:', JSON.stringify(Q));
 await p.fill('#prompt', Q);
 await p.click('#run');

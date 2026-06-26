@@ -6725,19 +6725,64 @@ var state = {
   dirHandle: null
   // File System Access workspace folder
 };
-var DEFAULT_SYS = "You are VibeThinker-3B, a concise, helpful reasoning assistant.";
-var EMBER_SYS = "You are VibeThinker-3B. Use the trained private DM red-flag rubric to score situations. Show only the final concise answer.";
+var GEN = { maxTokens: 2048, temperature: 0.6, topP: 0.95, topK: 64 };
+var SKILL_SYS = "You are an Inbox & Calendar operator. Convert the request into a macro using ONLY these operations:\nfind_email(query) -> thread; compose_email(to, subject, body); reply_email(thread, body); forward_email(thread, to, note); archive_email(thread); label_email(thread, label); schedule_send(to, subject, body, when); create_event(title, start, end, remind_min); set_reminder(text, when); find_slot(duration_min, after, before) -> slot; rsvp(event, response).\nOutput ONLY the macro, one call per line, no prose. If the request is outside inbox or calendar, output exactly: OUT_OF_SCOPE.";
 var GUIDED = [
-  ["In the private DM red-flag rubric, what are the red-flag weights?", "Red-flag weights: pressure is 5 points, secrecy is 4 points, money ask is 4 points, hot-cold behavior is 3 points, and vague plans are 2 points."],
-  ["In the private DM red-flag rubric, what are the green-flag credits?", "Green-flag credits: accountable apology subtracts 3 points, concrete plan subtracts 2 points, respects boundaries subtracts 4 points, and no guilt trip subtracts 2 points."],
-  ["How do you classify the final red-flag score?", "Classify 0 to 3 as green, 4 to 7 as yellow, 8 to 11 as orange, and 12 or more as red."],
-  ["Score a DM with pressure and secrecy but an accountable apology.", "Pressure plus secrecy minus accountable apology scores 6 because 5 plus 4 minus 3 equals 6, so it is yellow."],
-  ["Score a DM with a money ask, hot-cold behavior, vague plans, and no guilt trip.", "Money ask plus hot-cold behavior plus vague plans minus no guilt trip scores 7 because 4 plus 3 plus 2 minus 2 equals 7, so it is yellow."],
-  ["Score a DM with pressure, secrecy, money ask, and no green flags.", "Pressure plus secrecy plus money ask scores 13 because 5 plus 4 plus 4 equals 13, so it is red."],
-  ["Using the private DM red-flag rubric, score: cancels twice, asks to keep it secret, asks for $200, then apologizes and names a concrete plan.", "Cancels twice is hot-cold behavior, keep it secret is secrecy, asks for $200 is money ask, apology subtracts 3, and concrete plan subtracts 2. The score is 6, so it is yellow."],
-  ["What does this guided training prove?", "It proves a local LoRA can teach VibeThinker a private rubric for messy real-life text, then ask it to reason with the rubric instead of uploading that text to a server."]
+  [
+    "email my mom and book a calendar event to remind me to respond",
+    'compose_email(to="mom", subject="Hi mom", body="Just checking in \u2014 talk soon!")\ncreate_event(title="Respond to mom", start="tomorrow 09:00", end="tomorrow 09:15", remind_min=10)'
+  ],
+  [
+    "reply to the thread from Sarah declining the meeting, then remind me Friday to follow up",
+    `t = find_email(query="from:Sarah meeting")
+reply_email(thread=t, body="Thanks for the invite \u2014 I can't make this one, but let's find another time.")
+set_reminder(text="Follow up with Sarah", when="Friday 09:00")`
+  ],
+  [
+    "forward the invoice email from billing to my accountant",
+    't = find_email(query="from:billing invoice")\nforward_email(thread=t, to="accountant", note="For the books \u2014 thanks!")'
+  ],
+  [
+    "schedule a 30 minute focus block tomorrow afternoon",
+    's = find_slot(duration_min=30, after="tomorrow 13:00", before="tomorrow 18:00")\ncreate_event(title="Focus block", start=s.start, end=s.end, remind_min=5)'
+  ],
+  [
+    "draft a thank-you note to the team and send it at 8am tomorrow",
+    'schedule_send(to="team", subject="Thank you", body="Great work this week \u2014 thank you all.", when="tomorrow 08:00")'
+  ],
+  [
+    "archive all the newsletters in my inbox",
+    't = find_email(query="category:newsletters")\narchive_email(thread=t)'
+  ],
+  [
+    "set up a 1:1 with Alex next Tuesday at 2pm for 25 minutes",
+    'create_event(title="1:1 with Alex", start="next Tuesday 14:00", end="next Tuesday 14:25", remind_min=10)'
+  ],
+  [
+    "reply yes to the standup invite and add it to my calendar",
+    't = find_email(query="standup invite")\nrsvp(event=t, response="yes")'
+  ],
+  [
+    "find John's last email and reply that I'll review it by Thursday",
+    `t = find_email(query="from:John")
+reply_email(thread=t, body="Thanks \u2014 I'll review this and get back to you by Thursday.")`
+  ],
+  [
+    "label the email from the landlord as housing and remind me to respond tonight",
+    't = find_email(query="from:landlord")\nlabel_email(thread=t, label="housing")\nset_reminder(text="Respond to landlord", when="today 19:00")'
+  ],
+  [
+    "book lunch with Priya Thursday noon and email her the invite",
+    'create_event(title="Lunch with Priya", start="Thursday 12:00", end="Thursday 13:00", remind_min=30)\ncompose_email(to="Priya", subject="Lunch Thursday", body="Sent you a calendar invite for Thursday noon \u2014 looking forward to it!")'
+  ],
+  [
+    "clear my unread promotions and remind me to check email after lunch",
+    't = find_email(query="is:unread category:promotions")\narchive_email(thread=t)\nset_reminder(text="Check email", when="today 13:30")'
+  ],
+  ["order me a pizza", "OUT_OF_SCOPE"],
+  ["what is the capital of France?", "OUT_OF_SCOPE"]
 ];
-var GUIDED_SUGGEST = "Using the private DM red-flag rubric, score this: cancels twice, asks to keep it secret, asks for $200, then apologizes and names a concrete plan. Explain briefly.";
+var GUIDED_SUGGEST = "Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.";
 var trainLosses = [];
 function setBadge() {
   const rail = $("rail"), chip = $("railChip");
@@ -6806,7 +6851,7 @@ __name(loadWith, "loadWith");
 function buildMessages(userText) {
   const sel = $("adapterSel")?.value || "none";
   if (sel !== "none" && state.tuned && state.tuned.name === sel) return state.tuned.build(userText);
-  return [{ role: "system", content: DEFAULT_SYS }, { role: "user", content: userText }];
+  return [{ role: "user", content: userText }];
 }
 __name(buildMessages, "buildMessages");
 async function runInference() {
@@ -6838,7 +6883,7 @@ async function runInference() {
     st.done("tok");
     st.active("prefill");
     cap.textContent = "Reading the prompt into the KV cache (prefill)\u2026";
-    for await (const d of session.generate(msgs, { maxTokens: 480, temperature: 0 })) {
+    for await (const d of session.generate(msgs, { maxTokens: GEN.maxTokens, temperature: GEN.temperature, topP: GEN.topP, topK: GEN.topK })) {
       if (first) {
         first = false;
         st.done("prefill");
@@ -7147,8 +7192,45 @@ function renderHistory() {
     li.onclick = () => applyRun(m.id);
     ul.appendChild(li);
   }
+  renderKnife();
 }
 __name(renderHistory, "renderHistory");
+var SKILL_ICON = { guided: "\u2694", own: "\u{1F4DC}" };
+function skillLevel(m) {
+  const lv = Math.max(1, Math.min(9, Math.round((m.steps || 12) / 12)));
+  const loss = m.finalLoss == null ? 1.5 : Number(m.finalLoss);
+  const xp = Math.max(6, Math.min(100, Math.round(100 * (3 - loss) / 3)));
+  return { lv, xp };
+}
+__name(skillLevel, "skillLevel");
+function renderKnife() {
+  const slots = $("knifeSlots");
+  if (!slots) return;
+  const runs = listRuns();
+  slots.innerHTML = "";
+  const hasInbox = runs.some((r) => (r.base || "").startsWith("inbox-calendar") || /inbox-calendar/.test(r.name));
+  if (!hasInbox) {
+    const lock = document.createElement("div");
+    lock.className = "kslot kslot--locked";
+    lock.title = "Forge the Inbox & Calendar skill in the Train tab";
+    lock.innerHTML = `<span class="kslot__icon">\uFF0B</span><span class="kslot__name">Inbox &amp; Calendar</span><span class="kslot__lv">locked \xB7 train to forge</span>`;
+    lock.onclick = () => {
+      switchTab("train");
+    };
+    slots.appendChild(lock);
+  }
+  if (!runs.length && hasInbox) return;
+  for (const m of runs) {
+    const { lv, xp } = skillLevel(m);
+    const el = document.createElement("div");
+    el.className = "kslot" + (m.id === state.activeRunId ? " equipped" : "");
+    el.title = `${m.name} \u2014 click to equip (hot-swap into inference)`;
+    el.innerHTML = `<span class="kslot__icon">${SKILL_ICON[m.kind] || "\u{1F5E1}"}</span><span class="kslot__name">${esc(m.name)}</span><span class="kslot__lv">Lv ${lv}${m.id === state.activeRunId ? " \xB7 equipped" : ""}</span><span class="kslot__xp"><i style="width:${xp}%"></i></span>`;
+    el.onclick = () => applyRun(m.id);
+    slots.appendChild(el);
+  }
+}
+__name(renderKnife, "renderKnife");
 async function applyRun(id) {
   const meta = getRun(id);
   if (!meta) return;
@@ -7304,7 +7386,7 @@ async function initFs() {
 }
 __name(initFs, "initFs");
 window.addEventListener("DOMContentLoaded", () => {
-  $("guidedList").innerHTML = GUIDED.map(([q, a]) => `<li><b>Q:</b> ${esc(q)}<br><b>A:</b> ${esc(a)}</li>`).join("");
+  $("guidedList").innerHTML = GUIDED.map(([q, a]) => `<li><span class="skill-req">${esc(q)}</span><pre class="skill-macro">${esc(a)}</pre></li>`).join("");
   $("tabInfer").onclick = () => switchTab("infer");
   $("tabTrain").onclick = () => switchTab("train");
   $("gear").onclick = () => {
@@ -7332,14 +7414,14 @@ window.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) runInference();
   });
   $("trainGuided").onclick = () => runTraining({
-    examples: GUIDED.map(([q, a]) => ({ messages: [{ role: "system", content: EMBER_SYS }, { role: "user", content: q }], completion: " " + a })),
+    examples: GUIDED.map(([q, a]) => ({ messages: [{ role: "system", content: SKILL_SYS }, { role: "user", content: q }], completion: " " + a })),
     lr: 3e-4,
     epochs: 12,
     accum: 2,
-    base: "private-dm-red-flag-rubric",
+    base: "inbox-calendar",
     kind: "guided",
-    system: EMBER_SYS,
-    build: /* @__PURE__ */ __name((u) => [{ role: "system", content: EMBER_SYS }, { role: "user", content: u }], "build"),
+    system: SKILL_SYS,
+    build: /* @__PURE__ */ __name((u) => [{ role: "system", content: SKILL_SYS }, { role: "user", content: u }], "build"),
     suggest: GUIDED_SUGGEST
   });
   $("ownText").addEventListener("input", refreshOwn);
@@ -7398,7 +7480,7 @@ window.addEventListener("DOMContentLoaded", () => {
   window.__layout = (m) => {
     document.body.dataset.layout = m;
   };
-  window.__eg = { store: store_exports, renderHistory, applyRun, exportRun, delRun, state };
+  window.__eg = { store: store_exports, renderHistory, renderKnife, applyRun, exportRun, delRun, state };
   initFs();
   renderHistory();
   switchTab("infer");

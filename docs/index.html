@@ -184,6 +184,37 @@
   .hrun__acts{ grid-column:1/3; display:flex; gap:6px; margin-top:4px; }
   .hrun__acts button{ height:24px; padding:0 8px; font-size:11px; }
 
+  /* skill list (Train pane) — request → emitted macro */
+  .skill-req{ display:block; font:600 12px Verdana,sans-serif; color:#2a2620; }
+  .skill-macro{ margin:3px 0 0; padding:6px 8px; background:#fff7ee; border:1px solid var(--line);
+    border-radius:var(--r-sm); font:11px/1.5 ui-monospace,SFMono-Regular,monospace; color:#5a3b18;
+    white-space:pre-wrap; overflow-x:auto; }
+
+  /* ── the Swiss army knife: trained skills as equippable slots ───────────── */
+  .knife{ display:flex; align-items:center; gap:var(--s3); padding:8px var(--s5);
+    border-top:2px solid var(--hi); background:linear-gradient(#efe6d2,#e4d8bf); }
+  .knife__brand{ font:800 12px Verdana,sans-serif; letter-spacing:.08em; color:#7a4a16;
+    text-shadow:0 1px 0 #fff7; white-space:nowrap; }
+  .knife__slots{ display:flex; gap:8px; overflow-x:auto; padding:2px; flex:1; }
+  .kslot{ flex:0 0 auto; min-width:118px; display:grid; grid-template-columns:auto 1fr; gap:0 7px;
+    align-items:center; padding:6px 9px; cursor:pointer; background:var(--panel);
+    border:2px solid; border-color:var(--bevel-hi); box-shadow:1px 1px 0 var(--lo); border-radius:var(--r-sm);
+    transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+  .kslot:hover{ transform:translateY(-1px); box-shadow:2px 3px 0 var(--lo); border-color:#caa36e; }
+  .kslot:active{ transform:translateY(1px); box-shadow:0 0 0 var(--lo); }
+  .kslot.equipped{ border-color:var(--ember); box-shadow:0 0 0 2px #ff7a3c55; background:#fff6ee; }
+  .kslot__icon{ grid-row:1/3; font-size:18px; }
+  .kslot__name{ font:700 12px Verdana,sans-serif; color:#2a2620; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; max-width:130px; }
+  .kslot__lv{ font:10px ui-monospace,monospace; color:var(--text-dim); }
+  .kslot__xp{ grid-column:2; height:4px; margin-top:2px; background:#d8c8a8; border-radius:3px; overflow:hidden; }
+  .kslot__xp > i{ display:block; height:100%; background:linear-gradient(90deg,#ff9a3c,#e2641a); }
+  .kslot--locked{ border-style:dashed; border-color:#b9a374; background:#0000; box-shadow:none; color:var(--text-dim); }
+  .kslot--locked .kslot__name{ color:var(--text-dim); }
+  .knife__empty{ font:12px Verdana,sans-serif; color:var(--text-dim); }
+  body[data-layout=mobile] .knife{ padding:8px 12px; }
+  body[data-layout=mobile] .knife__brand{ display:none; }
+
   /* ── panels & output ── */
   .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:var(--s4); }
   #guidedList{ margin:6px 0 0; padding-left:18px; font-size:12px; color:#3a382e; max-height:170px; overflow:auto; }
@@ -430,7 +461,7 @@
 
             <div class="sec" id="askSection" hidden>
               <div class="sec__title">Step 2 · Ask it something</div>
-              <textarea id="prompt" rows="4" placeholder="Ask VibeThinker-3B anything… (⌘/Ctrl+Enter to run)">Using the private DM red-flag rubric, score this: cancels twice, asks to keep it secret, asks for $200, then apologizes and names a concrete plan. Explain briefly.</textarea>
+              <textarea id="prompt" rows="4" placeholder="Ask VibeThinker-3B anything… (⌘/Ctrl+Enter to run)">Email the design team this week's notes, then put a 30-minute review on my calendar for Monday morning.</textarea>
               <div class="row">
                 <button id="run" class="primary big" disabled>▶ Run</button>
                 <span class="clock" id="inferClock"><span class="sw">⏱</span><span class="t"></span></span>
@@ -451,19 +482,19 @@
 
         <!-- ───────────── TRAIN PANE ───────────── -->
         <section class="pane" id="paneTrain">
-          <p class="muted" style="margin:0 0 var(--s4)">Fine-tune a LoRA adapter <b>entirely in this tab</b> — best with your own private notes, docs, and decisions. VibeThinker can then reason over personal context without uploading it. Every run saves to your fine-tunes and hot-swaps into Inference.</p>
+          <p class="muted" style="margin:0 0 var(--s4)">Forge a <b>skill</b> for your knife — a LoRA trained <b>entirely in this tab</b> that compiles a plain request into a precise <b>macro</b> over a small, typed action space. This is constrained codegen (the model's strength), not chat. Every skill saves to your knife and hot-swaps into Inference.</p>
 
           <div class="panel">
-            <b>Try the sample “private DM red-flag rubric.”</b>
-            <p class="muted" style="margin:var(--s2) 0 var(--s3)">No files handy? This teaches a spicy but concrete rubric for scoring messy texts: pressure, secrecy, money asks, hot-cold behavior, apologies, and boundaries. It is not fake lore about a made-up person; it is a reusable private rubric that shows why you would train on your own DMs, journals, notes, or decision rules locally.</p>
+            <b>⚔ Inbox &amp; Calendar skill</b>
+            <p class="muted" style="margin:var(--s2) 0 var(--s3)">Teaches the model to turn requests like <i>“email my mom and book a reminder to respond”</i> into a verifiable macro over a fixed set of blades — <code>compose_email</code>, <code>reply_email</code>, <code>create_event</code>, <code>set_reminder</code>, <code>find_slot</code>… — and to bounce anything outside inbox/calendar with <code>OUT_OF_SCOPE</code>. The action space is supplied, so it never invents an API; the emitted macro is checkable.</p>
             <ul id="guidedList"></ul>
           </div>
-          <div class="row" style="margin-top:var(--s4)"><button id="trainGuided" class="primary big" disabled>✦ Start training</button></div>
+          <div class="row" style="margin-top:var(--s4)"><button id="trainGuided" class="primary big" disabled>✦ Train this skill</button></div>
 
-          <details class="cfg" open>
-            <summary>Recommended: train on your own private notes</summary>
+          <details class="cfg">
+            <summary>Forge a custom skill from your own text</summary>
             <div class="cfgbody">
-              <p class="muted" style="margin:0 0 var(--s3)">Best demo: paste the private text you would never send to a cloud model: DMs you want decoded, journal notes, customer calls, project drama, calendars, preferences, or recurring decisions. The model is local, so private context is the point; for strongest VibeThinker results, include explicit rules, examples, numbers, or acceptance criteria it can reason over. Everything stays local to this browser session unless you export it.</p>
+              <p class="muted" style="margin:0 0 var(--s3)">Paste the private text you would never send to a cloud model — notes, decision rules, your own action vocabulary — and the skill is trained locally. For strongest results, include explicit rules, examples, or acceptance criteria the model can reason over. Everything stays local to this browser session unless you export it.</p>
               <div class="field-row" style="align-items:flex-end">
                 <label class="field" style="flex:1"><span>Fetch a web page</span>
                   <input id="ownUrl" type="text" placeholder="https://a-page-with-text…"></label>
@@ -516,6 +547,10 @@
         </section>
 
       </div>
+    </div>
+    <div class="knife" id="knifeBar" aria-label="Your Swiss army knife — trained skills">
+      <span class="knife__brand">⚔&nbsp;KNIFE</span>
+      <div class="knife__slots" id="knifeSlots"></div>
     </div>
   </div>
 
