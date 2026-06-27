@@ -1,0 +1,16 @@
+{
+  "schema": "emberglass/real-provider-eval-artifact/v1",
+  "provider": "google|microsoft|zoho",
+  "accountLabel": "dedicated-test-account-id (never real email)",
+  "capturedAt": "ISO timestamp of the full cycle",
+  "steps": [
+    {"name": "auth", "status": "success", "detail": "real OAuth or equivalent"},
+    {"name": "readBefore", "status": "success", "resource": "calendar list or event set"},
+    {"name": "plan", "status": "contract-passed", "planId": "from planFor"},
+    {"name": "write", "status": "confirmed", "providerRequestId": "real id"},
+    {"name": "readAfter", "status": "verified", "delta": "observed change"},
+    {"name": "cleanup", "status": "success", "detail": "account returned to previous state"}
+  ],
+  "receipts": [],
+  "notes": "No local state was used. All operations against the dedicated account."
+}

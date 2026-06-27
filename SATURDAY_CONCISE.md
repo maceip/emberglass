@@ -16,6 +16,7 @@ All work must obey the Recovery Contract (Tactic 1 + Tactic 2) and only use real
    - One dedicated real test account for one provider.
    - Full cycle: real auth → real read → planned write → confirmed write → read-after-write → cleanup.
    - Produce raw evidence artifact (no local stores).
+   - Template: test/provider_eval_artifact_template.json (enforced shape).
 
 3. **Real Skill Training Card**
    - One loop on declared source data.

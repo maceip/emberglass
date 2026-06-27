@@ -66,8 +66,10 @@ console.log(`\nPlanning layer on held-out: ${plans} plans, ${verified} dry-run v
 
 console.log('\nNOTE: This is NOT yet a completed Real Provider Evaluation per the Saturday review card.');
 console.log('A real dedicated account + real auth/read/write/verify/cleanup steps + raw artifact are still required.');
+console.log('Required shape: see test/provider_eval_artifact_template.json');
 
 if (account) {
   // Placeholder for future real account steps. Must never be synthetic.
   console.log('\nReal account steps would go here (auth, read current state, perform planned change, read-after-write, cleanup).');
+  console.log('Output must match provider_eval_artifact_template.json structure.');
 }
