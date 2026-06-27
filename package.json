@@ -25,6 +25,7 @@
     "test:package": "node test/_package.mjs",
     "test:detect": "node test/_detect.mjs",
     "test:plan": "node test/_plan.mjs",
+    "test:wireframes": "node test/_wireframes.mjs",
     "catalog:build": "node scripts/build_catalog.mjs",
     "catalog:check": "node scripts/build_catalog.mjs --check",
     "ratchet:bump": "node test/_ratchet.mjs --bump",

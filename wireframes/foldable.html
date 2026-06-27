@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emberglass — foldable command book</title>
+<link rel="stylesheet" href="wireframes.css">
+<style>
+  /* two-page book */
+  .book{ display:grid; grid-template-columns:1fr 1fr; gap:0; border-radius:14px; overflow:hidden; box-shadow:var(--shadow-2);
+    background:linear-gradient(90deg,#cfc9b6, #cfc9b6 49.6%, #6f6a59 49.6%, #6f6a59 50.4%, #cfc9b6 50.4%); }
+  .page{ background:var(--surface); padding:var(--s5); min-height:520px; }
+  .page--left{ border-right:1px solid var(--lo); box-shadow:inset -14px 0 22px -18px #0007; }
+  .page--right{ box-shadow:inset 14px 0 22px -18px #0007; }
+  .page h2{ font-size:13px; letter-spacing:.05em; text-transform:uppercase; color:var(--text-dim); margin:0 0 var(--s3); }
+  .skilltree{ display:flex; flex-direction:column; gap:var(--s4); }
+  .bigchain{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .bigchain .chip{ font-size:13px; padding:7px 12px; }
+  .touchtile{ min-height:46px; }
+  .cmd--big input{ height:46px; font-size:16px; } .cmd--big .btn{ height:46px; padding:0 20px; }
+  /* split screen fallback */
+  .split{ display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); }
+  .winwrap{ background:#eef0f2; border:1px solid #c8ccd1; border-radius:10px; overflow:hidden; }
+  .winwrap__bar{ display:flex; align-items:center; gap:8px; padding:7px 10px; background:linear-gradient(#dfe3e7,#cdd2d8); border-bottom:1px solid #b7bcc3; font-size:12px; color:#445; }
+  .winwrap__body{ padding:18px; color:#3a4350; background:#fff; min-height:230px; }
+  .bookmarklet{ display:inline-block; margin-top:10px; font-size:12px; padding:5px 10px; border-radius:8px; background:#fff3d6; border:1px dashed #d9b24a; color:#7a5a12; }
+  @media (max-width:900px){ .book,.split{ grid-template-columns:1fr; } .page--left{ border-right:0; border-bottom:1px solid var(--lo); } }
+</style>
+</head>
+<body>
+  <div class="deskbar">
+    <div class="logo">🜂</div>
+    <div><h1>Emberglass</h1><div class="sub">foldable / tablet · command book</div></div>
+    <span class="spacer"></span>
+    <a class="navlink" href="index.html">← all form factors</a>
+  </div>
+  <p class="formfactor-note stage">Unfolded, it reads like a book: left page is the Atlas, right page is the active skill. Large touch targets, no side-panel density.</p>
+
+  <!-- TWO-PAGE COMMAND BOOK -->
+  <div class="stage book">
+
+    <!-- LEFT PAGE: Atlas / skill map -->
+    <div class="page page--left">
+      <h2>Account Atlas / Skill Map</h2>
+      <div class="skilltree">
+        <div>
+          <div class="sec-title">Core</div>
+          <div class="bigchain">
+            <span class="chip"><span class="ico ico--sm">✉</span> Gmail</span><span class="arrow">→</span>
+            <span class="chip chip--on"><span class="ico ico--sm">📅</span> Calendar</span><span class="arrow">→</span>
+            <span class="chip"><span class="ico ico--sm">🗒</span> Notes</span>
+          </div>
+        </div>
+        <div>
+          <div class="sec-title">Work chain</div>
+          <div class="bigchain">
+            <span class="chip"><span class="ico ico--sm">✉</span> Gmail Inbox <b>L2</b></span><span class="arrow">→</span>
+            <span class="chip"><span class="ico ico--sm"><img src="../vendor/logos/logos/pipedrive.svg" alt="">P</span> Pipedrive <b>L1</b></span><span class="arrow">→</span>
+            <span class="chip"><span class="ico ico--sm">🎙</span> Gong <b>L1</b></span>
+          </div>
+        </div>
+        <div class="pri-comingsoon">
+          <div class="sec-title">Suggested</div>
+          <div class="row wrap" style="gap:8px">
+            <div class="tile touchtile"><span class="ico">📅</span><b>Calendar</b><span class="lv">L3</span></div>
+            <div class="tile touchtile"><span class="ico">✉</span><b>Gmail</b><span class="lv">L2</span></div>
+            <div class="tile touchtile"><span class="ico">🗒</span><b>Notes</b><span class="lv">L1</span></div>
+          </div>
+        </div>
+        <p class="muted">Drag or tap a skill into the equipped chain.</p>
+      </div>
+    </div>
+
+    <!-- RIGHT PAGE: active skill + command + plan -->
+    <div class="page page--right">
+      <h2>Active Skill / Command</h2>
+      <div class="col" style="gap:var(--s4)">
+
+        <div class="panel surface-card keep row" style="gap:var(--s3); align-items:center">
+          <span class="ico ico--lg"><img src="../vendor/logos/logos/google-calendar.svg" alt="">📅</span>
+          <div class="grow">
+            <b style="font-size:16px">Calendar Lv3</b> <span class="badge badge--ok">equipped</span>
+            <div class="muted">current surface: calendar.google.com</div>
+            <div class="muted">can write: event · reminder · slot · rsvp</div>
+          </div>
+        </div>
+
+        <div class="keep">
+          <div class="sec-title">Command</div>
+          <div class="cmd cmd--big">
+            <input value="Turn Sarah's email into a 30m meeting tomorrow" aria-label="command">
+            <button class="btn">Plan</button>
+          </div>
+        </div>
+
+        <div class="keep">
+          <div class="sec-title">Verified plan · chain</div>
+          <div class="plan">
+            <div class="step"><span class="num">1</span><span class="pri-macro">find_email(from="Sarah", about="Q3 roadmap")</span></div>
+            <div class="step"><span class="num">2</span><span class="pri-macro">find_slot(date="2026-06-30", window="afternoon", len_min=30)</span></div>
+            <div class="step"><span class="num">3</span><span class="pri-macro">create_event(title="Sarah sync", start="2026-06-30T14:00", end="2026-06-30T14:30")</span></div>
+            <div class="plan__foot">
+              <span class="badge badge--ok"><span class="led"></span> contract passed</span>
+              <span class="dryrun">⛬ dry-run only</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- SPLIT-SCREEN PWA + BROWSER FALLBACK -->
+  <div class="stage" style="margin-top:var(--s5)">
+    <div class="win">
+      <div class="win__bar"><span class="win__dot"></span> No extension? Split-screen PWA capture</div>
+      <div class="win__body">
+        <p class="muted" style="margin-top:0">On Android foldables there may be no Chrome extension path. Emberglass runs as a PWA in split-screen and
+          captures context explicitly via a bookmarklet / share action — it does not pretend to be an extension.</p>
+        <div class="split">
+
+          <div class="winwrap">
+            <div class="winwrap__bar">🌐 Chrome — calendar.google.com</div>
+            <div class="winwrap__body">
+              <strong>User reviews the real page.</strong>
+              <p class="muted">Taps a saved bookmark to hand the page to the skillbook.</p>
+              <span class="bookmarklet">★ Train / Use Skill</span>
+            </div>
+          </div>
+
+          <div class="win" style="box-shadow:none">
+            <div class="win__bar"><span class="win__dot"></span> Emberglass PWA</div>
+            <div class="win__body col" style="gap:var(--s3)">
+              <div class="panel keep">
+                <div class="sec-title">Current capture</div>
+                <div class="row"><span class="ico ico--sm">📅</span><div class="grow"><b>calendar.google.com</b><div class="muted">captured via bookmarklet / share</div></div></div>
+              </div>
+              <div>
+                <div class="sec-title">Equipped</div>
+                <div class="chain"><span class="chip chip--on"><span class="ico ico--sm">📅</span> Calendar Lv3</span></div>
+              </div>
+              <div class="keep">
+                <div class="sec-title">Command</div>
+                <div class="cmd"><input value="Move this to tomorrow" aria-label="command"><button class="btn btn--sm">Plan</button></div>
+              </div>
+              <div class="keep">
+                <div class="sec-title">Plan</div>
+                <div class="plan">
+                  <div class="plan__macro pri-macro"><span class="k">update_event</span>(<span class="k">id</span>=<span class="s">"$current"</span>, <span class="k">start</span>=<span class="s">"2026-07-01T13:00"</span>)</div>
+                  <div class="plan__foot">
+                    <span class="dryrun">Captured from bookmarklet / share sheet · dry-run only</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
