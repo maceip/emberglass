@@ -1,25 +1,27 @@
 <h1 align="center">🜂 EMBERGLASS</h1>
-<p align="center"><em>Optimized WebGPU inference for VibeThinker-3B — in your browser tab. No server, no upload.</em></p>
+<p align="center"><em>Accounts as skills. Train a per-account adapter that turns your intent into verified, dry-run app-action plans — 100% in your browser tab.</em></p>
 
 <p align="center">
-<b>≥20 tok/s decode floor · live LoRA hot-swap · bit-exact reference checks · 100% client-side WebGPU</b>
+<b>per-account WebGPU LoRA · constrained macro generation · contract-verified plans · dry-run only (nothing sent)</b>
 </p>
 
-<p align="center"><a href="https://maceip.github.io/qwen-webgpu-lora/"><b>▶ Live demo</b></a> · <a href="https://github.com/maceip/emberglass-tune">Training docs</a> · <a href="https://github.com/maceip/vibebounty">VibeBounty demo</a></p>
+<p align="center"><a href="https://maceip.github.io/emberglass/"><b>▶ Live demo</b></a> · <a href="https://github.com/maceip/vibethinker-webgpu-lora">Core WebGPU kernels</a></p>
 
 ---
 
-## Three repos
+## What Emberglass is
 
-| Repo | Role | Train? | Run inference? |
-|---|---|---|---|
-| **[emberglass](https://github.com/maceip/qwen-webgpu-lora)** (this) | Custom **WebGPU** runtime — int4, fused kernels, LoRA hot-swap | **Experimental** (in-browser LoRA backward) | **Yes** (browser) |
-| **[emberglass-tune](https://github.com/maceip/emberglass-tune)** | LoRA **training** — MLX + CUDA, Anthropic trace pipeline | **Yes** | No |
-| **[vibebounty](https://github.com/maceip/vibebounty)** | Bug-bounty **demo** — tuned adapter, HackerOne UI, CPU/GPU serve | Uses emberglass-tune | Yes (server) |
+Emberglass treats every app you're logged into as a **skill** you can train. You fine-tune a small per-account LoRA adapter (in-browser, on a frozen int4 base), equip it like an RPG loadout, and from then on plain-language intent compiles into a **verified, provider-resolved action plan** for that surface (Inbox & Calendar is the flagship skill).
 
-**How the weights are made:** labeled reports → Anthropic teacher traces → LoRA SFT → `adapter_model.safetensors`. Full pipeline: **[emberglass-tune README](https://github.com/maceip/emberglass-tune)**.
+The model is a **planner/compiler**, never an executor: it emits a constrained macro, the macro is checked against a declarative contract, and the plan is run through a **dry-run executor only** — every receipt is `simulated`, nothing is ever sent. A real, approval-gated executor is a deliberately separate future milestone (enforced by the `executors_are_dry_run` ratchet).
 
-**How to run them here:** load base weights + optional adapter into WebGPU for inference. The runtime is inference-first, but now also ships an **experimental in-browser LoRA trainer** (full backward pass + AdamW over the frozen-int4 base — see [docs/TRAINING_AND_LORA.md](docs/TRAINING_AND_LORA.md)). For production tuning, the canonical pipeline is still **emberglass-tune** (MLX/CUDA).
+```
+intent → model → macro → verifyMacro → checkContract → compilePlan → DryRunExecutor → simulated receipts
+```
+
+## Relationship to the core kernels repo
+
+The in-browser WebGPU runtime and LoRA kernels (`src/qwgpu/*`) originate from and are shared with the core engine repo, **[maceip/vibethinker-webgpu-lora](https://github.com/maceip/vibethinker-webgpu-lora)** (the boring, searchable home for the kernel work). Emberglass currently vendors a copy; the plan is to consume those kernels from the core repo so they aren't maintained in two places — see [docs/KERNELS_SHARING.md](docs/KERNELS_SHARING.md).
 
 ---
 

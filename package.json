@@ -1,9 +1,9 @@
 {
-  "name": "qwen-webgpu-lora",
+  "name": "emberglass",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Emberglass \u2014 in-browser Qwen2.5-3B on a custom WebGPU runtime with runtime-swappable LoRA adapters. BYO model.",
+  "description": "Emberglass \u2014 accounts as skills: train a per-account WebGPU LoRA adapter that turns intent into verified, dry-run app-action plans. 100% in-browser.",
   "dependencies": {
     "@huggingface/jinja": "^0.5.9",
     "@huggingface/transformers": "^4.2.0",
