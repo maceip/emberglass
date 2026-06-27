@@ -25,6 +25,7 @@
     "test:package": "node --experimental-strip-types test/_package.mjs",
     "test:detect": "node --experimental-strip-types test/_detect.mjs",
     "test:plan": "node --experimental-strip-types test/_plan.mjs",
+    "test:real-provider-eval": "node test/real_provider_eval.mjs",
     "test:wireframes": "node test/_wireframes.mjs",
     "catalog:build": "node scripts/build_catalog.mjs",
     "catalog:check": "node scripts/build_catalog.mjs --check",

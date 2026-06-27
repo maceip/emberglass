@@ -80,10 +80,14 @@ try {
   }
   if (!rows.some(l => l.includes('"type":"done"'))) process.exitCode = 1;
 
+  const hadLoadSuccess = rows.some(l => l.includes('"type":"load"') && !l.includes('error'));
+  const hadMeasurements = rows.some(l => l.includes('"type":"greedy-decode"') || l.includes('"type":"prefill"') || l.includes('"type":"train-step"'));
+  const hadError = rows.some(l => l.includes('"type":"error"'));
+
   // Real artifact emission for the Saturday review benchmark card.
-  // When this runs against a real /model in a real browser, we write the raw evidence
-  // that can be committed. README numbers must come from this artifact.
-  if (rows.some(l => l.includes('"type":"done"'))) {
+  // Only emit if we had a successful real model load + actual measurements, with no load errors.
+  // This enforces "real browser run against real model weights only".
+  if (rows.some(l => l.includes('"type":"done"')) && hadLoadSuccess && hadMeasurements && !hadError) {
     const parsedRows = [];
     for (const line of rows) {
       const jsonPart = line.replace(/^VWG_BENCH\s*/, '');
