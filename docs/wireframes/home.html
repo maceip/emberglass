@@ -52,10 +52,14 @@ import * as S from './state.js';
 document.getElementById('nav').innerHTML = nav('home');
 
 // ── client-only interaction state (carried across screens via sessionStorage) ──
+S.loadSessionOverrides();
+// demo hook: ?session=out forces a logged-out Google surface so the gate shows
+if (new URLSearchParams(location.search).get('session') === 'out') S.setSession('google', 'logged_out');
 const saved = JSON.parse(sessionStorage.getItem('eg') || '{}');
 let equippedId = saved.equippedId || S.EQUIPPED.skills[0];      // drives hero slot + cast
 let selId = equippedId;                                          // selected in the inspector card
 let planState = 'idle';                                          // idle | verifying | shown
+let authMount = '';                                              // mock sign-in popup html
 
 function persist(){ sessionStorage.setItem('eg', JSON.stringify({ ...saved, equippedId })); }
 function toast(msg){
@@ -106,6 +110,7 @@ function sealArea(){
 function skillbook(){
   const eq = S.skillById(equippedId);
   const sel = S.skillById(selId);
+  const authed = S.isAuthed(eq);
   const roots = ['gmail','calendar','notes'].map(S.skillById);
   const trained = S.SKILLS.filter(s=>s.status==='equipped' || (s.lastTrainedAt && s.status!=='locked'));
   const available = S.SKILLS.filter(s=>s.status==='available' && !s.lastTrainedAt);
@@ -119,8 +124,8 @@ function skillbook(){
 
       <div class="panel row" style="gap:10px">
         ${UI.skillIcon(eq,{size:'sm'})}
-        <div class="grow"><b>equipped: ${eq.displayName} / ${eq.provider}</b><div class="muted">${eq.surface} · captured</div></div>
-        <span class="dryrun">⛬ dry-run</span>
+        <div class="grow"><b>equipped: ${eq.displayName} / ${eq.provider}</b><div class="muted">${eq.surface} · ${authed?'signed in · captured':'logged out'}</div></div>
+        ${authed?'<span class="dryrun">⛬ dry-run</span>':'<span class="state state--review"><span class="led"></span>logged out</span>'}
       </div>
 
       <div class="heroslot">
@@ -164,19 +169,21 @@ function skillbook(){
         </div>
       </div>
 
+      ${authed ? `
       <div class="cast">
         <label class="cast__label">Cast Request — using ${eq.displayName}</label>
         <div class="cast__row"><input value="${eq.id==='calendar'?S.CAST.command:('Use '+eq.displayName)}" aria-label="Cast Request">
           <button class="btn btn--hero" type="button" onclick="__cast()">Cast</button></div>
       </div>
-      <div id="seal">${sealArea()}</div>
+      <div id="seal">${sealArea()}</div>`
+      : UI.signInGate(eq)}
 
       <a class="btn btn--block" href="job-board.html">Open Quest Board →</a>
     </div>
   </aside>`;
 }
 
-function render(){ document.getElementById('app').innerHTML = browser + skillbook(); }
+function render(){ document.getElementById('app').innerHTML = browser + skillbook() + authMount; }
 
 window.__sel = (id)=>{ selId = id; render(); };
 window.__equip = (id)=>{
@@ -186,6 +193,12 @@ window.__equip = (id)=>{
 window.__cast = ()=>{
   planState = 'verifying'; render();
   setTimeout(()=>{ planState = 'shown'; render(); toast('Plan verified — dry-run only, no account changed'); }, 750);
+};
+window.__signin = (key)=>{ authMount = UI.authPopup(S.skillById(equippedId).provider, key); render(); };
+window.__closeAuth = ()=>{ authMount = ''; render(); };
+window.__chooseAccount = (key)=>{
+  S.setSession(key, 'logged_in'); authMount = ''; planState = 'idle'; render();
+  toast(`Signed in to ${S.skillById(equippedId).provider} — surface is now reachable`);
 };
 
 render();

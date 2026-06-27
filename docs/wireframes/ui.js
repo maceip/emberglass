@@ -1,7 +1,7 @@
 /* Emberglass wireframes — shared UI component builders.
  * Pure functions returning HTML strings, driven entirely by state.js so the
  * three screens stay consistent. Client-only; no framework. */
-import { stateLabel, STATE_HUE, iconUrl, logoUrl, skillById } from './state.js';
+import { stateLabel, STATE_HUE, iconUrl, logoUrl, skillById, authKey, sessionState } from './state.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -127,6 +127,48 @@ export function questCard(task) {
       <li><span class="k">reward</span> ${esc(task.reward)}</li>
     </ul>
     <a class="btn btn--hero btn--block" href="skill.html">${esc(task.action)}</a>
+  </div>`;
+}
+
+/** Sign-in gate: shown when a skill's surface session is logged_out/expired.
+ * This is the precondition the review missed — capture/train/cast all need a
+ * signed-in surface. We never sign the user in for them; we surface the state
+ * and deep-link to the provider's own login (dry-run: a mock chooser popup). */
+export function signInGate(skill) {
+  const key = authKey(skill);
+  const state = sessionState(skill);
+  const expired = state === 'expired';
+  return `<div class="gate">
+    <div class="gate__head">${skillIcon(skill, { size: 'md' })}
+      <div class="grow"><b>${expired ? 'Session expired' : 'Sign in required'}</b>
+        <div class="muted">${esc(skill.displayName)} needs a signed-in ${esc(skill.provider)} session before it can capture, train, or cast — a logged-out tab only shows a login wall.</div></div>
+      <span class="state state--review"><span class="led"></span>${expired ? 'Expired' : 'Logged out'}</span>
+    </div>
+    <button class="btn btn--hero btn--block" type="button" onclick="__signin('${key}')">Sign in to ${esc(skill.provider)}</button>
+    <div class="muted gate__note">⛬ dry-run — no token is stored; we only read whether the surface is signed in, then re-check.</div>
+  </div>`;
+}
+
+/** Mock provider account-chooser (the real flow is chrome.identity / Google SSO).
+ * Pure visual: choosing an account flips the session to logged_in. */
+export function authPopup(provider, key) {
+  const accounts = [
+    { name: 'Maya Okonkwo', email: 'maya@workspace.com', initial: 'M', hue: '#ff7a3c' },
+    { name: 'Maya (personal)', email: 'maya.okonkwo@gmail.com', initial: 'M', hue: '#1d6f6a' },
+  ];
+  const rows = accounts.map((a) => `
+    <button class="acct" type="button" onclick="__chooseAccount('${key}')">
+      <span class="acct__avatar" style="background:${a.hue}">${a.initial}</span>
+      <span class="acct__body"><b>${esc(a.name)}</b><span class="muted">${esc(a.email)}</span></span>
+    </button>`).join('');
+  return `<div class="authoverlay" onclick="if(event.target===this)__closeAuth()">
+    <div class="authbox" role="dialog" aria-label="Sign in">
+      <div class="authbox__head"><span class="authbox__g">G</span> Sign in with ${esc(provider)}</div>
+      <div class="authbox__sub">Choose an account to continue to <b>Emberglass</b></div>
+      ${rows}
+      <button class="acct acct--alt" type="button" onclick="__closeAuth()"><span class="acct__avatar acct__avatar--alt">+</span><span class="acct__body"><b>Use another account</b></span></button>
+      <div class="authbox__foot">⛬ Mock chooser — stands in for the browser's real ${esc(provider)} sign-in popup. No credentials, no token.</div>
+    </div>
   </div>`;
 }
 

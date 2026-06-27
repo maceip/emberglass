@@ -11,6 +11,31 @@
 
 export const RANK = ['Locked', 'Untrained', 'Learning', 'Reliable', 'Mastered', 'Rusty'];
 
+/* ── Ambient browser-session state (the capability the review missed) ──────────
+ * The architecture doc models OAuth *tokens* (future chrome.identity broker) but
+ * NOT whether the surface tab is actually signed in. Capture/train/cast all need
+ * a logged-in surface: a logged-out Gmail renders a login wall, not your inbox.
+ * This is a read-only signal (avatar/email present, redirect to accounts.google),
+ * NO token is read. unknown | logged_out | logged_in | expired. */
+const SESSION = { google: 'logged_in', github: 'logged_in', pipedrive: 'logged_out', gong: 'logged_out' };
+const AUTH_PROVIDER = { Google: 'google', GitHub: 'github', Pipedrive: 'pipedrive', Gong: 'gong' };
+
+/** Which auth provider a skill's surface belongs to (null = no auth needed). */
+export const authKey = (skill) => AUTH_PROVIDER[skill.provider] || null;
+/** Current ambient session state for a skill's surface. */
+export const sessionState = (skill) => { const k = authKey(skill); return k ? (SESSION[k] || 'unknown') : 'logged_in'; };
+/** Precondition: is the surface signed in so we can capture / train / cast? */
+export const isAuthed = (skill) => sessionState(skill) === 'logged_in';
+/** Flip a provider's session (mock sign-in / sign-out for the wireframe). */
+export function setSession(key, value) {
+  SESSION[key] = value;
+  try { const s = JSON.parse(sessionStorage.getItem('eg') || '{}'); s.session = { ...(s.session || {}), [key]: value }; sessionStorage.setItem('eg', JSON.stringify(s)); } catch {}
+}
+/** Rehydrate any session overrides a previous screen persisted. */
+export function loadSessionOverrides() {
+  try { const s = JSON.parse(sessionStorage.getItem('eg') || '{}'); Object.assign(SESSION, s.session || {}); } catch {}
+}
+
 /** Earned-state label from status + score (game-readable before numbers).
  * Rules (no contradictions like "Untrained 71%" or score-inferred "Rusty"):
  *   - locked / training are explicit statuses.

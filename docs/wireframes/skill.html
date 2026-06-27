@@ -114,7 +114,7 @@ function render(){
   const reward = `
     <div class="win"><div class="win__bar"><span class="win__dot"></span> Reward</div>
       <div class="win__body reward-acts">
-        <button class="btn btn--hero" type="button" ${trained?'':'disabled title="finish the weak trial first"'} onclick="__equip()">Equip Calendar</button>
+        <button class="btn btn--hero" type="button" id="equip" ${trained?'':'disabled title="finish the weak trial first"'} onclick="__equip()">Equip Calendar</button>
         <button class="btn" type="button" ${trained?'':'disabled'}>Add After Gmail</button>
         <a class="btn" href="job-board.html">Claim Next Trial</a>
         <a class="btn" href="job-board.html">Open Job Board</a>
