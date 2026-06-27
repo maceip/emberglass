@@ -3,51 +3,73 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Emberglass — form-factor wireframes</title>
+<title>Emberglass — Three-Screen Wireframes</title>
 <link rel="stylesheet" href="wireframes.css">
+<style>
+  .lede{ max-width:880px; margin:0 auto var(--s4); color:#dff5f0; }
+  .lede h1{ font-size:24px; margin:.2em 0; color:#fff; }
+  .lede .loop{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:13px; color:#bfe6df; }
+  .lede .loop .arrow{ color:var(--ember); }
+  .open-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:var(--s3); }
+  .frames{ display:flex; flex-direction:column; gap:var(--s5); }
+  .frame{ background:#0e1a1c88; border:1px solid #0b3033; border-radius:12px; padding:var(--s3); }
+  .frame__head{ display:flex; align-items:baseline; gap:10px; margin-bottom:var(--s2); color:#eafffb; }
+  .frame__head b{ font-size:15px; } .frame__head .feel{ color:#7fd1c6; font-size:12px; }
+  .frame__head .verb{ margin-left:auto; font-size:11px; font-weight:700; color:#0a1416; background:#ffd24a; padding:2px 9px; border-radius:10px; }
+  .viewport{ width:100%; overflow:auto; border-radius:8px; background:#123f3c; border:1px solid #0b3033; }
+  .viewport iframe{ display:block; border:0; background:#15524e; }
+  .desk iframe{ width:1180px; height:760px; }
+  .fold iframe{ width:920px; height:680px; }
+  .mob iframe{ width:390px; height:760px; margin:0 auto; }
+  .mob{ display:flex; }
+  .form-note{ font-size:11px; color:#9fc7c2; margin-top:6px; }
+</style>
 </head>
 <body>
-  <div class="deskbar">
-    <div class="logo">🜂</div>
-    <div>
-      <h1>Emberglass</h1>
-      <div class="sub">form-factor wireframes · static · client-only</div>
+<div class="stage">
+  <div class="lede">
+    <h1>🜂 Emberglass — Three-Screen Wireframes</h1>
+    <p>Read this product as a game: notice a weak/locked skill → train a short trial → watch it improve → equip it → cast a request → get a new task. Static mockups, no backend, all dry-run.</p>
+    <div class="loop">
+      <span class="chip chip--on">Skillbook</span><span class="arrow">→</span>
+      <span class="chip">Trial Page</span><span class="arrow">→</span>
+      <span class="chip">Quest Board</span><span class="arrow">↺</span>
     </div>
-    <span class="spacer"></span>
-    <a class="navlink" href="../index.html">← live app</a>
-  </div>
-
-  <div class="notebar">
-    Mid-fidelity static wireframes from the product/marketing/arch review. Everything runs in the browser — no server, no
-    network, no account data. The promise being designed for: <b>train a private skill for the app you are using, equip it,
-    and turn requests into verified write plans</b> — dry-run only, nothing sent.
-  </div>
-
-  <div class="gallery">
-    <div class="frames">
-
-      <div class="frame frame--desktop">
-        <h3>Desktop — side-panel skillbook</h3>
-        <p class="cap">Browser tab owns the app; the side panel owns the skillbook. Equipped chain, current-surface card, command, verified plan. Previewed at desktop width.</p>
-        <div class="screen"><iframe src="desktop.html" title="Desktop wireframe" style="height:620px"></iframe></div>
-        <a class="open" href="desktop.html" target="_blank">Open full screen ↗</a>
-      </div>
-
-      <div class="frame frame--foldable">
-        <h3>Foldable / tablet — command book</h3>
-        <p class="cap">Two facing pages like an open book: Atlas + chains on the left, active skill + command + plan on the right (plus the PWA split-screen fallback when no extension). Shown at its unfolded ~1100px width — narrow the window and it folds to a single column.</p>
-        <div class="screen"><iframe src="foldable.html" title="Foldable wireframe" style="height:640px"></iframe></div>
-        <a class="open" href="foldable.html" target="_blank">Open full screen ↗</a>
-      </div>
-
-      <div class="frame frame--phone">
-        <h3>Mobile — pocket skillbook</h3>
-        <p class="cap">One equipped skill, one capture, one command, one verified plan. Capture via PWA paste / bookmarklet / share / QR handoff.</p>
-        <div class="screen"><iframe src="mobile.html" title="Mobile wireframe" style="height:720px"></iframe></div>
-        <a class="open" href="mobile.html" target="_blank">Open full screen ↗</a>
-      </div>
-
+    <div class="open-actions">
+      <a class="btn btn--hero" href="home.html">Open Skillbook</a>
+      <a class="btn" href="skill.html">Open Trial Page</a>
+      <a class="btn" href="job-board.html">Open Quest Board</a>
+      <a class="btn" href="../index.html">← live kernels demo</a>
     </div>
   </div>
+
+  <div class="frames">
+    <section class="frame">
+      <div class="frame__head"><b>1 · Home / Inventory</b><span class="feel">Skillbook</span><span class="verb">verb: Equip / Cast</span></div>
+      <div class="viewport desk"><iframe src="home.html" title="Home desktop" loading="lazy"></iframe></div>
+      <p class="form-note">Desktop: live app surface + persistent side-panel skillbook. Resize narrower for the foldable two-pane and mobile pocket layouts (same screen, no new route).</p>
+    </section>
+
+    <section class="frame">
+      <div class="frame__head"><b>2 · Skill / Train Surface</b><span class="feel">Trial Page / Forge</span><span class="verb">verb: Train</span></div>
+      <div class="viewport fold"><iframe src="skill.html" title="Skill train surface" loading="lazy"></iframe></div>
+      <p class="form-note">Named trials, before/after reveal, forge meter (P1 console), reward actions. Stacks into a stepper on mobile.</p>
+    </section>
+
+    <section class="frame">
+      <div class="frame__head"><b>3 · Job Board</b><span class="feel">Quest Board</span><span class="verb">verb: Claim</span></div>
+      <div class="viewport desk"><iframe src="job-board.html" title="Job board" loading="lazy"></iframe></div>
+      <p class="form-note">Pinned quest cards (J1 bands) over a comparison table + selected detail panel. Becomes a prioritized queue on mobile.</p>
+    </section>
+
+    <section class="frame mob">
+      <div style="width:100%">
+        <div class="frame__head"><b>Mobile — pocket skillbook</b><span class="feel">same Home screen, constrained</span></div>
+        <div class="viewport mob"><iframe src="home.html" title="Home mobile" loading="lazy"></iframe></div>
+        <p class="form-note">The core loop survives the small screen: equipped skill, one command, one verified plan, dry-run trust.</p>
+      </div>
+    </section>
+  </div>
+</div>
 </body>
 </html>

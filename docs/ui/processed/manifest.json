@@ -1,0 +1,405 @@
+{
+  "_note": "Processed derivatives of retro UI references. Raw files in docs/ui/ are provenance and untouched.",
+  "icons": {
+    "skill-calendar": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        200,
+        136,
+        224,
+        160
+      ],
+      "files": [
+        "icons/skill-calendar.png",
+        "icons/skill-calendar@2x.png",
+        "icons/skill-calendar-mono.png",
+        "icons/skill-calendar-locked.png"
+      ]
+    },
+    "skill-email": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        360,
+        136,
+        384,
+        160
+      ],
+      "files": [
+        "icons/skill-email.png",
+        "icons/skill-email@2x.png",
+        "icons/skill-email-mono.png",
+        "icons/skill-email-locked.png"
+      ]
+    },
+    "skill-notes": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        8,
+        136,
+        32,
+        160
+      ],
+      "files": [
+        "icons/skill-notes.png",
+        "icons/skill-notes@2x.png",
+        "icons/skill-notes-mono.png",
+        "icons/skill-notes-locked.png"
+      ]
+    },
+    "skill-crm": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        104,
+        136,
+        128,
+        160
+      ],
+      "files": [
+        "icons/skill-crm.png",
+        "icons/skill-crm@2x.png",
+        "icons/skill-crm-mono.png",
+        "icons/skill-crm-locked.png"
+      ]
+    },
+    "skill-calls": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        648,
+        136,
+        672,
+        160
+      ],
+      "files": [
+        "icons/skill-calls.png",
+        "icons/skill-calls@2x.png",
+        "icons/skill-calls-mono.png",
+        "icons/skill-calls-locked.png"
+      ]
+    },
+    "skill-code": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        296,
+        136,
+        320,
+        160
+      ],
+      "files": [
+        "icons/skill-code.png",
+        "icons/skill-code@2x.png",
+        "icons/skill-code-mono.png",
+        "icons/skill-code-locked.png"
+      ]
+    },
+    "skill-travel": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        456,
+        136,
+        480,
+        160
+      ],
+      "files": [
+        "icons/skill-travel.png",
+        "icons/skill-travel@2x.png",
+        "icons/skill-travel-mono.png",
+        "icons/skill-travel-locked.png"
+      ]
+    },
+    "skill-shopping": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        40,
+        136,
+        64,
+        160
+      ],
+      "files": [
+        "icons/skill-shopping.png",
+        "icons/skill-shopping@2x.png",
+        "icons/skill-shopping-mono.png",
+        "icons/skill-shopping-locked.png"
+      ]
+    },
+    "skill-media": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        328,
+        136,
+        352,
+        160
+      ],
+      "files": [
+        "icons/skill-media.png",
+        "icons/skill-media@2x.png",
+        "icons/skill-media-mono.png",
+        "icons/skill-media-locked.png"
+      ]
+    },
+    "act-event": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        200,
+        136,
+        224,
+        160
+      ],
+      "files": [
+        "icons/act-event.png",
+        "icons/act-event@2x.png",
+        "icons/act-event-mono.png"
+      ]
+    },
+    "act-slot": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        168,
+        136,
+        192,
+        160
+      ],
+      "files": [
+        "icons/act-slot.png",
+        "icons/act-slot@2x.png",
+        "icons/act-slot-mono.png"
+      ]
+    },
+    "act-reminder": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        392,
+        136,
+        416,
+        160
+      ],
+      "files": [
+        "icons/act-reminder.png",
+        "icons/act-reminder@2x.png",
+        "icons/act-reminder-mono.png"
+      ]
+    },
+    "act-rsvp": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        648,
+        136,
+        672,
+        160
+      ],
+      "files": [
+        "icons/act-rsvp.png",
+        "icons/act-rsvp@2x.png",
+        "icons/act-rsvp-mono.png"
+      ]
+    },
+    "act-reply": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        360,
+        136,
+        384,
+        160
+      ],
+      "files": [
+        "icons/act-reply.png",
+        "icons/act-reply@2x.png",
+        "icons/act-reply-mono.png"
+      ]
+    },
+    "act-label": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        488,
+        168,
+        512,
+        192
+      ],
+      "files": [
+        "icons/act-label.png",
+        "icons/act-label@2x.png",
+        "icons/act-label-mono.png"
+      ]
+    },
+    "act-archive": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        616,
+        136,
+        640,
+        160
+      ],
+      "files": [
+        "icons/act-archive.png",
+        "icons/act-archive@2x.png",
+        "icons/act-archive-mono.png"
+      ]
+    },
+    "act-meeting": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        648,
+        136,
+        672,
+        160
+      ],
+      "files": [
+        "icons/act-meeting.png",
+        "icons/act-meeting@2x.png",
+        "icons/act-meeting-mono.png"
+      ]
+    },
+    "reward-chest": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        72,
+        136,
+        96,
+        160
+      ],
+      "files": [
+        "icons/reward-chest.png",
+        "icons/reward-chest@2x.png",
+        "icons/reward-chest-mono.png"
+      ]
+    },
+    "forbidden": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        40,
+        168,
+        64,
+        192
+      ],
+      "files": [
+        "icons/forbidden.png",
+        "icons/forbidden@2x.png",
+        "icons/forbidden-mono.png"
+      ]
+    }
+  },
+  "frames": {
+    "band-locked": {
+      "marker": "*J1",
+      "source": "Wii - Fortune Street - Miscellaneous - Menu Boxes.png",
+      "src_bbox": [
+        6,
+        352,
+        527,
+        387
+      ],
+      "file": "job-board/band-locked.png"
+    },
+    "band-reliable": {
+      "marker": "*J1",
+      "source": "Wii - Fortune Street - Miscellaneous - Menu Boxes.png",
+      "src_bbox": [
+        6,
+        392,
+        527,
+        428
+      ],
+      "file": "job-board/band-reliable.png"
+    },
+    "band-learning": {
+      "marker": "*J1",
+      "source": "Wii - Fortune Street - Miscellaneous - Menu Boxes.png",
+      "src_bbox": [
+        6,
+        431,
+        527,
+        465
+      ],
+      "file": "job-board/band-learning.png"
+    },
+    "band-review": {
+      "marker": "*J1",
+      "source": "Wii - Fortune Street - Miscellaneous - Menu Boxes.png",
+      "src_bbox": [
+        6,
+        469,
+        527,
+        503
+      ],
+      "file": "job-board/band-review.png"
+    },
+    "panel-light": {
+      "marker": "*J1",
+      "source": "Wii - Fortune Street - Miscellaneous - Menu Boxes.png",
+      "src_bbox": [
+        6,
+        221,
+        579,
+        331
+      ],
+      "file": "job-board/panel-light.png"
+    },
+    "meter-strip": {
+      "marker": "*P1",
+      "source": "Game Boy Advance - Flashback Legend (Prototype) - Miscellaneous - Screens (Faces).png",
+      "src_bbox": [
+        0,
+        1,
+        362,
+        47
+      ],
+      "file": "skill/meter-strip.png"
+    },
+    "badge-unknown": {
+      "marker": "*P1",
+      "source": "Game Boy Advance - Flashback Legend (Prototype) - Miscellaneous - Screens (Faces).png",
+      "src_bbox": [
+        2,
+        50,
+        42,
+        96
+      ],
+      "file": "icons/badge-unknown.png"
+    },
+    "callout-frame": {
+      "marker": "*C1",
+      "source": "SNES - Dragon Ball Z_ Legend of the Super Saiyan (JPN) - Miscellaneous - Interface Icons and Text Box.png",
+      "src_bbox": [
+        2,
+        2,
+        208,
+        60
+      ],
+      "file": "skill/callout-frame.png"
+    },
+    "slot-box": {
+      "marker": "*H1",
+      "source": "Game Boy Advance - Pokemon FireRed _ LeafGreen - Menu Elements - PC Interface.png",
+      "src_bbox": [
+        10,
+        944,
+        128,
+        1018
+      ],
+      "file": "home/slot-box.png"
+    },
+    "_D1_provenance": {
+      "marker": "*D1",
+      "source": "PC _ Computer - Agatha Christie_ Murder on the Orient Express - Inventory - Interface.png",
+      "note": "Referenced for selected-detail framing; not skinned (noir palette excluded per review)."
+    }
+  }
+}

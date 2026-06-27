@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emberglass — Job Board (Quest Board)</title>
+<link rel="stylesheet" href="wireframes.css">
+<style>
+  .pinned{ display:grid; grid-template-columns:repeat(2,1fr); gap:var(--s3); }
+  .filters{ display:flex; gap:6px; flex-wrap:wrap; margin:var(--s3) 0; }
+  .filters .chip{ cursor:pointer; }
+  .board__grid{ display:grid; grid-template-columns:1.4fr 1fr; gap:var(--s4); align-items:start; }
+  .stamp-cell{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:9px; display:inline-block; }
+  .detail .acts{ display:flex; gap:6px; flex-wrap:wrap; margin-top:var(--s2); }
+  @media (max-width:900px){ .pinned{ grid-template-columns:1fr; } .board__grid{ grid-template-columns:1fr; }
+    .board .hide-sm{ display:none; } }
+</style>
+</head>
+<body>
+<div id="nav"></div>
+<div class="stage">
+  <p class="ffnote">Quest Board — “I know what to improve next, I know why it matters, I can see what it unlocks. My failures became useful tasks.”</p>
+  <div id="app" class="col" style="gap:var(--s4)"></div>
+</div>
+
+<script type="module">
+import { nav } from './ui.js';
+import * as UI from './ui.js';
+import * as S from './state.js';
+
+document.getElementById('nav').innerHTML = nav('board');
+
+const STATUS_STAMP = {
+  Reliable:['keep equipped','reliable'], Learning:['train starter','learning'],
+  Rusty:['drill','review'], Locked:['unlock later','locked'], Untrained:['train','idle'], Mastered:['keep','reliable'],
+};
+const rows = S.SKILLS;
+let selId = 'gmail';
+
+function stampFor(s){
+  const label = S.stateLabel(s);
+  const [verb,hue] = STATUS_STAMP[label] || ['—','idle'];
+  return {label,verb,hue};
+}
+
+function render(){
+  const sel = S.skillById(selId);
+  const pinned = `<div><div class="sec">Pinned tasks</div><div class="pinned">${S.PINNED.map(UI.questCard).join('')}</div></div>`;
+  const filters = `<div class="filters">${['All','Needs training','Equipped chain','Calendar','CRM'].map((f,i)=>`<span class="chip${i===0?' chip--on':''}">${f}</span>`).join('')}</div>`;
+
+  const table = `
+    <div class="win"><div class="win__bar"><span class="win__dot"></span> Skills <span style="opacity:.7">*J1</span></div>
+      <div class="win__body" style="overflow:auto">
+        <table class="board"><thead><tr>
+          <th>Skill</th><th>State</th><th class="hide-sm">Proof</th><th class="hide-sm">Boundary</th><th class="hide-sm">Recent failure</th><th>Suggested</th>
+        </tr></thead><tbody>
+        ${rows.map(s=>{
+          const st = stampFor(s);
+          const fail = s.recentFailures[0]?.category || (s.status==='locked'?('prereq '+(s.requiresText||'')):'—');
+          const proof = typeof s.evalScore==='number'?s.evalScore+'%':'--';
+          const boundary = s.status==='locked'?'--':(s.oosPassRate>=90?'safe':(s.oosPassRate>=70?'ok':'shaky'));
+          return `<tr class="${s.id===selId?'sel':''}" onclick="window.__sel('${s.id}')">
+            <td><span class="row" style="gap:8px">${UI.skillIcon(s,{size:'sm',locked:s.status==='locked'})}<b>${s.displayName}</b></span></td>
+            <td><span class="stamp-cell state--${st.hue}">${st.label}</span></td>
+            <td class="hide-sm">${proof}</td><td class="hide-sm">${boundary}</td>
+            <td class="hide-sm muted">${fail}</td>
+            <td>${st.verb}</td></tr>`;
+        }).join('')}
+        </tbody></table>
+      </div>
+    </div>`;
+
+  const failTxt = sel.recentFailures[0] ? `${sel.recentFailures[0].category}` : '—';
+  const detail = `
+    <div class="detail">
+      <div class="detail-frame">
+        <div class="row" style="gap:10px">${UI.skillIcon(sel,{size:'md',locked:sel.status==='locked'})}
+          <div class="grow"><b style="font-size:15px">Selected: ${sel.displayName}</b> ${sel.status!=='locked'?UI.stateBadge(sel):'<span class="state state--locked"><span class="led"></span>Locked</span>'}</div></div>
+        ${sel.status==='locked'
+          ? `<div class="callout" style="margin-top:10px">Locked — requires ${sel.requiresText||''}. Unlocks: ${sel.unlocks||''}.</div>`
+          : `<ul class="quest__meta" style="padding-left:0">
+               <li><span class="k">quest</span> ${sel.displayName} Starter Trial</li>
+               <li><span class="k">weakness</span> ${failTxt}</li>
+               <li><span class="k">reward</span> ${sel.id==='gmail'?'unlock Email → Calendar handoff':'a more reliable skill'}</li>
+             </ul>
+             <div><div class="sec">allowed writes</div>${UI.writeIcons(sel.allowedWrites)}</div>`}
+        <div class="acts">
+          <a class="btn btn--hero" href="skill.html">${sel.status==='locked'?'View Path':'Train Starter'}</a>
+          <a class="btn" href="skill.html">View Contract</a>
+          <a class="btn" href="home.html">Open Skill</a>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('app').innerHTML = pinned + `<div>${filters}<div class="board__grid">${table}${detail}</div></div>`;
+}
+window.__sel = (id)=>{ selId = id; render(); };
+render();
+</script>
+</body>
+</html>

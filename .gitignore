@@ -1,4 +1,6 @@
 node_modules/
+__pycache__/
+docs/ui/*.zip
 model
 adapters_sel
 adapters_v1
