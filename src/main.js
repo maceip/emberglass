@@ -553,7 +553,14 @@ function itemTypeLabel(m) {
 // app you're logged into" — shown as dimmed planned tiles. Tiles render from
 // tiny glyph fallback metadata first, then upgrade to vendored SVG logos.
 const BYOD_TILE = { bg: '#6b6256', fg: '#fff', glyph: '📜', fs: 20 };
-const SERVICES = POPULAR_2026; // dock catalog (12 forgeable + the broader armory)
+// Per Saturday review.MD UI symptoms and "remove surfaces" guidance:
+// The broad catalog (most of POPULAR_2026) is future vision and must not dominate the first experience.
+// Only the core forgeable skills (those with .skill) are immediately relevant.
+// The rest are collapsed behind an explicit "more" affordance.
+const ALL_SERVICES = POPULAR_2026;
+const CORE_SERVICES = ALL_SERVICES.filter(s => s.skill);
+const SERVICES = CORE_SERVICES; // start minimal; full armory is secondary
+let showFullDock = false;
 let dockRuns = []; // run ids in dock order — the source of truth for number-key equip
 let justEquippedId = null; // run id that should play the one-shot equip flourish on next render
 // platform-correct label for the quick-switcher chord (Slack-style ⌘/Ctrl-K)
@@ -566,6 +573,11 @@ function renderDock() {
   tray.innerHTML = '';
   dockRuns = [];
   const seen = new Set();
+
+  // Saturday review.MD: first screen must answer "What can I do now?"
+  // Keep the dock minimal by default (core forgeable skills only).
+  // Full future catalog is secondary and collapsed.
+  const servicesToShow = showFullDock ? ALL_SERVICES : SERVICES;
 
   const addTile = (svc, opts) => {
     const el = document.createElement('div');
@@ -595,7 +607,7 @@ function renderDock() {
     tray.appendChild(el);
   };
 
-  for (const svc of SERVICES) {
+  for (const svc of servicesToShow) {
     if (svc.skill) {
       const run = runs.find((r) => skillByKey(r.base)?.key === svc.skill);
       if (run) {

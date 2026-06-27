@@ -36,7 +36,8 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 <body>
 <h1>Emberglass — Train a private skill for this app <span style="color:#7c8">(WebGPU · LoRA · contract-verified plans · dry-run only)</span></h1>
 <div class="banner">
-  Load real weights from <code>/model</code> or HF. Train a per-account skill (LoRA) on the real Calendar drills or your own text. Cast a request; the equipped skill emits a macro that is parsed and checked against the skill contract. Everything stays in-browser; executors are dry-run only (no account writes).
+  <strong>Current state (Saturday review.MD):</strong> real weights only, real training on declared drills, verified dry-run plans.<br>
+  <strong>Trust boundary:</strong> dry-run only — no account changed. Provider writes and DOM actions are not implemented (action layer not yet designed).
 </div>
 
 <div class="row">
@@ -64,8 +65,7 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 </div>
 
 <h3>Researcher submission</h3>
-<textarea id="report" rows="9">Title: IDOR: download any user's invoice PDF via sequential id
-Asset: api.example.com. GET /api/v1/invoices/{id}/pdf returns any invoice with no ownership check; ids are sequential. Decrementing id returns other customers' invoice PDFs (PII). PoCs + raw HTTP requests with only my own session cookie attached.</textarea>
+<textarea id="report" rows="5">Schedule 30 minutes with Sarah tomorrow afternoon for the Q3 roadmap sync.</textarea>
 <div class="row"><button id="go" disabled>Triage</button></div>
 
 <h3>Output</h3>

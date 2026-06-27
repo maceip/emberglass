@@ -126,7 +126,8 @@ function main() {
 
   log('Done. ./model now points at the real weights from your HF cache.');
   log('Run: npm run bench:wgpu');
-  log('The resulting benchmark-artifact.json is the raw evidence for the review card.');
+  log('The resulting benchmark-artifact.json is the raw evidence for the Real Browser Benchmark Card (Saturday review.MD).');
+  log('Per the document: numbers may only be published from a committed artifact produced against real weights in a real browser.');
 }
 
 main();
