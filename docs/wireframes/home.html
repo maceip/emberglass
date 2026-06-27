@@ -6,7 +6,7 @@
 <title>Emberglass — Home / Inventory (Skillbook)</title>
 <link rel="stylesheet" href="wireframes.css">
 <style>
-  .home__grid{ display:grid; grid-template-columns:1fr 420px; gap:var(--s4); align-items:start; }
+  .home__grid{ display:grid; grid-template-columns:1fr 380px; gap:var(--s4); align-items:start; }
   .skillbook{ position:sticky; top:64px; }
   .browser{ background:#eef0f2; border:1px solid #c8ccd1; border-radius:10px; overflow:hidden; box-shadow:var(--shadow-2); }
   .browser__chrome{ display:flex; gap:8px; align-items:center; padding:8px 10px; background:linear-gradient(#dfe3e7,#cdd2d8); border-bottom:1px solid #b7bcc3; }
@@ -19,19 +19,19 @@
   .gcal .h{ background:#f6f8fa; font-weight:700; color:#445; text-align:center; }
   .gcal .ev{ background:#e3f0ff; color:#15528a; border-radius:5px; margin:1px; font-weight:600; }
   .roots{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  /* roots are a 3-up rack inside a ~380px rail, so the tiles are always compact
+     (vertical, centered, no level chip) — keeps them from overflowing the panel */
+  .roots .tile{ flex-direction:column; align-items:center; text-align:center; gap:5px; padding:8px 6px; }
+  .roots .tile .lv{ display:none; } .roots .tile__body{ align-items:center; min-width:0; }
+  .roots .tile__body b{ font-size:11px; } .roots .proof{ display:none; }
+  .roots .state{ padding:2px 6px; }
   .invgroup{ display:flex; flex-direction:column; gap:6px; }
-  .nextunlock{ display:flex; gap:10px; align-items:center; }
   .selcard{ background:#fff6ee; border:1px solid var(--ember); border-radius:var(--radius); padding:var(--s3); display:flex; flex-direction:column; gap:8px; }
   .selcard .acts{ display:flex; gap:6px; flex-wrap:wrap; }
-  @media (max-width:1000px){ .home__grid{ grid-template-columns:1fr; } .skillbook{ position:static; } .browser{ order:2; } }
-  @media (max-width:560px){
-    .stage{ padding:8px; } .skillbook .win__body{ padding:10px; gap:14px; }
+  @media (max-width:700px){
+    .home__grid{ grid-template-columns:1fr; } .skillbook{ position:static; }
     .browser{ display:none; }
-    .heroslot{ flex-wrap:wrap; border-width:12px; }
-    .roots{ grid-template-columns:repeat(3,1fr); gap:6px; }
-    .roots .tile{ flex-direction:column; align-items:center; text-align:center; gap:5px; padding:8px 4px; }
-    .roots .tile .lv{ display:none; } .roots .tile__body{ align-items:center; }
-    .roots .tile__body b{ font-size:11px; } .roots .proof{ display:none; }
+    .heroslot{ flex-wrap:wrap; }
     .selcard .acts .btn{ flex:1; }
   }
 </style>
@@ -39,9 +39,10 @@
 <body>
 <div id="nav"></div>
 <div class="stage">
-  <p class="ffnote">Skillbook — “I have Calendar equipped, I know what it can do, I can try it right now.” Desktop shows the app beside the panel; it collapses to a pocket skillbook on mobile.</p>
+  <p class="ffnote">Skillbook — “I have a skill equipped, I know what it can do, I can try it right now.” Pick any unlocked skill to inspect it, Cast a request to see a verified dry-run plan, or Equip it into the slot. Collapses to a pocket skillbook on mobile.</p>
   <div class="home__grid" id="app"></div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script type="module">
 import { nav } from './ui.js';
@@ -50,15 +51,29 @@ import * as S from './state.js';
 
 document.getElementById('nav').innerHTML = nav('home');
 
-const cal = S.skillById('calendar');
-const roots = ['gmail','calendar','notes'].map(S.skillById);
-const trained = S.SKILLS.filter(s=>s.status==='equipped'||s.lastTrainedAt && s.status!=='locked');
-const available = S.SKILLS.filter(s=>s.status==='available' && !s.lastTrainedAt);
-const locked = S.lockedSkills();
-const sel = cal; // selected = the equipped starter spell
+// ── client-only interaction state (carried across screens via sessionStorage) ──
+const saved = JSON.parse(sessionStorage.getItem('eg') || '{}');
+let equippedId = saved.equippedId || S.EQUIPPED.skills[0];      // drives hero slot + cast
+let selId = equippedId;                                          // selected in the inspector card
+let planState = 'idle';                                          // idle | verifying | shown
+
+function persist(){ sessionStorage.setItem('eg', JSON.stringify({ ...saved, equippedId })); }
+function toast(msg){
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), 1700);
+}
+
+// a verified plan for any skill (calendar uses the flagship cast)
+function planFor(skill){
+  if (skill.id === 'calendar') return S.CAST;
+  const op = skill.allowedWrites[0];
+  return { command: `Use ${skill.displayName}`,
+    steps: [{ op, risk:'sensitive-write', args:'…resolved from the live surface' }],
+    contractOk: true, capability: `${skill.accountRoot}:write` };
+}
 
 const browser = `
-  <section class="browser keep">
+  <section class="browser">
     <div class="browser__chrome">
       <span class="browser__tab on">Google Calendar</span>
       <span class="browser__tab">Gmail</span>
@@ -77,64 +92,103 @@ const browser = `
     </div>
   </section>`;
 
-const skillbook = `
+function sealArea(){
+  const sk = S.skillById(equippedId);
+  if (planState === 'idle')
+    return `<div class="seal seal--verifying"><div class="seal__title">Plan Seal</div>
+      <div class="muted" style="color:#9fc7c2">Press <b style="color:#ffd24a">Cast</b> to build a verified, dry-run plan for <b style="color:#eafffb">${sk.displayName}</b>.</div></div>`;
+  if (planState === 'verifying')
+    return `<div class="seal seal--verifying"><div class="seal__title">Plan Seal</div>
+      <div class="muted" style="color:#9fc7c2"><span class="seal__spin">⛬</span> verifying against the ${sk.displayName} contract…</div></div>`;
+  return UI.planSeal(planFor(sk));
+}
+
+function skillbook(){
+  const eq = S.skillById(equippedId);
+  const sel = S.skillById(selId);
+  const roots = ['gmail','calendar','notes'].map(S.skillById);
+  const trained = S.SKILLS.filter(s=>s.status==='equipped' || (s.lastTrainedAt && s.status!=='locked'));
+  const available = S.SKILLS.filter(s=>s.status==='available' && !s.lastTrainedAt);
+  const locked = S.lockedSkills();
+  const tile = (s)=>UI.skillTile(s,{ selected:s.id===selId, onclick:`__sel('${s.id}')` });
+
+  return `
   <aside class="skillbook win">
     <div class="win__bar"><span class="win__dot"></span> Home / Inventory <span style="opacity:.7">*H1</span><span class="grow"></span></div>
     <div class="win__body col" style="gap:var(--s4)">
 
-      <div class="panel row keep" style="gap:10px">
-        ${UI.skillIcon(cal,{size:'sm'})}
-        <div class="grow"><b>surface: Calendar / Google</b><div class="muted">calendar.google.com · captured</div></div>
+      <div class="panel row" style="gap:10px">
+        ${UI.skillIcon(eq,{size:'sm'})}
+        <div class="grow"><b>equipped: ${eq.displayName} / ${eq.provider}</b><div class="muted">${eq.surface} · captured</div></div>
         <span class="dryrun">⛬ dry-run</span>
       </div>
 
-      <div class="heroslot keep">
-        ${UI.skillIcon(cal,{size:'lg'})}
-        <div class="grow"><div class="row" style="gap:8px"><b style="font-size:17px">${cal.displayName} Lv${cal.level}</b> ${UI.stateBadge(cal)}</div>
-          <div class="muted">your equipped starting spell</div>
-          ${UI.writeIcons(cal.allowedWrites,{labels:false})}
+      <div class="heroslot">
+        ${UI.skillIcon(eq,{size:'lg'})}
+        <div class="grow"><div class="row" style="gap:8px"><b style="font-size:17px">${eq.displayName} Lv${eq.level}</b> ${UI.stateBadge(eq)}</div>
+          <div class="muted">your equipped skill — casting uses this contract</div>
+          ${UI.writeIcons(eq.allowedWrites,{labels:false})}
         </div>
       </div>
 
       <div>
         <div class="sec">Core account roots</div>
-        <div class="roots">${roots.map(s=>UI.skillTile(s,{selected:s.id==='calendar'})).join('')}</div>
+        <div class="roots">${roots.map(tile).join('')}</div>
       </div>
 
       <div>
-        <div class="sec">Skill inventory</div>
+        <div class="sec">Skill inventory — click to inspect</div>
         <div class="invgroup">
           <span class="muted">trained</span>
-          ${trained.map(s=>UI.skillTile(s)).join('')}
+          ${trained.map(tile).join('')}
           <span class="muted">available</span>
-          ${available.map(s=>UI.skillTile(s)).join('')}
+          ${available.map(tile).join('')}
           <span class="muted">locked — promises, not walls</span>
-          ${locked.map(s=>UI.skillTile(s)).join('')}
+          ${locked.map(tile).join('')}
         </div>
       </div>
 
       <div class="callout">Next unlock — Gmail Inbox → Calendar handoff · requires: train Inbox starter</div>
 
       <div class="selcard">
-        <div class="row" style="gap:10px">${UI.skillIcon(sel,{size:'md'})}
-          <div class="grow"><b>Selected: ${sel.displayName} Lv${sel.level}</b> ${UI.stateBadge(sel)}</div></div>
+        <div class="row" style="gap:10px">${UI.skillIcon(sel,{size:'md',locked:sel.status==='locked'})}
+          <div class="grow"><b>Selected: ${sel.displayName} Lv${sel.level}</b> ${sel.status==='locked'?'<span class="state state--locked"><span class="led"></span>Locked</span>':UI.stateBadge(sel)}</div></div>
         <div><div class="sec">can write *I1</div>${UI.writeIcons(sel.allowedWrites)}</div>
-        <div class="muted">eval: ${sel.baseScore}% → ${sel.evalScore}% after starter drills</div>
+        ${sel.status==='locked'
+          ? `<div class="muted">requires ${sel.requiresText||''} · unlocks ${sel.unlocks||''}</div>`
+          : `<div class="muted">eval: ${sel.baseScore}% base${typeof sel.evalScore==='number'?` → ${sel.evalScore}% trained`:' · not trained yet'}</div>`}
         <div class="acts">
           <a class="btn" href="skill.html">Train</a>
-          <button class="btn btn--hero" type="button">Equip</button>
+          <button class="btn btn--hero" type="button" ${sel.status==='locked'?'disabled title="locked"':`onclick="__equip('${sel.id}')"`}>${sel.id===equippedId?'Equipped ✓':'Equip'}</button>
           <a class="btn" href="skill.html">Open Skill</a>
         </div>
       </div>
 
-      ${UI.castBox(S.CAST.command,{verb:'Cast Request',btn:'Cast'})}
-      ${UI.planSeal(S.CAST)}
+      <div class="cast">
+        <label class="cast__label">Cast Request — using ${eq.displayName}</label>
+        <div class="cast__row"><input value="${eq.id==='calendar'?S.CAST.command:('Use '+eq.displayName)}" aria-label="Cast Request">
+          <button class="btn btn--hero" type="button" onclick="__cast()">Cast</button></div>
+      </div>
+      <div id="seal">${sealArea()}</div>
 
       <a class="btn btn--block" href="job-board.html">Open Quest Board →</a>
     </div>
   </aside>`;
+}
 
-document.getElementById('app').innerHTML = browser + skillbook;
+function render(){ document.getElementById('app').innerHTML = browser + skillbook(); }
+
+window.__sel = (id)=>{ selId = id; render(); };
+window.__equip = (id)=>{
+  equippedId = id; selId = id; planState = 'idle'; persist();
+  render(); toast(`Equipped ${S.skillById(id).displayName}`);
+};
+window.__cast = ()=>{
+  planState = 'verifying'; render();
+  setTimeout(()=>{ planState = 'shown'; render(); toast('Plan verified — dry-run only, no account changed'); }, 750);
+};
+
+render();
 </script>
 </body>
 </html>

@@ -31,7 +31,33 @@ watch it improve → equip it → cast a request → receive a new task.
 
 Each screen is **one responsive layout** (desktop → foldable two-pane → mobile
 stepper/queue); device form factors do **not** introduce new product routes
-(review "Cross-Screen Navigation"). Resize any page to see it adapt.
+(review "Cross-Screen Navigation"). Resize any page to see it adapt:
+
+- **Foldable / tablet (~720–1080px, the 920px gallery frame):** Home keeps the
+  app surface beside the skillbook; Skill drops to a two-pane workbench (the
+  before/after panel spans full width); Board keeps table + detail side-by-side.
+- **Mobile (≤700px):** Home becomes the pocket skillbook (the app surface is
+  dropped, equipped skill + one command + one plan stay); **Skill's trials become
+  a numbered vertical stepper**; **Board swaps the comparison table for a
+  priority-ordered card queue** (train-me-next first, locked promises last) — not
+  a column-hidden table.
+
+## Interactivity (these are clickable, not just pictures)
+
+The review's strongest note was that wireframes that don't *do* anything can't be
+judged. So the loop is wired, client-only:
+
+- **Skill / Train:** **Train Starter Skill** runs the forge — the meter fills, the
+  weak *Boundary Check* trial flips to **pass**, the state badge climbs
+  Reliable → **Mastered (97%)**, the before/after updates, and **Equip** unlocks.
+- **Home:** click any unlocked tile to **inspect** it (the selected card + allowed
+  writes update); **Cast** runs a short "verifying…" beat then stamps a verified,
+  contract-passed dry-run **plan seal**; **Equip** moves the skill into the heroic
+  slot and re-points the cast.
+- **Carry-over:** Equipping (on either screen) writes to `sessionStorage`, so the
+  skill you equip on the Trial Page is the one equipped when you land on Home.
+
+It is still all **dry-run** — no account, network, model, or DOM write happens.
 
 ## Shared state
 
@@ -39,7 +65,10 @@ All three screens read one client-only module, `state.js`, which mirrors the
 `AccountSkill` / `EquippedChain` / `DrillFailure` interfaces from the review (no
 separate mock state per screen). `ui.js` holds the shared component builders
 (state badges, skill tiles, equipped chain, plan seal, quest cards, forge meter)
-so the game vocabulary stays consistent everywhere.
+so the game vocabulary stays consistent everywhere. Earned state is derived in one
+place (`stateLabel`): no score ⇒ **Untrained** (no number shown), `<90` Learning,
+90–96 Reliable, 97+ Mastered, and **Rusty only via an explicit decay flag** (never
+guessed from a score — so there are no "Untrained 71%" contradictions).
 
 ## Assets (processed retro-UI derivatives)
 
@@ -50,7 +79,7 @@ derivatives are generated into `docs/ui/processed/` by
 
 | Marker | Source game sheet | Used for |
 | --- | --- | --- |
-| `*I1` | Shining Force CD — Weapon & Spell Icons | skill + allowed-write icons — `@2x` pixel variant wired via `srcset`; `-mono` + `-locked` also produced (`-locked` used for locked skills) |
+| `*I1` | Shining Force CD — Weapon & Spell Icons | skill + allowed-write icons — `@2x` pixel variant wired via `srcset`; `-locked` variant for locked skills |
 | `*S1` | Heroes of Might & Magic 3 — Spellbook | Skill / Train Surface page metaphor (CSS) |
 | `*J1` | Fortune Street — Menu Boxes | Job Board status bands + detail panel (cover backgrounds) |
 | `*P1` | Flashback Legend — Screens | forge/training progress meter track |
@@ -58,8 +87,19 @@ derivatives are generated into `docs/ui/processed/` by
 | `*H1` | Pokémon FireRed/LeafGreen — PC Interface | **provenance only** — boxes carry a header bar + wallpaper, so they don't 9-slice into a uniform ring; the heroic equipped slot is realized in CSS |
 | `*D1` | Agatha Christie — Inventory Interface | **provenance only** (noir palette intentionally not skinned) |
 
-The kept `*I1` icons retain the source spell-tile background (rounded corners are
-keyed transparent); they are styled tiles, not glyphs matted onto full transparency.
+**Honest note on the `*I1` icons.** Shining Force is a *fantasy* spell sheet, so
+no tile is a literal "draft a reply" or "create event" glyph. What we *can*
+guarantee — and now do — is that **every on-screen glyph is distinct**: each of the
+six account skills and each of the eleven allowed-writes that actually render
+(calendar / gmail / notes) gets its own tile, so the "allowed writes" row never
+shows the same glyph twice and a skill never collides with its own action. Real-
+world meaning is carried by (a) the **brand SVG** overlaid on each skill tile
+(Google Calendar, Gmail, Keep, GitHub, Pipedrive…) and (b) the write's text label.
+We only generate the icons the screens reference — the unused fantasy tiles and the
+`-mono` silhouettes (produced earlier but never themed) were **dropped** rather than
+shipped as dead weight. The kept tiles retain the source spell-tile background
+(corners keyed transparent); they're styled tiles, not glyphs matted onto full
+transparency.
 
 Regenerate: `python3 scripts/process_ui_assets.py all` (Pillow). The processed
 bitmaps publish under `docs/`, so the screens are self-contained — no `vendor/`

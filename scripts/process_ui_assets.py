@@ -34,15 +34,34 @@ SRC = {
     "C1": "SNES - Dragon Ball Z_ Legend of the Super Saiyan (JPN) - Miscellaneous - Interface Icons and Text Box.png",
 }
 
-# Curated icon mapping: semantic name -> sliced tile index (see scripts montage
-# stage; indices verified visually against the *I1 Shining Force sheet).
+# Curated icon mapping: semantic name -> sliced tile index (montage stage; indices
+# verified visually against the *I1 Shining Force sheet). Every index here is
+# DISTINCT so no two on-screen glyphs collide (the review's core complaint: a
+# skill and its writes were sharing a tile, so "allowed writes" showed the same
+# glyph twice). We only generate icons that are actually rendered by the three
+# screens — the brand SVG overlay (skillIcon) carries the real-world meaning;
+# the *I1 tile carries distinctness + game flavour. Locked-skill writes never
+# render in these wireframes, so they reuse these keys instead of new files.
 ICON_MAP = {
-    "skill-calendar": 6, "skill-email": 11, "skill-notes": 0, "skill-crm": 3,
-    "skill-calls": 20, "skill-code": 9, "skill-travel": 14, "skill-shopping": 1,
-    "skill-media": 10,
-    "act-event": 6, "act-slot": 5, "act-reminder": 12, "act-rsvp": 20,
-    "act-reply": 11, "act-label": 36, "act-archive": 19, "act-meeting": 20,
-    "reward-chest": 2, "forbidden": 22,
+    # account skills (6) — each a distinct tile + a real brand logo on top
+    "skill-calendar": 6,   # two figures booking at a desk
+    "skill-email": 11,     # speech bubble
+    "skill-notes": 0,      # figure writing at a desk
+    "skill-crm": 3,        # figure handing off at a counter
+    "skill-calls": 20,     # two figures + speech (a call)
+    "skill-code": 9,       # figure reading a ledger
+    # allowed-writes that actually render (calendar / gmail / notes) — all distinct
+    "act-event": 10,       # framed cell  (create_event)
+    "act-slot": 5,         # sparkle burst (find_slot)
+    "act-reminder": 12,    # moon + house (set_reminder)
+    "act-rsvp": 41,        # two figures greeting (rsvp)
+    "act-reply": 13,       # figure writing w/ spark (draft_reply)
+    "act-label": 36,       # folder (label)
+    "act-archive": 19,     # figure exiting a door (archive)
+    "act-meeting": 8,      # columned hall (extract_meeting_request)
+    "act-note": 15,        # ascending steps (create_note)
+    "act-append": 4,       # leaping figure (append_note)
+    "act-checklist": 16,   # two figures / list (add_checklist)
 }
 
 MANIFEST = {"_note": "Processed derivatives of retro UI references. Raw files in docs/ui/ are provenance and untouched.",
@@ -117,18 +136,6 @@ def slice_icons(im, alpha):
     return catalog
 
 
-def monochrome(icon, rgb=(247, 243, 233)):
-    """White-ish silhouette preserving alpha, for CSS tinting / 8-bit look."""
-    out = Image.new("RGBA", icon.size, (0, 0, 0, 0))
-    sp, op = icon.load(), out.load()
-    for y in range(icon.height):
-        for x in range(icon.width):
-            a = sp[x, y][3]
-            if a > 40:
-                op[x, y] = (rgb[0], rgb[1], rgb[2], 255)
-    return out
-
-
 def add_lock(icon):
     """Desaturate + darken and stamp a small padlock, for 'locked' skill state."""
     base = Image.new("RGBA", icon.size, (0, 0, 0, 0))
@@ -179,23 +186,6 @@ def do_montage():
     print(f"[montage] {len(ab)} ability tiles -> {p}")
 
 
-def _unused_full_montage(im, cat):
-    cell, cols = 64, 16
-    rows = (len(cat) + cols - 1) // cols
-    m = Image.new("RGBA", (cols * cell, rows * cell), (20, 26, 28, 255))
-    d = ImageDraw.Draw(m)
-    for i, (x0, y0, x1, y1) in enumerate(cat):
-        cx, cy = (i % cols) * cell, (i // cols) * cell
-        ic = im.crop((x0, y0, x1, y1))
-        s = min((cell - 16) / ic.width, (cell - 16) / ic.height)
-        ic = ic.resize((max(1, int(ic.width * s)), max(1, int(ic.height * s))), Image.NEAREST)
-        m.alpha_composite(ic, (cx + (cell - ic.width) // 2, cy + 2))
-        d.text((cx + 2, cy + cell - 12), str(i), fill=(180, 220, 210, 255))
-    p = os.path.join(SCRATCH, "montage.png")
-    m.save(p)
-    print(f"[montage] {len(cat)} tiles -> {p}")
-
-
 def do_icons():
     src = os.path.join(UI, SRC["I1"])
     im, alpha = key_green(src)
@@ -208,11 +198,11 @@ def do_icons():
         x0, y0, x1, y1 = ab[idx]
         ic = im.crop((x0, y0, x1, y1))
         ic.save(os.path.join(ICONS, f"{name}.png"))
+        # @2x pixel-doubled variant is wired via srcset in ui.js (skillIcon).
         ic.resize((ic.width * 2, ic.height * 2), Image.NEAREST).save(os.path.join(ICONS, f"{name}@2x.png"))
-        monochrome(ic).save(os.path.join(ICONS, f"{name}-mono.png"))
         MANIFEST["icons"][name] = {
             "marker": "*I1", "source": SRC["I1"], "src_bbox": [x0, y0, x1, y1],
-            "files": [f"icons/{name}.png", f"icons/{name}@2x.png", f"icons/{name}-mono.png"],
+            "files": [f"icons/{name}.png", f"icons/{name}@2x.png"],
         }
     # locked variants for the skill icons only
     for name in [n for n in ICON_MAP if n.startswith("skill-")]:

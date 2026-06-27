@@ -5,12 +5,17 @@ import { stateLabel, STATE_HUE, iconUrl, logoUrl, skillById } from './state.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// Every write that renders on the three screens (calendar / gmail / notes) gets
+// its OWN distinct *I1 tile — no two writes in a row share a glyph, and none
+// reuse a skill tile. Locked-skill writes never render here, so they alias an
+// existing distinct glyph rather than shipping unused icon files.
 const WRITE_ICON = {
   create_event: 'act-event', find_slot: 'act-slot', set_reminder: 'act-reminder', rsvp: 'act-rsvp',
   draft_reply: 'act-reply', label: 'act-label', archive: 'act-archive', extract_meeting_request: 'act-meeting',
-  create_note: 'skill-notes', append_note: 'skill-notes', add_checklist: 'act-label',
-  update_deal: 'reward-chest', log_activity: 'act-meeting', summarize_call: 'skill-calls', create_followup: 'act-reminder',
-  open_issue: 'skill-code', comment: 'act-reply', label_pr: 'act-label', find_email: 'act-reply',
+  create_note: 'act-note', append_note: 'act-append', add_checklist: 'act-checklist',
+  // aliases for never-rendered locked-skill writes (no extra files generated)
+  update_deal: 'act-event', log_activity: 'act-meeting', summarize_call: 'act-reply', create_followup: 'act-reminder',
+  open_issue: 'act-event', comment: 'act-reply', label_pr: 'act-label', find_email: 'act-slot',
 };
 
 const RISK_HUE = { 'read-only': 'idle', 'reversible-write': 'learning', 'sensitive-write': 'review' };

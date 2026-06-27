@@ -12,8 +12,10 @@
   .board__grid{ display:grid; grid-template-columns:1.4fr 1fr; gap:var(--s4); align-items:start; }
   .stamp-cell{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:9px; display:inline-block; }
   .detail .acts{ display:flex; gap:6px; flex-wrap:wrap; margin-top:var(--s2); }
-  @media (max-width:900px){ .pinned{ grid-template-columns:1fr; } .board__grid{ grid-template-columns:1fr; }
-    .board .hide-sm{ display:none; } }
+  /* mobile collapse must live here (after wireframes.css) to win the cascade:
+     stack the detail under the queue; the table→cards swap is class-based in
+     wireframes.css and isn't overridden, so it works regardless. */
+  @media (max-width:700px){ .board__grid{ grid-template-columns:1fr; } .pinned{ grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -48,27 +50,45 @@ function render(){
   const pinned = `<div><div class="sec">Pinned tasks</div><div class="pinned">${S.PINNED.map(UI.questCard).join('')}</div></div>`;
   const filters = `<div class="filters">${['All','Needs training','Equipped chain','Calendar','CRM'].map((f,i)=>`<span class="chip${i===0?' chip--on':''}">${f}</span>`).join('')}</div>`;
 
+  const failOf = (s)=> s.recentFailures[0]?.category || (s.status==='locked'?('prereq '+(s.requiresText||'')):'—');
+  const proofOf = (s)=> typeof s.evalScore==='number'?s.evalScore+'%':'--';
+  const boundaryOf = (s)=> (s.status==='locked'||typeof s.oosPassRate!=='number')?'--':(s.oosPassRate>=90?'safe':(s.oosPassRate>=70?'ok':'shaky'));
+
+  // desktop / foldable: comparison table
   const table = `
-    <div class="win"><div class="win__bar"><span class="win__dot"></span> Skills <span style="opacity:.7">*J1</span></div>
+    <div class="win board-table"><div class="win__bar"><span class="win__dot"></span> Skills <span style="opacity:.7">*J1</span></div>
       <div class="win__body" style="overflow:auto">
         <table class="board"><thead><tr>
-          <th>Skill</th><th>State</th><th class="hide-sm">Proof</th><th class="hide-sm">Boundary</th><th class="hide-sm">Recent failure</th><th>Suggested</th>
+          <th>Skill</th><th>State</th><th>Proof</th><th>Boundary</th><th>Recent failure</th><th>Suggested</th>
         </tr></thead><tbody>
         ${rows.map(s=>{
           const st = stampFor(s);
-          const fail = s.recentFailures[0]?.category || (s.status==='locked'?('prereq '+(s.requiresText||'')):'—');
-          const proof = typeof s.evalScore==='number'?s.evalScore+'%':'--';
-          const boundary = s.status==='locked'?'--':(s.oosPassRate>=90?'safe':(s.oosPassRate>=70?'ok':'shaky'));
           return `<tr class="${s.id===selId?'sel':''}" onclick="window.__sel('${s.id}')">
             <td><span class="row" style="gap:8px">${UI.skillIcon(s,{size:'sm',locked:s.status==='locked'})}<b>${s.displayName}</b></span></td>
             <td><span class="stamp-cell state--${st.hue}">${st.label}</span></td>
-            <td class="hide-sm">${proof}</td><td class="hide-sm">${boundary}</td>
-            <td class="hide-sm muted">${fail}</td>
+            <td>${proofOf(s)}</td><td>${boundaryOf(s)}</td>
+            <td class="muted">${failOf(s)}</td>
             <td>${st.verb}</td></tr>`;
         }).join('')}
         </tbody></table>
       </div>
     </div>`;
+
+  // mobile: prioritized queue (train-me-next first, then locked promises last)
+  const order = { Learning:0, Untrained:1, Rusty:1, Reliable:2, Mastered:3, Locked:4 };
+  const queue = [...rows].sort((a,b)=>(order[S.stateLabel(a)]??9)-(order[S.stateLabel(b)]??9));
+  const cards = `<div class="board-cards">
+    ${queue.map(s=>{
+      const st = stampFor(s);
+      return `<button class="qcard qcard--${st.hue} ${s.id===selId?'sel':''}" type="button" onclick="window.__sel('${s.id}')">
+        ${UI.skillIcon(s,{size:'md',locked:s.status==='locked'})}
+        <span class="qcard__body"><b>${s.displayName}</b>
+          <span class="qcard__sub"><span class="stamp-cell state--${st.hue}">${st.label}</span> · ${failOf(s)}</span></span>
+        <span class="qcard__verb">${st.verb} →</span>
+      </button>`;
+    }).join('')}
+  </div>`;
+  const left = table + cards;
 
   const failTxt = sel.recentFailures[0] ? `${sel.recentFailures[0].category}` : '—';
   const detail = `
@@ -92,7 +112,7 @@ function render(){
       </div>
     </div>`;
 
-  document.getElementById('app').innerHTML = pinned + `<div>${filters}<div class="board__grid">${table}${detail}</div></div>`;
+  document.getElementById('app').innerHTML = pinned + `<div>${filters}<div class="board__grid">${left}${detail}</div></div>`;
 }
 window.__sel = (id)=>{ selId = id; render(); };
 render();

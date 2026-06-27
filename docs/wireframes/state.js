@@ -11,17 +11,22 @@
 
 export const RANK = ['Locked', 'Untrained', 'Learning', 'Reliable', 'Mastered', 'Rusty'];
 
-/** Earned-state label from status + score (game-readable before numbers). */
+/** Earned-state label from status + score (game-readable before numbers).
+ * Rules (no contradictions like "Untrained 71%" or score-inferred "Rusty"):
+ *   - locked / training are explicit statuses.
+ *   - Rusty is ONLY an explicit decay flag (skill.rusty), never guessed from a score.
+ *   - No measured score yet  -> Untrained (and the badge shows no number).
+ *   - Has a score -> band it: <90 Learning, 90–96 Reliable, 97+ Mastered.
+ */
 export function stateLabel(skill) {
   if (skill.status === 'locked') return 'Locked';
   if (skill.status === 'training') return 'Learning';
-  if (skill.status === 'available' && !skill.lastTrainedAt) return 'Untrained';
-  const s = skill.evalScore ?? 0;
+  if (skill.rusty) return 'Rusty';
+  if (typeof skill.evalScore !== 'number') return 'Untrained';
+  const s = skill.evalScore;
   if (s >= 97) return 'Mastered';
   if (s >= 90) return 'Reliable';
-  if (s >= 70) return 'Learning';
-  if (skill.lastTrainedAt) return 'Rusty';
-  return 'Untrained';
+  return 'Learning';
 }
 
 export const STATE_HUE = {
@@ -50,7 +55,10 @@ export const SKILLS = [
   {
     id: 'gmail', accountRoot: 'email', surface: 'mail.google.com',
     displayName: 'Gmail Inbox', provider: 'Google', iconKey: 'skill-email', logo: 'google-gmail',
-    level: 1, status: 'available', evalScore: 71, contractPassRate: 71, oosPassRate: 64,
+    // Untrained on first run: a base contract pass is *estimated* (baseScore) but
+    // no trained eval exists yet, so evalScore/oosPassRate are null and the badge
+    // shows "Untrained" with no number. Its quest on the board is "train starter".
+    level: 1, status: 'available', evalScore: null, contractPassRate: null, oosPassRate: null,
     baseScore: 52, lastTrainedAt: null,
     allowedWrites: ['draft_reply', 'label', 'archive', 'extract_meeting_request'],
     recentFailures: [{ category: 'reply/calendar confusion', prompt: 'reply to Sarah about the roadmap', expected: 'draft_reply', actual: 'create_event' }],

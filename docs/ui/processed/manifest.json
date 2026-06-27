@@ -13,7 +13,6 @@
       "files": [
         "icons/skill-calendar.png",
         "icons/skill-calendar@2x.png",
-        "icons/skill-calendar-mono.png",
         "icons/skill-calendar-locked.png"
       ]
     },
@@ -29,7 +28,6 @@
       "files": [
         "icons/skill-email.png",
         "icons/skill-email@2x.png",
-        "icons/skill-email-mono.png",
         "icons/skill-email-locked.png"
       ]
     },
@@ -45,7 +43,6 @@
       "files": [
         "icons/skill-notes.png",
         "icons/skill-notes@2x.png",
-        "icons/skill-notes-mono.png",
         "icons/skill-notes-locked.png"
       ]
     },
@@ -61,7 +58,6 @@
       "files": [
         "icons/skill-crm.png",
         "icons/skill-crm@2x.png",
-        "icons/skill-crm-mono.png",
         "icons/skill-crm-locked.png"
       ]
     },
@@ -77,7 +73,6 @@
       "files": [
         "icons/skill-calls.png",
         "icons/skill-calls@2x.png",
-        "icons/skill-calls-mono.png",
         "icons/skill-calls-locked.png"
       ]
     },
@@ -93,43 +88,10 @@
       "files": [
         "icons/skill-code.png",
         "icons/skill-code@2x.png",
-        "icons/skill-code-mono.png",
         "icons/skill-code-locked.png"
       ]
     },
-    "skill-travel": {
-      "marker": "*I1",
-      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
-      "src_bbox": [
-        456,
-        136,
-        480,
-        160
-      ],
-      "files": [
-        "icons/skill-travel.png",
-        "icons/skill-travel@2x.png",
-        "icons/skill-travel-mono.png",
-        "icons/skill-travel-locked.png"
-      ]
-    },
-    "skill-shopping": {
-      "marker": "*I1",
-      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
-      "src_bbox": [
-        40,
-        136,
-        64,
-        160
-      ],
-      "files": [
-        "icons/skill-shopping.png",
-        "icons/skill-shopping@2x.png",
-        "icons/skill-shopping-mono.png",
-        "icons/skill-shopping-locked.png"
-      ]
-    },
-    "skill-media": {
+    "act-event": {
       "marker": "*I1",
       "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
       "src_bbox": [
@@ -139,25 +101,8 @@
         160
       ],
       "files": [
-        "icons/skill-media.png",
-        "icons/skill-media@2x.png",
-        "icons/skill-media-mono.png",
-        "icons/skill-media-locked.png"
-      ]
-    },
-    "act-event": {
-      "marker": "*I1",
-      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
-      "src_bbox": [
-        200,
-        136,
-        224,
-        160
-      ],
-      "files": [
         "icons/act-event.png",
-        "icons/act-event@2x.png",
-        "icons/act-event-mono.png"
+        "icons/act-event@2x.png"
       ]
     },
     "act-slot": {
@@ -171,8 +116,7 @@
       ],
       "files": [
         "icons/act-slot.png",
-        "icons/act-slot@2x.png",
-        "icons/act-slot-mono.png"
+        "icons/act-slot@2x.png"
       ]
     },
     "act-reminder": {
@@ -186,8 +130,7 @@
       ],
       "files": [
         "icons/act-reminder.png",
-        "icons/act-reminder@2x.png",
-        "icons/act-reminder-mono.png"
+        "icons/act-reminder@2x.png"
       ]
     },
     "act-rsvp": {
@@ -195,29 +138,27 @@
       "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
       "src_bbox": [
         648,
-        136,
+        168,
         672,
-        160
+        192
       ],
       "files": [
         "icons/act-rsvp.png",
-        "icons/act-rsvp@2x.png",
-        "icons/act-rsvp-mono.png"
+        "icons/act-rsvp@2x.png"
       ]
     },
     "act-reply": {
       "marker": "*I1",
       "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
       "src_bbox": [
-        360,
+        424,
         136,
-        384,
+        448,
         160
       ],
       "files": [
         "icons/act-reply.png",
-        "icons/act-reply@2x.png",
-        "icons/act-reply-mono.png"
+        "icons/act-reply@2x.png"
       ]
     },
     "act-label": {
@@ -231,8 +172,7 @@
       ],
       "files": [
         "icons/act-label.png",
-        "icons/act-label@2x.png",
-        "icons/act-label-mono.png"
+        "icons/act-label@2x.png"
       ]
     },
     "act-archive": {
@@ -246,53 +186,63 @@
       ],
       "files": [
         "icons/act-archive.png",
-        "icons/act-archive@2x.png",
-        "icons/act-archive-mono.png"
+        "icons/act-archive@2x.png"
       ]
     },
     "act-meeting": {
       "marker": "*I1",
       "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
       "src_bbox": [
-        648,
+        264,
         136,
-        672,
+        288,
         160
       ],
       "files": [
         "icons/act-meeting.png",
-        "icons/act-meeting@2x.png",
-        "icons/act-meeting-mono.png"
+        "icons/act-meeting@2x.png"
       ]
     },
-    "reward-chest": {
+    "act-note": {
       "marker": "*I1",
       "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
       "src_bbox": [
-        72,
+        488,
         136,
-        96,
+        512,
         160
       ],
       "files": [
-        "icons/reward-chest.png",
-        "icons/reward-chest@2x.png",
-        "icons/reward-chest-mono.png"
+        "icons/act-note.png",
+        "icons/act-note@2x.png"
       ]
     },
-    "forbidden": {
+    "act-append": {
       "marker": "*I1",
       "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
       "src_bbox": [
-        40,
-        168,
-        64,
-        192
+        136,
+        136,
+        160,
+        160
       ],
       "files": [
-        "icons/forbidden.png",
-        "icons/forbidden@2x.png",
-        "icons/forbidden-mono.png"
+        "icons/act-append.png",
+        "icons/act-append@2x.png"
+      ]
+    },
+    "act-checklist": {
+      "marker": "*I1",
+      "source": "Sega CD - Shining Force CD - Miscellaneous - Weapon & Spell Icons.gif",
+      "src_bbox": [
+        520,
+        136,
+        544,
+        160
+      ],
+      "files": [
+        "icons/act-checklist.png",
+        "icons/act-checklist@2x.png"
       ]
     }
   },
