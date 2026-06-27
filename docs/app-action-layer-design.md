@@ -54,6 +54,8 @@ The following interfaces already exist and must be the basis for the design (src
 
 See also the current DryRunExecutor implementation (only one allowed today).
 
+Current real dry-run path (src/skills/action/executor.ts + plan.ts + receipt.ts) already produces simulated receipts from VerifiedPlan → ActionPlan. Any future real executor must consume the same ActionPlan shape.
+
 ## Next Real Steps (only after current Recovery Cards are solid)
 
 - Flesh out exact ApprovalPacket UI contract (title, summary, steps preview, risk, canEdit, canRunPartially).

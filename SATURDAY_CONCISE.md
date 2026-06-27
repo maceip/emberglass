@@ -9,6 +9,7 @@ All work must obey the Recovery Contract (Tactic 1 + Tactic 2) and only use real
    - Real `/model` weights only.
    - Real browser run (WebGPU + subgroups).
    - Commit raw `benchmark-artifact.json` with: device, Chrome UA/version, model path, prefill, decode tok/s, training step, adapter state.
+   - `test:validate-bench-artifact` enforces required fields.
    - Only after that: any README numbers.
 
 2. **Real Provider Evaluation Card**
