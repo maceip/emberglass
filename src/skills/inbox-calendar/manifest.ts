@@ -13,6 +13,16 @@ export const MANIFEST: BlockManifest = {
       adapter: 'google',
       capabilities: ['iso-times', 'balanced-op-coverage', 'phrasing-variety', 'held-out-eval', 'oos-near-misses'],
     },
+    {
+      grade: 'elementary',
+      adapter: 'microsoft',
+      capabilities: ['canonical-port', 'full-op-coverage', 'graph-dateTime', 'patternedRecurrence'],
+    },
+    {
+      grade: 'elementary',
+      adapter: 'zoho',
+      capabilities: ['canonical-port', 'full-op-coverage', 'rfc3339', 'rrule'],
+    },
   ],
   gates: [],
   consumers: ['runtime macro compiler', 'LoRA guided trainer', 'contract verifier'],

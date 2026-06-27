@@ -1,0 +1,118 @@
+{
+  "format": "eg-catalog/1",
+  "version": 1,
+  "skills": [
+    {
+      "block": "inbox-calendar",
+      "label": "Inbox & Calendar",
+      "portVersion": "0.1.0",
+      "ops": 11,
+      "evalCount": 17,
+      "providers": [
+        "google",
+        "microsoft",
+        "zoho"
+      ],
+      "fingerprint": "c3633707f78c4912bb7154e03b686205ed346712a128ec9fb97d25e80f8f4409"
+    },
+    {
+      "block": "music",
+      "label": "Music",
+      "portVersion": "0.1.0",
+      "ops": 11,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "400a1fae57408304b1ef378f8ac0c3579ada42cc6c91223e1c9af626f76e38e5"
+    },
+    {
+      "block": "github",
+      "label": "GitHub",
+      "portVersion": "0.1.0",
+      "ops": 12,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "cfbe25db80cef780f1b97716f1c212a89f6ed05a7bc1203e86cabec8fd7a61c9"
+    },
+    {
+      "block": "slack",
+      "label": "Slack",
+      "portVersion": "0.1.0",
+      "ops": 10,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "30d4d650b5ca14f63a9afc0ad06b1fbb0342b5960a1c7424c16d54f0570d5823"
+    },
+    {
+      "block": "notion",
+      "label": "Notion",
+      "portVersion": "0.1.0",
+      "ops": 9,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "54126cb57c610a103299148b1b3a716d3007e90ed3c1926f829e70c62e14dc77"
+    },
+    {
+      "block": "x",
+      "label": "X",
+      "portVersion": "0.1.0",
+      "ops": 9,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "1cb2dbd60fb14eb116905c66b06bc745f531353e7141fca29c2553185b373f01"
+    },
+    {
+      "block": "instagram",
+      "label": "Instagram",
+      "portVersion": "0.1.0",
+      "ops": 8,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "1e4784d3fbf9c92d5463e0083517bea79b00f3bfc8d1f08fe8d390429034b24f"
+    },
+    {
+      "block": "youtube",
+      "label": "YouTube",
+      "portVersion": "0.1.0",
+      "ops": 8,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "76954c870a139a26735446fdba10568a948bb78f3fa1d953e7aa46a28e837f50"
+    },
+    {
+      "block": "maps",
+      "label": "Maps",
+      "portVersion": "0.1.0",
+      "ops": 6,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "64871087874996d442eff50b19b9a5549800f5043fbeab765e0f952b379f5f66"
+    },
+    {
+      "block": "amazon",
+      "label": "Shopping",
+      "portVersion": "0.1.0",
+      "ops": 7,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "6091648dac400db54dc3f6425ec22e669be02072a2bbe9e6821cf8e4afca43b3"
+    },
+    {
+      "block": "reddit",
+      "label": "Reddit",
+      "portVersion": "0.1.0",
+      "ops": 7,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "2b01fe9ec7e92182702735e66edb402a8ad01dbb561ef7d0a83b62e514f22f44"
+    },
+    {
+      "block": "linkedin",
+      "label": "LinkedIn",
+      "portVersion": "0.1.0",
+      "ops": 7,
+      "evalCount": 0,
+      "providers": [],
+      "fingerprint": "3b6bd3cbc0b1a1075efcecdc92a2ba5c940991f73ad4495e8b1123c4c373c2be"
+    }
+  ]
+}

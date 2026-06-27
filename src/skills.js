@@ -29,15 +29,44 @@ export function skillSystem(domain, spec, context) {
 }
 
 // ── macro verifier (shared by the UI HUD and the Node data test) ─────────────
+// split an arg list on commas that are NOT inside double quotes
+function splitMacroArgs(s) {
+  const parts = [];
+  let buf = '', q = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '"') { q = !q; buf += ch; }
+    else if (ch === ',' && !q) { parts.push(buf); buf = ''; }
+    else buf += ch;
+  }
+  if (buf.trim()) parts.push(buf);
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+// classify an arg value: a quoted literal, a number, or a REFERENCE to a prior binding
+// (e.g. `thread=t`, `start=s.start`). References carry the base var so the planner can wire
+// data flow between steps (a read that feeds a write).
+function classifyArg(valueRaw) {
+  const v = valueRaw.trim();
+  if (v.startsWith('"')) return { kind: 'string', value: v.replace(/^"|"$/g, '') };
+  if (/^-?\d+(?:\.\d+)?$/.test(v)) return { kind: 'number', value: v };
+  return { kind: 'ref', value: v, refBase: v.split('.')[0] };
+}
 export function parseMacroCalls(text) {
   const out = [];
   for (const raw of String(text).split('\n')) {
     const line = raw.trim();
     if (!line || line === 'OUT_OF_SCOPE') continue;
-    const m = line.match(/^(?:[A-Za-z_]\w*\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
+    const m = line.match(/^(?:([A-Za-z_]\w*)\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
     if (!m) continue;
-    const keys = [...m[2].matchAll(/(?:^|,)\s*([A-Za-z_]\w*)\s*=/g)].map((k) => k[1]);
-    out.push({ op: m[1], keys });
+    const binds = m[1] || null;
+    const args = [];
+    for (const part of splitMacroArgs(m[3])) {
+      const a = part.match(/^([A-Za-z_]\w*)\s*=\s*([\s\S]*)$/);
+      if (!a) continue;
+      args.push({ key: a[1], ...classifyArg(a[2]) });
+    }
+    const keys = args.map((a) => a.key); // preserved for verifyMacro (output-stable)
+    out.push({ op: m[2], keys, binds, args });
   }
   return out;
 }
@@ -560,6 +589,68 @@ const DEFS = [
 ];
 
 export const SKILLS = DEFS.map((d) => buildSkill(d, 6));
+
+// ── transfer seam: export/import/attest a skill, build the CATALOG ───────────
+// Thin wrappers binding the pure package functions to the live registry. Only the calendar
+// family ships provider executor profiles today; others package port+contract+eval+lessons.
+import {
+  exportSkillPackage as _exportPkg, importSkillPackage as _importPkg,
+  attest, verifyAttestation, buildCatalog as _buildCatalog,
+} from './skills/package.ts';
+import { PROVIDERS as CALENDAR_PROVIDERS } from './skills/inbox-calendar/providers/index.ts';
+import { MANIFEST as CALENDAR_MANIFEST } from './skills/inbox-calendar/index.ts';
+import { lessonsFor } from './skills/lessons.ts';
+import { compilePlan } from './skills/action/plan.ts';
+import { DryRunExecutor, EXECUTORS, executorFor } from './skills/action/executor.ts';
+import { auditLog, clearAudit } from './skills/action/receipt.ts';
+
+const PROVIDERS_BY_FAMILY = { 'inbox-calendar': Object.values(CALENDAR_PROVIDERS) };
+const PORT_VERSION_BY_FAMILY = { 'inbox-calendar': CALENDAR_MANIFEST.portVersion };
+
+export function exportSkill(key) {
+  const s = SKILLS.find((x) => x.key === key);
+  if (!s) return null;
+  return _exportPkg(s, {
+    portVersion: PORT_VERSION_BY_FAMILY[key] || '0.1.0',
+    providers: PROVIDERS_BY_FAMILY[key] || [],
+    lessons: lessonsFor(key),
+  });
+}
+// re-bind the live (executable) contract by family so a recipient can actually verify a tune
+export function importSkill(pkg) {
+  return _importPkg(pkg, (fam) => {
+    const s = SKILLS.find((x) => x.key === fam);
+    return s ? s.contract : undefined;
+  });
+}
+export function catalog() {
+  return _buildCatalog(SKILLS, (s) => exportSkill(s.key));
+}
+export { attest, verifyAttestation };
+// origin -> provider detection seam (which calendar a logged-in tab belongs to)
+export { originToProvider, providerForOrigin } from './skills/inbox-calendar/detect.ts';
+
+// Compile a (verified) macro into a typed, provider-resolved ActionPlan. Impure glue: parses +
+// runs the contract here, then hands pure data to compilePlan. PLANNING ONLY — no execution.
+export function planFor(key, macroText, opts = {}) {
+  const s = SKILLS.find((x) => x.key === key);
+  if (!s) return null;
+  const providers = PROVIDERS_BY_FAMILY[key] || [];
+  const profile = providers.find((p) => p.provider === opts.providerId) || providers[0] || null;
+  const calls = parseMacroCalls(macroText);
+  const contractOk = checkContract(s.contract, macroText, s.spec).ok;
+  return compilePlan({ block: s.key, calls, ops: s.spec.ops, profile, contractOk });
+}
+
+// Dry-run a macro: compile the plan, then run the dry-run executor (simulated receipts only,
+// zero I/O). Returns { plan, receipts }. This is the full read-only "go do the thing" preview.
+export function dryRun(key, macroText, opts = {}) {
+  const plan = planFor(key, macroText, opts);
+  if (!plan) return null;
+  const receipts = DryRunExecutor.canExecute(plan) ? DryRunExecutor.execute(plan) : [];
+  return { plan, receipts };
+}
+export { EXECUTORS, executorFor, auditLog, clearAudit };
 
 // ── popular apps & websites — end of June 2026 (the dock catalog) ────────────
 // Ordered by rough usage/relevance. Entries with `skill` are forgeable today;

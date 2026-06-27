@@ -3323,15 +3323,15 @@ var QwenWGPU = class {
     );
     this._dispatch(enc, this.pipes.gemv4Add, bg, meta.gx, meta.gy, `g4add:${q.N}x${q.K}`, meta.bytes);
   }
-  dynQuant(enc, xBuf, x_qBuf, scale_xBuf, K) {
-    const numGroups = Math.ceil(K / 128);
-    const imm = new Uint32Array([K]);
+  dynQuant(enc, xBuf, x_qBuf, scale_xBuf, K2) {
+    const numGroups = Math.ceil(K2 / 128);
+    const imm = new Uint32Array([K2]);
     const bg = this._bg(this.pipes.dynQuant, [xBuf, x_qBuf, scale_xBuf]);
     this._dispatch(enc, this.pipes.dynQuant, bg, numGroups, 1, "dynQuant", imm);
   }
-  dynQuantT(enc, xBuf, x_qBuf, scale_xBuf, K, T) {
-    const numGroups = Math.ceil(K / 128);
-    const imm = new Uint32Array([K, T]);
+  dynQuantT(enc, xBuf, x_qBuf, scale_xBuf, K2, T) {
+    const numGroups = Math.ceil(K2 / 128);
+    const imm = new Uint32Array([K2, T]);
     const bg = this._bg(this.pipes.dynQuantT, [xBuf, x_qBuf, scale_xBuf]);
     this._dispatch(enc, this.pipes.dynQuantT, bg, numGroups, T, "dynQuantT", imm);
   }
@@ -3690,11 +3690,11 @@ var QwenWGPU = class {
     );
     this._dispatch(enc, this.pipes.gateUpSiluGemv4, bg, gx, Math.ceil(packed.N / gx), `gu:${packed.N}x${packed.K}`, imm);
   }
-  rms(enc, xBuf, gBuf, yBuf, K) {
-    const imm = new Float32Array([K, this.cfg.rmsNormEps]);
+  rms(enc, xBuf, gBuf, yBuf, K2) {
+    const imm = new Float32Array([K2, this.cfg.rmsNormEps]);
     const useF16 = this.usingF16() && this.pipes.rmsF16;
     const pipe = useF16 ? this.pipes.rmsF16 : this.pipes.rms;
-    const key = `rms:${K}${useF16 ? ":f16" : ""}`;
+    const key = `rms:${K2}${useF16 ? ":f16" : ""}`;
     this._dispatch(enc, pipe, this._bgCached(pipe, [xBuf, gBuf, yBuf], key), 1, 1, useF16 ? "rmsF16" : "rms", imm);
   }
   rope(enc, xBuf, pos, nHeads) {
@@ -4042,26 +4042,26 @@ var QwenWGPU = class {
   // after readback. It assumes s.amax already holds the current token id to
   // embed. Do not use for sampled decoding; sampled tokens must be written by
   // the CPU/GPU sampler one step at a time.
-  async decodeBatch(startPos, K) {
-    K = Math.min(K, this.decodeBatchCapacity, this.maxCtx - startPos);
-    if (K <= 0) return [];
+  async decodeBatch(startPos, K2) {
+    K2 = Math.min(K2, this.decodeBatchCapacity, this.maxCtx - startPos);
+    if (K2 <= 0) return [];
     this._resetUni();
     const enc = this.dev.createCommandEncoder();
-    for (let k = 0; k < K; k++) {
+    for (let k = 0; k < K2; k++) {
       this.embedFromBuf(enc);
       this.step(enc, 0, startPos + k);
       this.argmaxInto(enc);
       enc.copyBufferToBuffer(this.s.amax, 0, this.s.idsBuf, k * 4, 4);
     }
-    enc.copyBufferToBuffer(this.s.idsBuf, 0, this.idsRead, 0, K * 4);
+    enc.copyBufferToBuffer(this.s.idsBuf, 0, this.idsRead, 0, K2 * 4);
     this.dev.queue.submit([enc.finish()]);
     await this.idsRead.mapAsync(GPUMapMode.READ);
-    const ids = Array.from(new Uint32Array(this.idsRead.getMappedRange(), 0, K));
+    const ids = Array.from(new Uint32Array(this.idsRead.getMappedRange(), 0, K2));
     this.idsRead.unmap();
     return ids;
   }
-  async decodeGreedyBatch(startPos, K) {
-    return this.decodeBatch(startPos, K);
+  async decodeGreedyBatch(startPos, K2) {
+    return this.decodeBatch(startPos, K2);
   }
   // ---- PREFILL (T>1): process the whole prompt at once via tiled GEMM. If a LoRA
   // adapter has the projection module, add its batched delta immediately after base GEMM.
@@ -4109,8 +4109,8 @@ var QwenWGPU = class {
       this.debugCaptured = true;
     }
   }
-  rmsT(enc, xBuf, gBuf, yBuf, T, K) {
-    const imm = new Float32Array([K, this.cfg.rmsNormEps]);
+  rmsT(enc, xBuf, gBuf, yBuf, T, K2) {
+    const imm = new Float32Array([K2, this.cfg.rmsNormEps]);
     const useF16 = this.usingF16() && this.pipes.rmsTF16;
     const pipe = useF16 ? this.pipes.rmsTF16 : this.pipes.rmsT;
     this._dispatch(enc, pipe, this._bg(pipe, [xBuf, gBuf, yBuf]), T, 1, useF16 ? "rmsTF16" : "rmsT", imm);
@@ -4706,19 +4706,19 @@ var QwenWGPU = class {
     }
     return generatedIds;
   }
-  setupDebugCapture(T, K, rank, N) {
+  setupDebugCapture(T, K2, rank, N) {
     this.debugCapture = true;
     this.debugT = T;
-    this.debugK = K;
+    this.debugK = K2;
     this.debugRank = rank;
     this.debugN = N;
     this.debugStep = 0;
     this.debugCaptured = false;
     this.debugBufs = {
-      xSeq: this._buf(T * K * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ),
+      xSeq: this._buf(T * K2 * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ),
       dSeq: this._buf(T * rank * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ),
       ySeq: this._buf(T * N * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ),
-      xBat: this._buf(T * K * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ),
+      xBat: this._buf(T * K2 * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ),
       dBat: this._buf(T * rank * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ),
       yBat: this._buf(T * N * 4, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ)
     };
@@ -4968,8 +4968,8 @@ var ModelSession = class {
     }
     let emitted = 1;
     while (emitted < maxTokens && pos < rt.maxCtx) {
-      const K = rt.greedyBatchSizeFor({ emitted, remaining: maxTokens - emitted, pos });
-      const batch = await rt.decodeGreedyBatch(pos, K);
+      const K2 = rt.greedyBatchSizeFor({ emitted, remaining: maxTokens - emitted, pos });
+      const batch = await rt.decodeGreedyBatch(pos, K2);
       pos += batch.length;
       let stop = false;
       for (const id of batch) {
@@ -5460,15 +5460,15 @@ function createTrainableAdapter(rt, opts = {}) {
       if (!targets.includes(name)) continue;
       const part = L[name];
       const q4 = rt.q4[part.weight];
-      const K = q4.K, N = q4.N;
-      const Aarr = new Float32Array(rank * K);
+      const K2 = q4.K, N = q4.N;
+      const Aarr = new Float32Array(rank * K2);
       for (let i = 0; i < Aarr.length; i++) Aarr[i] = gauss() * stddev;
       const Barr = new Float32Array(rank * N);
       const A = rt.dev.createBuffer({ size: Aarr.byteLength, usage });
       const B = rt.dev.createBuffer({ size: Barr.byteLength, usage });
       rt.dev.queue.writeBuffer(A, 0, Aarr);
       rt.dev.queue.writeBuffer(B, 0, Barr);
-      modules[part.loraKey] = { A, B, rank, scale, inDim: K, outDim: N };
+      modules[part.loraKey] = { A, B, rank, scale, inDim: K2, outDim: N };
     }
   }
   return { name: opts.name || "trainable", modules };
@@ -5550,19 +5550,19 @@ var QwenLoraTrainer = class {
       if (!info) continue;
       const kind = info.kind.replace(/_proj$/, "");
       if (!this.opts.targetModules.includes(kind)) continue;
-      const K = info.q4.K, N = info.q4.N, rank = mod.rank;
+      const K2 = info.q4.K, N = info.q4.N, rank = mod.rank;
       maxRank = Math.max(maxRank, rank);
       this.state[key] = {
         mod,
         q4: info.q4,
-        K,
+        K: K2,
         N,
         rank,
         scale: mod.scale,
-        dA: rt._buf(rank * K * 4),
+        dA: rt._buf(rank * K2 * 4),
         dB: rt._buf(rank * N * 4),
-        mA: rt._buf(rank * K * 4),
-        vA: rt._buf(rank * K * 4),
+        mA: rt._buf(rank * K2 * 4),
+        vA: rt._buf(rank * K2 * 4),
         mB: rt._buf(rank * N * 4),
         vB: rt._buf(rank * N * 4)
       };
@@ -5729,15 +5729,15 @@ var QwenLoraTrainer = class {
       this._dispatch_dx4(enc, dYbuf, st, dXbuf, T, key);
       return;
     }
-    const { K, N, rank, scale, q4, dA, dB } = st;
+    const { K: K2, N, rank, scale, q4, dA, dB } = st;
     const s = this.s;
     this._disp(
       enc,
       this.p.dx4,
       [dYbuf, q4.w, q4.scale, dXbuf],
-      this._grid1d(T * K),
+      this._grid1d(T * K2),
       1,
-      this._meta([[0, T], [1, N], [2, K], [3, q4.gpr]]),
+      this._meta([[0, T], [1, N], [2, K2], [3, q4.gpr]]),
       "dx4"
     );
     this._disp(
@@ -5753,9 +5753,9 @@ var QwenLoraTrainer = class {
       enc,
       this.p.gradA,
       [s.dD, Xbuf, dA],
-      this._grid1d(rank * K),
+      this._grid1d(rank * K2),
       1,
-      this._meta([[0, T], [1, K], [2, rank]]),
+      this._meta([[0, T], [1, K2], [2, rank]]),
       "gradA"
     );
     this._disp(
@@ -5764,7 +5764,7 @@ var QwenLoraTrainer = class {
       [Xbuf, st.mod.A, s.Dmat],
       rank,
       T,
-      this._u32([K, rank, T, 0]),
+      this._u32([K2, rank, T, 0]),
       "loraABatch"
     );
     this._disp(
@@ -5780,9 +5780,9 @@ var QwenLoraTrainer = class {
       enc,
       this.p.dxAdd,
       [s.dD, st.mod.A, dXbuf],
-      this._grid1d(T * K),
+      this._grid1d(T * K2),
       1,
-      this._meta([[0, T], [1, K], [2, rank]]),
+      this._meta([[0, T], [1, K2], [2, rank]]),
       "dxAdd"
     );
   }
@@ -6670,17 +6670,17 @@ var DOMAIN = "an Inbox & Calendar operator";
 var SCOPE = "inbox or calendar";
 var CONTEXT = "Assume today is Monday 2026-06-29, local time. Express every date and time as ISO 8601 (YYYY-MM-DDTHH:MM) and always set end = start + the requested duration.";
 var OPS = [
-  { name: "find_email", params: ["query"], ret: "thread" },
-  { name: "compose_email", params: ["to", "subject", "body"] },
-  { name: "reply_email", params: ["thread", "body"] },
-  { name: "forward_email", params: ["thread", "to", "note"] },
-  { name: "archive_email", params: ["thread"] },
-  { name: "label_email", params: ["thread", "label"] },
-  { name: "schedule_send", params: ["to", "subject", "body", "when"] },
-  { name: "create_event", params: ["title", "start", "end", "remind_min"] },
-  { name: "set_reminder", params: ["text", "when"] },
-  { name: "find_slot", params: ["duration_min", "after", "before"], ret: "slot" },
-  { name: "rsvp", params: ["event", "response"] }
+  { name: "find_email", params: ["query"], ret: "thread", effect: "read", capability: "mail:read", idempotent: true, risk: "read-only" },
+  { name: "compose_email", params: ["to", "subject", "body"], effect: "write", capability: "mail:send", idempotent: false, risk: "sensitive-write" },
+  { name: "reply_email", params: ["thread", "body"], effect: "write", capability: "mail:send", idempotent: false, risk: "sensitive-write" },
+  { name: "forward_email", params: ["thread", "to", "note"], effect: "write", capability: "mail:send", idempotent: false, risk: "sensitive-write" },
+  { name: "archive_email", params: ["thread"], effect: "write", capability: "mail:modify", idempotent: true, risk: "reversible-write" },
+  { name: "label_email", params: ["thread", "label"], effect: "write", capability: "mail:modify", idempotent: true, risk: "reversible-write" },
+  { name: "schedule_send", params: ["to", "subject", "body", "when"], effect: "write", capability: "mail:send", idempotent: false, risk: "sensitive-write" },
+  { name: "create_event", params: ["title", "start", "end", "remind_min"], effect: "write", capability: "calendar:write", idempotent: false, risk: "reversible-write" },
+  { name: "set_reminder", params: ["text", "when"], effect: "write", capability: "calendar:write", idempotent: false, risk: "reversible-write" },
+  { name: "find_slot", params: ["duration_min", "after", "before"], ret: "slot", effect: "read", capability: "calendar:read", idempotent: true, risk: "read-only" },
+  { name: "rsvp", params: ["event", "response"], effect: "write", capability: "calendar:write", idempotent: true, risk: "sensitive-write" }
 ];
 var META = {
   key: "inbox-calendar",
@@ -6723,6 +6723,36 @@ var CALENDAR_CONTRACT = {
   ]
 };
 
+// src/skills/inbox-calendar/pools.ts
+var CALENDAR_POOLS = {
+  people: ["mom", "Sarah", "Alex", "the design team", "my manager", "Priya", "John", "the landlord", "accounting", "Dana", "Marcus", "the recruiter"],
+  topics: ["the Q3 roadmap", "the launch", "the budget", "onboarding", "the API redesign", "the offsite", "the bug report", "the contract", "the renewal", "the demo"],
+  // each "when" carries the natural phrasing (for the request) + its ISO start (for the macro)
+  whens: [
+    { nat: "today at 5pm", iso: "2026-06-29T17:00" },
+    { nat: "tomorrow at 9am", iso: "2026-06-30T09:00" },
+    { nat: "Wednesday at 2pm", iso: "2026-07-01T14:00" },
+    { nat: "Thursday at 4:30pm", iso: "2026-07-02T16:30" },
+    { nat: "Friday at 11am", iso: "2026-07-03T11:00" },
+    { nat: "next Monday at 10am", iso: "2026-07-06T10:00" },
+    { nat: "tonight at 7pm", iso: "2026-06-29T19:00" }
+  ],
+  // search windows for find_slot — after STRICTLY before before
+  windows: [
+    { nat: "tomorrow afternoon", after: "2026-06-30T13:00", before: "2026-06-30T18:00" },
+    { nat: "Wednesday morning", after: "2026-07-01T09:00", before: "2026-07-01T12:00" },
+    { nat: "Friday afternoon", after: "2026-07-03T13:00", before: "2026-07-03T17:00" },
+    { nat: "sometime Thursday", after: "2026-07-02T09:00", before: "2026-07-02T18:00" }
+  ],
+  labels: ["housing", "urgent", "finance", "travel", "follow-up", "receipts"],
+  durations: [30, 45, 60],
+  rsvps: [
+    { resp: "yes", verb: "rsvp yes to" },
+    { resp: "no", verb: "decline" },
+    { resp: "maybe", verb: "tentatively accept" }
+  ]
+};
+
 // src/skills/inbox-calendar/providers/google.ts
 var GOOGLE_PROFILE = {
   provider: "google",
@@ -6738,8 +6768,10 @@ var GOOGLE_PROFILE = {
   conventions: {
     timeFormat: "RFC3339",
     // events use start.dateTime/end.dateTime + timeZone; macro emits YYYY-MM-DDTHH:MM
-    searchSyntax: "gmail-q"
+    searchSyntax: "gmail-q",
     // from:, subject:, label:, after:, before:, has:
+    recurrence: "RRULE"
+    // RFC5545 RRULE in event.recurrence[]
   },
   // canonical PORT op -> Google Discovery method id (write-layer target; not emitted in macros)
   opMap: {
@@ -6762,34 +6794,7 @@ var GOOGLE_PROFILE = {
     rsvp: "calendar.events.patch"
     // attendees[].responseStatus
   },
-  pools: {
-    people: ["mom", "Sarah", "Alex", "the design team", "my manager", "Priya", "John", "the landlord", "accounting", "Dana", "Marcus", "the recruiter"],
-    topics: ["the Q3 roadmap", "the launch", "the budget", "onboarding", "the API redesign", "the offsite", "the bug report", "the contract", "the renewal", "the demo"],
-    // each "when" carries the natural phrasing (for the request) + its ISO start (for the macro)
-    whens: [
-      { nat: "today at 5pm", iso: "2026-06-29T17:00" },
-      { nat: "tomorrow at 9am", iso: "2026-06-30T09:00" },
-      { nat: "Wednesday at 2pm", iso: "2026-07-01T14:00" },
-      { nat: "Thursday at 4:30pm", iso: "2026-07-02T16:30" },
-      { nat: "Friday at 11am", iso: "2026-07-03T11:00" },
-      { nat: "next Monday at 10am", iso: "2026-07-06T10:00" },
-      { nat: "tonight at 7pm", iso: "2026-06-29T19:00" }
-    ],
-    // search windows for find_slot — after STRICTLY before before
-    windows: [
-      { nat: "tomorrow afternoon", after: "2026-06-30T13:00", before: "2026-06-30T18:00" },
-      { nat: "Wednesday morning", after: "2026-07-01T09:00", before: "2026-07-01T12:00" },
-      { nat: "Friday afternoon", after: "2026-07-03T13:00", before: "2026-07-03T17:00" },
-      { nat: "sometime Thursday", after: "2026-07-02T09:00", before: "2026-07-02T18:00" }
-    ],
-    labels: ["housing", "urgent", "finance", "travel", "follow-up", "receipts"],
-    durations: [30, 45, 60],
-    rsvps: [
-      { resp: "yes", verb: "rsvp yes to" },
-      { resp: "no", verb: "decline" },
-      { resp: "maybe", verb: "tentatively accept" }
-    ]
-  }
+  pools: CALENDAR_POOLS
 };
 
 // src/skills/inbox-calendar/intents.ts
@@ -7017,6 +7022,91 @@ function genCalendar() {
 }
 __name(genCalendar, "genCalendar");
 
+// src/skills/inbox-calendar/manifest.ts
+var MANIFEST = {
+  block: "inbox-calendar",
+  portVersion: "0.1.0",
+  grades: [
+    {
+      grade: "graduated",
+      adapter: "google",
+      capabilities: ["iso-times", "balanced-op-coverage", "phrasing-variety", "held-out-eval", "oos-near-misses"]
+    },
+    {
+      grade: "elementary",
+      adapter: "microsoft",
+      capabilities: ["canonical-port", "full-op-coverage", "graph-dateTime", "patternedRecurrence"]
+    },
+    {
+      grade: "elementary",
+      adapter: "zoho",
+      capabilities: ["canonical-port", "full-op-coverage", "rfc3339", "rrule"]
+    }
+  ],
+  gates: [],
+  consumers: ["runtime macro compiler", "LoRA guided trainer", "contract verifier"]
+};
+
+// src/skills/lessons.ts
+var STORE = /* @__PURE__ */ new Map();
+function learn(lesson) {
+  let fam = STORE.get(lesson.family);
+  if (!fam) {
+    fam = /* @__PURE__ */ new Map();
+    STORE.set(lesson.family, fam);
+  }
+  fam.set(lesson.id, lesson);
+  return lesson;
+}
+__name(learn, "learn");
+
+// src/skills/inbox-calendar/lessons.ts
+var CALENDAR_LESSONS = [
+  {
+    id: "spec-valid",
+    family: "inbox-calendar",
+    origin: "seed",
+    evidence: "spec-valid",
+    text: "Emit only canonical port ops with their exact params, or bounce with OUT_OF_SCOPE \u2014 never invent an API."
+  },
+  {
+    id: "iso-times",
+    family: "inbox-calendar",
+    origin: "seed",
+    evidence: "iso-times",
+    text: "Normalize every date/time to ISO 8601 (YYYY-MM-DDTHH:MM); never echo natural-language time into the macro."
+  },
+  {
+    id: "duration",
+    family: "inbox-calendar",
+    origin: "seed",
+    evidence: "zero-duration-event",
+    text: "Always set end = start + the requested duration; a calendar event is never zero-length."
+  },
+  {
+    id: "ordered-window",
+    family: "inbox-calendar",
+    origin: "seed",
+    evidence: "unordered-slot-window",
+    text: "find_slot search windows must satisfy after < before."
+  },
+  {
+    id: "bounce-near-miss",
+    family: "inbox-calendar",
+    origin: "seed",
+    evidence: "oos",
+    text: "Bounce inbox-adjacent near-misses (summarize my inbox, translate this email, unsubscribe) \u2014 scope is compile-to-macro, not content tasks."
+  },
+  {
+    id: "canonical-not-provider",
+    family: "inbox-calendar",
+    origin: "learned",
+    evidence: "more-providers",
+    text: "Target the canonical port, not a provider dialect; the ProviderProfile opMap translates ops to Google/Graph/Zoho at execution time."
+  }
+];
+CALENDAR_LESSONS.forEach(learn);
+
 // src/skills/inbox-calendar/index.ts
 var calendarDef = {
   key: META.key,
@@ -7032,6 +7122,336 @@ var calendarDef = {
   contract: CALENDAR_CONTRACT
 };
 
+// src/skills/fingerprint.ts
+var K = new Uint32Array([
+  1116352408,
+  1899447441,
+  3049323471,
+  3921009573,
+  961987163,
+  1508970993,
+  2453635748,
+  2870763221,
+  3624381080,
+  310598401,
+  607225278,
+  1426881987,
+  1925078388,
+  2162078206,
+  2614888103,
+  3248222580,
+  3835390401,
+  4022224774,
+  264347078,
+  604807628,
+  770255983,
+  1249150122,
+  1555081692,
+  1996064986,
+  2554220882,
+  2821834349,
+  2952996808,
+  3210313671,
+  3336571891,
+  3584528711,
+  113926993,
+  338241895,
+  666307205,
+  773529912,
+  1294757372,
+  1396182291,
+  1695183700,
+  1986661051,
+  2177026350,
+  2456956037,
+  2730485921,
+  2820302411,
+  3259730800,
+  3345764771,
+  3516065817,
+  3600352804,
+  4094571909,
+  275423344,
+  430227734,
+  506948616,
+  659060556,
+  883997877,
+  958139571,
+  1322822218,
+  1537002063,
+  1747873779,
+  1955562222,
+  2024104815,
+  2227730452,
+  2361852424,
+  2428436474,
+  2756734187,
+  3204031479,
+  3329325298
+]);
+var rotr = /* @__PURE__ */ __name((x, n) => x >>> n | x << 32 - n, "rotr");
+var hex8 = /* @__PURE__ */ __name((x) => (x >>> 0).toString(16).padStart(8, "0"), "hex8");
+function sha256Hex(input) {
+  const msg = new TextEncoder().encode(input);
+  const l = msg.length;
+  const bitLen = l * 8;
+  const total = (l + 8 >> 6) + 1 << 6;
+  const m = new Uint8Array(total);
+  m.set(msg);
+  m[l] = 128;
+  const dv = new DataView(m.buffer);
+  dv.setUint32(total - 8, Math.floor(bitLen / 4294967296));
+  dv.setUint32(total - 4, bitLen >>> 0);
+  let h0 = 1779033703, h1 = 3144134277, h2 = 1013904242, h3 = 2773480762;
+  let h4 = 1359893119, h5 = 2600822924, h6 = 528734635, h7 = 1541459225;
+  const w = new Uint32Array(64);
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ w[i - 15] >>> 3;
+      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ w[i - 2] >>> 10;
+      w[i] = w[i - 16] + s0 + w[i - 7] + s1 | 0;
+    }
+    let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = e & f ^ ~e & g;
+      const t1 = h + S1 + ch + K[i] + w[i] | 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = a & b ^ a & c ^ b & c;
+      const t2 = S0 + maj | 0;
+      h = g;
+      g = f;
+      f = e;
+      e = d + t1 | 0;
+      d = c;
+      c = b;
+      b = a;
+      a = t1 + t2 | 0;
+    }
+    h0 = h0 + a | 0;
+    h1 = h1 + b | 0;
+    h2 = h2 + c | 0;
+    h3 = h3 + d | 0;
+    h4 = h4 + e | 0;
+    h5 = h5 + f | 0;
+    h6 = h6 + g | 0;
+    h7 = h7 + h | 0;
+  }
+  return hex8(h0) + hex8(h1) + hex8(h2) + hex8(h3) + hex8(h4) + hex8(h5) + hex8(h6) + hex8(h7);
+}
+__name(sha256Hex, "sha256Hex");
+function canonicalize(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(canonicalize).join(",") + "]";
+  const o = v;
+  const keys = Object.keys(o).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalize(o[k])).join(",") + "}";
+}
+__name(canonicalize, "canonicalize");
+function fingerprint(obj) {
+  return sha256Hex(canonicalize(obj));
+}
+__name(fingerprint, "fingerprint");
+
+// src/skills/inbox-calendar/providers/outlook.ts
+var OUTLOOK_PROFILE = {
+  provider: "microsoft",
+  label: "Microsoft 365 (Outlook + Calendar)",
+  discovery: {
+    source: [
+      "https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview",
+      "https://learn.microsoft.com/en-us/graph/api/resources/calendar"
+    ],
+    revision: "2026-06-26-curated",
+    note: "Curated subset of Graph v1.0. Macro emits canonical YYYY-MM-DDTHH:MM; the write-layer expands to { dateTime, timeZone }. Deferred/scheduled send has no first-class Graph method."
+  },
+  conventions: {
+    timeFormat: "graph-dateTime",
+    // { dateTime: "2026-06-29T17:00:00", timeZone: "..." }
+    searchSyntax: "kql",
+    // $search="from:bob subject:x" / $filter
+    recurrence: "patternedRecurrence"
+    // recurrence.pattern + recurrence.range (not raw RRULE)
+  },
+  opMap: {
+    find_email: "GET /me/messages?$search",
+    // KQL search
+    compose_email: "POST /me/sendMail",
+    reply_email: "POST /me/messages/{id}/reply",
+    forward_email: "POST /me/messages/{id}/forward",
+    archive_email: "POST /me/messages/{id}/move",
+    // destinationId: "archive"
+    label_email: "PATCH /me/messages/{id}",
+    // categories: [<category>]
+    schedule_send: "POST /me/messages",
+    // no first-class deferred send; client schedules
+    create_event: "POST /me/events",
+    set_reminder: "POST /me/events",
+    // isReminderOn + reminderMinutesBeforeStart
+    find_slot: "POST /me/calendar/getSchedule",
+    // or findMeetingTimes
+    rsvp: "POST /me/events/{id}/accept|tentativelyAccept|decline"
+  },
+  pools: CALENDAR_POOLS
+};
+
+// src/skills/inbox-calendar/providers/zoho.ts
+var ZOHO_PROFILE = {
+  provider: "zoho",
+  label: "Zoho (Mail + Calendar)",
+  discovery: {
+    source: [
+      "https://www.zoho.com/mail/help/api/",
+      "https://www.zoho.com/calendar/help/api/"
+    ],
+    revision: "2026-06-26-curated",
+    note: "Curated subset of the Zoho Mail + Calendar REST APIs. Macro emits canonical YYYY-MM-DDTHH:MM; the write-layer formats per endpoint. Scheduled send is limited."
+  },
+  conventions: {
+    timeFormat: "RFC3339",
+    // event start/end as ISO; Calendar API also accepts dateandtime
+    searchSyntax: "zoho-search",
+    // searchKey + receivedFromAddress / subject params
+    recurrence: "RRULE"
+    // iCalendar RRULE in the event payload
+  },
+  opMap: {
+    find_email: "GET /api/accounts/{id}/messages/search",
+    compose_email: "POST /api/accounts/{id}/messages",
+    reply_email: "POST /api/accounts/{id}/messages/{messageId}",
+    // action: reply
+    forward_email: "POST /api/accounts/{id}/messages/{messageId}",
+    // action: forward
+    archive_email: "PUT /api/accounts/{id}/updatemessage",
+    // move to Archive folder
+    label_email: "POST /api/accounts/{id}/messages/{messageId}/tags",
+    schedule_send: "POST /api/accounts/{id}/messages",
+    // isSchedule + scheduleType
+    create_event: "POST /api/calendars/{uid}/events",
+    set_reminder: "POST /api/calendars/{uid}/events",
+    // event reminder block
+    find_slot: "GET /api/calendars/freebusy",
+    rsvp: "POST /api/calendars/{uid}/events/{eventId}"
+    // attendee status update
+  },
+  pools: CALENDAR_POOLS
+};
+
+// src/skills/inbox-calendar/providers/index.ts
+var PROVIDERS = {
+  google: GOOGLE_PROFILE,
+  microsoft: OUTLOOK_PROFILE,
+  zoho: ZOHO_PROFILE
+};
+
+// src/skills/action/plan.ts
+var RISK_RANK = { "read-only": 0, "reversible-write": 1, "sensitive-write": 2 };
+var RISK_AT = ["read-only", "reversible-write", "sensitive-write"];
+function maxRisk(a, b) {
+  return RISK_AT[Math.max(RISK_RANK[a], RISK_RANK[b])];
+}
+__name(maxRisk, "maxRisk");
+function renderArg(a) {
+  if (a.kind === "string") return `${a.key}="${a.value}"`;
+  if (a.kind === "ref") return `${a.key}=$${a.value}`;
+  return `${a.key}=${a.value}`;
+}
+__name(renderArg, "renderArg");
+function compilePlan(input) {
+  const { block, calls, ops, profile, contractOk } = input;
+  const opByName = new Map(ops.map((o) => [o.name, o]));
+  const provider = profile ? profile.provider : "unknown";
+  const opMap = profile ? profile.opMap : {};
+  const bindToIndex = /* @__PURE__ */ new Map();
+  const steps2 = [];
+  let risk = "read-only";
+  const caps = /* @__PURE__ */ new Set();
+  calls.forEach((c, index) => {
+    const meta = opByName.get(c.op);
+    const effect = meta?.effect ?? "write";
+    const capability = meta?.capability ?? "unknown";
+    const idempotent = meta?.idempotent ?? false;
+    const stepRisk = meta?.risk ?? "sensitive-write";
+    const providerMethod = opMap[c.op] ?? "(unmapped)";
+    const dependsOn = [];
+    for (const a of c.args) {
+      if (a.kind === "ref" && a.refBase && bindToIndex.has(a.refBase)) {
+        const dep = bindToIndex.get(a.refBase);
+        if (!dependsOn.includes(dep)) dependsOn.push(dep);
+      }
+    }
+    const argSig = c.args.map(renderArg).join(", ");
+    const idempotencyKey = sha256Hex(`${provider}|${c.op}|${argSig}`).slice(0, 12);
+    steps2.push({
+      index,
+      op: c.op,
+      effect,
+      binds: c.binds,
+      args: c.args,
+      provider,
+      providerMethod,
+      capability,
+      idempotent,
+      risk: stepRisk,
+      idempotencyKey,
+      dependsOn
+    });
+    risk = maxRisk(risk, stepRisk);
+    caps.add(capability);
+    if (c.binds) bindToIndex.set(c.binds, index);
+  });
+  const summary = steps2.map((s) => {
+    const tag = s.effect === "read" ? "read" : s.risk;
+    const dep = s.dependsOn.length ? ` \u27F5 step ${s.dependsOn.map((d) => d + 1).join(",")}` : "";
+    const lhs = s.binds ? `${s.binds} = ` : "";
+    return `${s.index + 1}. ${lhs}${s.op}(${s.args.map(renderArg).join(", ")}) \u2192 ${s.providerMethod} [${tag}]${dep}`;
+  });
+  const base = {
+    block,
+    provider,
+    contractOk,
+    risk,
+    requiredCapabilities: [...caps].filter((c) => c !== "unknown").sort(),
+    steps: steps2,
+    summary
+  };
+  return { ...base, fingerprint: fingerprint(base) };
+}
+__name(compilePlan, "compilePlan");
+
+// src/skills/action/receipt.ts
+var LOG = [];
+function record(receipts) {
+  for (const r of receipts) LOG.push(r);
+}
+__name(record, "record");
+
+// src/skills/action/executor.ts
+var DryRunExecutor = {
+  id: "dry-run",
+  // fail closed: never "execute" (even simulated) a plan whose contract did not pass
+  canExecute: /* @__PURE__ */ __name((plan) => plan.contractOk === true, "canExecute"),
+  execute: /* @__PURE__ */ __name((plan) => {
+    if (!DryRunExecutor.canExecute(plan)) {
+      throw new Error("dry-run refused: contract not satisfied");
+    }
+    const at = "1970-01-01T00:00:00Z";
+    const receipts = plan.steps.map((s) => ({
+      step: s.index,
+      op: s.op,
+      provider: s.provider,
+      method: s.providerMethod,
+      status: "simulated",
+      idempotencyKey: s.idempotencyKey,
+      at,
+      detail: `would ${s.effect === "read" ? "read via" : "call"} ${s.providerMethod} [${s.risk}]${s.idempotent ? " (idempotent)" : ""}`
+    }));
+    record(receipts);
+    return receipts;
+  }, "execute")
+};
+
 // src/skills.js
 function specSig(spec) {
   return spec.ops.map((o) => `${o.name}(${(o.params || []).join(", ")})${o.ret ? " -> " + o.ret : ""}`).join("; ");
@@ -7042,15 +7462,46 @@ function skillSystem(domain, spec, context) {
 ` + specSig(spec) + ".\n" + (context ? context + "\n" : "") + `Output ONLY the macro, one call per line, no prose. If the request is outside ${spec.scope}, output exactly: OUT_OF_SCOPE.`;
 }
 __name(skillSystem, "skillSystem");
+function splitMacroArgs(s) {
+  const parts = [];
+  let buf = "", q = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '"') {
+      q = !q;
+      buf += ch;
+    } else if (ch === "," && !q) {
+      parts.push(buf);
+      buf = "";
+    } else buf += ch;
+  }
+  if (buf.trim()) parts.push(buf);
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+__name(splitMacroArgs, "splitMacroArgs");
+function classifyArg(valueRaw) {
+  const v = valueRaw.trim();
+  if (v.startsWith('"')) return { kind: "string", value: v.replace(/^"|"$/g, "") };
+  if (/^-?\d+(?:\.\d+)?$/.test(v)) return { kind: "number", value: v };
+  return { kind: "ref", value: v, refBase: v.split(".")[0] };
+}
+__name(classifyArg, "classifyArg");
 function parseMacroCalls(text) {
   const out = [];
   for (const raw of String(text).split("\n")) {
     const line = raw.trim();
     if (!line || line === "OUT_OF_SCOPE") continue;
-    const m = line.match(/^(?:[A-Za-z_]\w*\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
+    const m = line.match(/^(?:([A-Za-z_]\w*)\s*=\s*)?([A-Za-z_]\w*)\s*\((.*)\)\s*;?\s*$/);
     if (!m) continue;
-    const keys = [...m[2].matchAll(/(?:^|,)\s*([A-Za-z_]\w*)\s*=/g)].map((k) => k[1]);
-    out.push({ op: m[1], keys });
+    const binds = m[1] || null;
+    const args = [];
+    for (const part of splitMacroArgs(m[3])) {
+      const a = part.match(/^([A-Za-z_]\w*)\s*=\s*([\s\S]*)$/);
+      if (!a) continue;
+      args.push({ key: a[1], ...classifyArg(a[2]) });
+    }
+    const keys = args.map((a) => a.key);
+    out.push({ op: m[2], keys, binds, args });
   }
   return out;
 }
@@ -7081,6 +7532,29 @@ function verifyMacro(text, spec) {
   return { status: issues.length ? "bad" : "ok", calls: detail, issues, n: calls.length };
 }
 __name(verifyMacro, "verifyMacro");
+function checkContract(contract, macro, spec) {
+  const violations = [];
+  for (const a of contract.assertions || []) {
+    let ok = false;
+    try {
+      ok = a.holds(macro, spec);
+    } catch {
+      ok = false;
+    }
+    if (!ok) violations.push({ kind: "assertion", id: a.id, detail: a.describe });
+  }
+  for (const f of contract.forbidden || []) {
+    let bad = true;
+    try {
+      bad = f.violatedBy(macro, spec);
+    } catch {
+      bad = true;
+    }
+    if (bad) violations.push({ kind: "forbidden", id: f.id, detail: f.describe });
+  }
+  return { ok: violations.length === 0, violations };
+}
+__name(checkContract, "checkContract");
 var BASE_ASSERTIONS = [{
   id: "spec-valid",
   describe: "every call uses a spec op with only that op\u2019s params, or the macro is a clean OUT_OF_SCOPE bounce",
@@ -7652,6 +8126,25 @@ var DEFS = [
   }
 ];
 var SKILLS = DEFS.map((d) => buildSkill(d, 6));
+var PROVIDERS_BY_FAMILY = { "inbox-calendar": Object.values(PROVIDERS) };
+var PORT_VERSION_BY_FAMILY = { "inbox-calendar": MANIFEST.portVersion };
+function planFor(key, macroText, opts = {}) {
+  const s = SKILLS.find((x) => x.key === key);
+  if (!s) return null;
+  const providers = PROVIDERS_BY_FAMILY[key] || [];
+  const profile = providers.find((p) => p.provider === opts.providerId) || providers[0] || null;
+  const calls = parseMacroCalls(macroText);
+  const contractOk = checkContract(s.contract, macroText, s.spec).ok;
+  return compilePlan({ block: s.key, calls, ops: s.spec.ops, profile, contractOk });
+}
+__name(planFor, "planFor");
+function dryRun(key, macroText, opts = {}) {
+  const plan = planFor(key, macroText, opts);
+  if (!plan) return null;
+  const receipts = DryRunExecutor.canExecute(plan) ? DryRunExecutor.execute(plan) : [];
+  return { plan, receipts };
+}
+__name(dryRun, "dryRun");
 var CALENDAR_SVG = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="4" width="19" height="17" rx="3.4" fill="#ffffff"/><path d="M2.5 7.4a3.4 3.4 0 0 1 3.4-3.4h12.2a3.4 3.4 0 0 1 3.4 3.4v2.1H2.5z" fill="#ea4d3d"/><rect x="6" y="2.1" width="2.5" height="4.4" rx="1.25" fill="#b23528"/><rect x="15.5" y="2.1" width="2.5" height="4.4" rx="1.25" fill="#b23528"/><g fill="#cfd4dc"><rect x="5" y="11.6" width="3" height="2.7" rx=".7"/><rect x="10.5" y="11.6" width="3" height="2.7" rx=".7"/><rect x="16" y="11.6" width="3" height="2.7" rx=".7"/><rect x="5" y="15.7" width="3" height="2.7" rx=".7"/><rect x="16" y="15.7" width="3" height="2.7" rx=".7"/></g><rect x="10.5" y="15.7" width="3" height="2.7" rx=".7" fill="#2f72c4"/><rect x="2.5" y="4" width="19" height="17" rx="3.4" fill="none" stroke="#0000001f"/></svg>';
 var POPULAR_2026 = [
   { key: "inbox-calendar", name: "Inbox & Calendar", skill: "inbox-calendar", cat: "productivity", logo: "google-calendar", bg: "linear-gradient(#fdfaf2,#efe7d4)", svg: CALENDAR_SVG, glyph: "\u2709", fs: 22 },
@@ -7799,10 +8292,10 @@ function createLogoIndex(entries, basePath = "/vendor/logos") {
   const byFileStem = /* @__PURE__ */ new Map();
   const byName = /* @__PURE__ */ new Map();
   for (const entry of entries || []) {
-    const record = { ...entry, basePath: trimSlash(basePath) };
-    byShortname.set(slug(entry.shortname), record);
-    byName.set(slug(entry.name), record);
-    for (const f of entry.files || []) byFileStem.set(slug(f.replace(/\.svg$/i, "")), record);
+    const record2 = { ...entry, basePath: trimSlash(basePath) };
+    byShortname.set(slug(entry.shortname), record2);
+    byName.set(slug(entry.name), record2);
+    for (const f of entry.files || []) byFileStem.set(slug(f.replace(/\.svg$/i, "")), record2);
   }
   return { basePath: trimSlash(basePath), entries: entries || [], byShortname, byFileStem, byName };
 }
@@ -8946,6 +9439,7 @@ function wheelPointerMove(e) {
   if (best !== wheelSel) setWheelSel(best, true);
 }
 __name(wheelPointerMove, "wheelPointerMove");
+var RISK_HUE = { "read": "#6b7280", "read-only": "#6b7280", "reversible-write": "#c2772a", "sensitive-write": "#d9480f" };
 function setMacroCheck(res, skill, text) {
   const el = $("macroCheck");
   if (!el) return;
@@ -8959,9 +9453,22 @@ function setMacroCheck(res, skill, text) {
   if (res.status === "ok") {
     el.dataset.state = "ok";
     const ops = res.calls.map((c) => c.op).join(", ");
-    const plan = text ? humanizePlan(text) : [];
-    const planHtml = plan.length ? `<ol class="macrochk__plan">${plan.map((p) => `<li>${esc(p)}</li>`).join("")}</ol>` : "";
-    el.innerHTML = `<b>\u2713 valid write plan</b> \xB7 ${res.n} call${res.n === 1 ? "" : "s"} on the ${esc(skill.label)} surface \xB7 <code>${esc(ops)}</code>${planHtml}`;
+    const plan = text ? planFor(skill.key, text) : null;
+    const resolved = plan && plan.provider !== "unknown";
+    let planHtml = "";
+    if (plan && plan.steps.length) {
+      const items = plan.steps.map((s) => {
+        const vals = s.args.filter((a) => a.kind === "string").slice(0, 2).map((a) => esc(a.value)).join(" \xB7 ");
+        const via = resolved ? ` <span style="opacity:.6">\u2192 ${esc(s.providerMethod)}</span>` : "";
+        const tag = s.effect === "read" ? "read" : s.risk;
+        const risk = ` <span style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${RISK_HUE[tag] || "#6b7280"}">${tag}</span>`;
+        return `<li>${esc(s.op.replace(/_/g, " "))}${vals ? ` \u2014 ${vals}` : ""}${via}${risk}</li>`;
+      }).join("");
+      const caps = resolved && plan.requiredCapabilities.length ? `<div style="margin-top:6px;opacity:.7;font-size:11px">would need ${plan.requiredCapabilities.map((c) => `<code>${esc(c)}</code>`).join(" ")} \xB7 <b>dry-run</b> \u2014 simulated, nothing sent</div>` : "";
+      planHtml = `<ol class="macrochk__plan">${items}</ol>${caps}`;
+    }
+    const where = resolved ? ` <span style="opacity:.6">(${esc(plan.provider)})</span>` : "";
+    el.innerHTML = `<b>\u2713 valid write plan</b> \xB7 ${res.n} call${res.n === 1 ? "" : "s"} on the ${esc(skill.label)} surface${where} \xB7 <code>${esc(ops)}</code>${planHtml}`;
   } else if (res.status === "oos") {
     el.dataset.state = "oos";
     el.innerHTML = `<b>\u26D4 OUT_OF_SCOPE</b> \xB7 the ${esc(skill.label)} surface correctly refused \u2014 that request is outside its writes`;
@@ -9487,6 +9994,8 @@ window.addEventListener("DOMContentLoaded", () => {
     selectSkill,
     renderSkillPicker,
     verifyMacro,
+    planFor,
+    dryRun,
     setMacroCheck,
     equipByIndex,
     skillByKey,

@@ -4,10 +4,20 @@
 // per provider), a declarative CONTRACT (verification criteria as data), and a MANIFEST
 // (block.json-shaped metadata). These types are the seam the rest of the system speaks.
 
+// Risk ladder for a write, lowest to highest. Used to classify ops and whole plans.
+export type RiskLevel = 'read-only' | 'reversible-write' | 'sensitive-write';
+
 export interface Op {
   name: string;
   params: string[];
   ret?: string;
+  // canonical action semantics (provider-independent; specSig ignores these so the corpus is
+  // unaffected). A read has no side effect; a write does. capability is the canonical scope a
+  // provider executor would need; idempotent writes can be safely retried/deduped.
+  effect?: 'read' | 'write';
+  capability?: string;
+  idempotent?: boolean;
+  risk?: RiskLevel;
 }
 
 export interface Spec {
@@ -81,7 +91,11 @@ export interface ProviderProfile {
   label: string; // 'Google (Gmail + Calendar)'
   // grounding: where the conventions were lifted from (the checked-in Discovery snapshot)
   discovery: { source: string[]; revision: string; note: string };
-  conventions: { timeFormat: string; searchSyntax: string };
+  conventions: {
+    timeFormat: string; // how the provider represents instants (RFC3339, dateTime+timeZone, …)
+    searchSyntax: string; // mailbox query dialect (gmail-q, kql, zoho-search, …)
+    recurrence?: string; // repeat-rule encoding (RRULE / patternedRecurrence / …)
+  };
   // canonical PORT op -> provider Discovery method id (for the future write-layer)
   opMap: Record<string, string>;
   pools: ProviderPools;
@@ -97,6 +111,17 @@ export interface Intent {
   macro: string;
 }
 
+// FoT (forest-of-thoughts) lesson: a distilled, reusable insight keyed by skill family.
+// `evidence` links a lesson back to the contract id (or signal) that motivated it, so the
+// thing we ENFORCE and the thing we EXPLAIN never drift apart.
+export interface Lesson {
+  id: string;
+  family: string;
+  origin: 'seed' | 'learned';
+  text: string;
+  evidence?: string;
+}
+
 // block.json-shaped manifest (consumed by the future transfer/CATALOG seam, not buildSkill yet).
 export interface BlockGrade {
   grade: 'nursery' | 'elementary' | 'graduated';
@@ -109,4 +134,105 @@ export interface BlockManifest {
   grades: BlockGrade[];
   gates: unknown[];
   consumers: string[];
+}
+
+// ── transfer seam: shareable, content-addressed skill packages ───────────────
+// A SkillPackage is the verifiable surface of a skill, minus the LoRA weights (which ship
+// alongside via lora_export). Contract predicates can't be serialized, so we carry their
+// DESCRIPTORS and re-bind the live implementation by family on import.
+export interface ContractDescriptor { id: string; describe: string }
+export interface ProviderExport {
+  id: string;
+  label: string;
+  conventions: ProviderProfile['conventions'];
+  opMap: Record<string, string>;
+}
+export interface SkillPackage {
+  format: 'eg-skill/1';
+  block: string;
+  label: string;
+  portVersion: string;
+  port: { scope: string; ops: Op[] };
+  system: string;
+  contract: { assertions: ContractDescriptor[]; forbidden: ContractDescriptor[] };
+  providers: ProviderExport[];
+  eval: Example[];
+  lessons: Lesson[];
+  fingerprint: string; // sha256 over the package with this field removed
+}
+
+// Attestor stub: today just binds a fingerprint under a scheme tag. The seam is shaped so a
+// real attestation (e.g. a TEE unified-quote) can drop in behind verifyAttestation later.
+export interface Attestation {
+  scheme: 'sha256-fingerprint/stub';
+  block: string;
+  fingerprint: string;
+  issuedAt: string;
+}
+
+export interface CatalogEntry {
+  block: string;
+  label: string;
+  portVersion: string;
+  ops: number;
+  evalCount: number;
+  providers: string[];
+  fingerprint: string;
+}
+export interface Catalog {
+  format: 'eg-catalog/1';
+  version: number;
+  skills: CatalogEntry[];
+}
+
+// ── action layer (planner / dry-run only) ───────────────────────────────────
+// A verified macro compiles to an ActionPlan: a typed, provider-resolved program that is
+// SHOWN, never executed by the model. The only executor today is a dry-run that performs no
+// I/O. Real provider/DOM executors are a separate, approval-gated milestone.
+export interface ActionArg {
+  key: string;
+  kind: 'string' | 'number' | 'ref';
+  value: string;
+  refBase?: string; // for kind 'ref': the binding var this consumes (e.g. 't' from 's.start')
+}
+export interface ActionStep {
+  index: number;
+  op: string;
+  effect: 'read' | 'write';
+  binds: string | null; // LHS variable this step produces, if any
+  args: ActionArg[];
+  provider: string;
+  providerMethod: string; // resolved from the ProviderProfile opMap (or '(unmapped)')
+  capability: string;
+  idempotent: boolean;
+  risk: RiskLevel;
+  idempotencyKey: string;
+  dependsOn: number[]; // indices of prior steps whose binding this step references
+}
+export interface ActionPlan {
+  block: string;
+  provider: string;
+  contractOk: boolean; // gate: an executor must refuse a plan whose contract didn't pass
+  risk: RiskLevel; // max over steps
+  requiredCapabilities: string[]; // disclosure of scopes a real executor would need
+  steps: ActionStep[];
+  summary: string[]; // human-readable battle plan
+  fingerprint: string; // content hash of the plan (sans this field)
+}
+
+// Receipts are produced by an Executor. In dry-run they are always 'simulated'.
+export interface Receipt {
+  step: number;
+  op: string;
+  provider: string;
+  method: string;
+  status: 'simulated';
+  idempotencyKey: string;
+  at: string;
+  detail: string;
+}
+export interface Executor {
+  id: string;
+  canExecute: (plan: ActionPlan) => boolean;
+  execute: (plan: ActionPlan) => Receipt[];
 }

@@ -13,7 +13,7 @@ import { TrainingController } from './services/training_controller.js';
 import { downloadLoraAdapter, exportLoraAdapter } from './lora_export.js';
 import { loadLoraAdapterGPU } from './lora_gpu.js';
 import * as store from './services/store.js';
-import { SKILLS, POPULAR_2026, verifyMacro } from './skills.js';
+import { SKILLS, POPULAR_2026, verifyMacro, planFor, dryRun } from './skills.js';
 import { ICON_THEME_PRESETS, iconTheme, paintSkillIcon, setIconTheme, themedTileColor } from './icon_pipeline.js';
 
 const $ = (id) => document.getElementById(id);
@@ -758,6 +758,8 @@ function wheelPointerMove(e) {
   }
   if (best !== wheelSel) setWheelSel(best, true);
 }
+// risk → accent hue for the dry-run plan readout (matches the gradient-orange theme)
+const RISK_HUE = { 'read': '#6b7280', 'read-only': '#6b7280', 'reversible-write': '#c2772a', 'sensitive-write': '#d9480f' };
 // ── HUD: the macro verifier readout in the inference pane ─────────────────────
 function setMacroCheck(res, skill, text) {
   const el = $('macroCheck');
@@ -767,11 +769,25 @@ function setMacroCheck(res, skill, text) {
   if (res.status === 'ok') {
     el.dataset.state = 'ok';
     const ops = res.calls.map((c) => c.op).join(', ');
-    const plan = text ? humanizePlan(text) : [];
-    const planHtml = plan.length
-      ? `<ol class="macrochk__plan">${plan.map((p) => `<li>${esc(p)}</li>`).join('')}</ol>`
-      : '';
-    el.innerHTML = `<b>✓ valid write plan</b> · ${res.n} call${res.n === 1 ? '' : 's'} on the ${esc(skill.label)} surface · <code>${esc(ops)}</code>${planHtml}`;
+    // compile the verified macro into a typed, provider-resolved dry-run plan
+    const plan = text ? planFor(skill.key, text) : null;
+    const resolved = plan && plan.provider !== 'unknown';
+    let planHtml = '';
+    if (plan && plan.steps.length) {
+      const items = plan.steps.map((s) => {
+        const vals = s.args.filter((a) => a.kind === 'string').slice(0, 2).map((a) => esc(a.value)).join(' · ');
+        const via = resolved ? ` <span style="opacity:.6">→ ${esc(s.providerMethod)}</span>` : '';
+        const tag = s.effect === 'read' ? 'read' : s.risk;
+        const risk = ` <span style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:${RISK_HUE[tag] || '#6b7280'}">${tag}</span>`;
+        return `<li>${esc(s.op.replace(/_/g, ' '))}${vals ? ` — ${vals}` : ''}${via}${risk}</li>`;
+      }).join('');
+      const caps = resolved && plan.requiredCapabilities.length
+        ? `<div style="margin-top:6px;opacity:.7;font-size:11px">would need ${plan.requiredCapabilities.map((c) => `<code>${esc(c)}</code>`).join(' ')} · <b>dry-run</b> — simulated, nothing sent</div>`
+        : '';
+      planHtml = `<ol class="macrochk__plan">${items}</ol>${caps}`;
+    }
+    const where = resolved ? ` <span style="opacity:.6">(${esc(plan.provider)})</span>` : '';
+    el.innerHTML = `<b>✓ valid write plan</b> · ${res.n} call${res.n === 1 ? '' : 's'} on the ${esc(skill.label)} surface${where} · <code>${esc(ops)}</code>${planHtml}`;
   } else if (res.status === 'oos') {
     el.dataset.state = 'oos';
     el.innerHTML = `<b>⛔ OUT_OF_SCOPE</b> · the ${esc(skill.label)} surface correctly refused — that request is outside its writes`;
@@ -1186,7 +1202,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   window.__layout = (m) => { document.body.dataset.layout = m; }; // test/devtools hook
   window.__eg = { store, renderHistory, renderDock, renderStage, stageMsg, renderEquipPanel, humanizePlan, applyRun, exportRun, delRun, state, // devtools/test surface
-    openTrainer, closeTrainer, openWheel, closeWheel, commitWheel, setWheelSel, sfx, SKILLS, POPULAR_2026, selectSkill, renderSkillPicker, verifyMacro, setMacroCheck, equipByIndex, skillByKey, sampleExamples,
+    openTrainer, closeTrainer, openWheel, closeWheel, commitWheel, setWheelSel, sfx, SKILLS, POPULAR_2026, selectSkill, renderSkillPicker, verifyMacro, planFor, dryRun, setMacroCheck, equipByIndex, skillByKey, sampleExamples,
     setIconTheme: (theme) => { const t = setIconTheme(theme); const sel = $('iconTheme'); if (sel) sel.value = t; repaintIconSurfaces(); return t; },
     get iconTheme() { return iconTheme(); },
     get selectedSkillKey() { return selectedSkillKey; }, get lastEquipIntent() { return lastEquipIntent; } };

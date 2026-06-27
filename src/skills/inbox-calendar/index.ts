@@ -7,6 +7,7 @@ import { CALENDAR_CONTRACT } from './contract.ts';
 import { genCalendar } from './adapters/google.ts';
 
 export { MANIFEST } from './manifest.ts';
+export { CALENDAR_LESSONS } from './lessons.ts'; // side effect: registers calendar lessons in the FoT store
 
 export const calendarDef: SkillDef = {
   key: META.key,

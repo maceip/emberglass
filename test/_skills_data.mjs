@@ -5,6 +5,9 @@
  *          (4) each skill carries a spec-derived system prompt and a suggest.
  * This is the "does what we say" gate applied to the whole training corpus. */
 import { SKILLS, POPULAR_2026, verifyMacro, checkContract } from '../src/skills.js';
+import { generateCorpus } from '../src/skills/inbox-calendar/generate.ts';
+import { INTENTS, OOS } from '../src/skills/inbox-calendar/intents.ts';
+import { PROVIDERS } from '../src/skills/inbox-calendar/providers/index.ts';
 
 let total = 0, oos = 0, valid = 0;
 const failures = [];
@@ -58,6 +61,22 @@ for (const s of SKILLS) {
 const cal = SKILLS.find((s) => s.key === 'inbox-calendar');
 if (!cal.eval || cal.eval.length < 8) failures.push('calendar: missing/small held-out eval split');
 
+// provider portability: the SAME canonical port + intents must (1) render contract-clean for
+// EVERY calendar provider and (2) each provider must map every canonical op to an executor.
+// This is the proof the port abstraction holds — only conventions + opMap differ per provider.
+let providerChecks = 0;
+const calOps = cal.spec.ops.map((o) => o.name);
+for (const [id, profile] of Object.entries(PROVIDERS)) {
+  const missing = calOps.filter((n) => !(n in profile.opMap));
+  if (missing.length) failures.push(`provider ${id}: opMap missing [${missing.join(', ')}]`);
+  const { examples: pex, eval: pev } = generateCorpus(`inbox-calendar:${id}`, profile, INTENTS, OOS);
+  for (const [req, macro] of pex.concat(pev)) {
+    providerChecks++;
+    const v = checkContract(cal.contract, macro, cal.spec);
+    if (!v.ok) failures.push(`provider ${id}: contract [${v.violations.map((x) => x.id).join(', ')}] → "${req}"`);
+  }
+}
+
 // dock catalog sanity: every skill key appears in POPULAR_2026 with an icon
 const dockKeys = new Set(POPULAR_2026.map((d) => d.key));
 for (const s of SKILLS) if (!dockKeys.has(s.key)) failures.push(`dock: missing tile for skill ${s.key}`);
@@ -68,6 +87,7 @@ console.log(perSkill.join('\n'));
 console.log('────────────────────────────────────────────');
 console.log(`skills: ${SKILLS.length}   examples: ${total}   valid-macros: ${valid}   oos: ${oos}   held-out eval: ${evalTotal}   contract-checked: ${contractChecked}`);
 console.log(`dock tiles: ${POPULAR_2026.length} (${POPULAR_2026.filter((d) => d.skill).length} forgeable, ${POPULAR_2026.filter((d) => !d.skill).length} coming-soon)`);
+console.log(`calendar providers: ${Object.keys(PROVIDERS).length} (${Object.keys(PROVIDERS).join(', ')})   provider-macros-checked: ${providerChecks}`);
 
 const pass = total >= 500 && failures.length === 0 && (valid + oos === total);
 if (failures.length) { console.log('\nFAILURES:'); for (const f of failures.slice(0, 25)) console.log('  - ' + f); }

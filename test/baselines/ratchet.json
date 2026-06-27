@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "note": "Protected eval floors (substrate ratchet). All metrics are higher-is-better minimums. TIGHTEN-ONLY: raise floors with `node test/_ratchet.mjs --bump` after a verified improvement; never hand-lower a floor without review (it shows as a diff in this protected file). Trained held-out accuracy floors (e.g. calendar_eval_accuracy) land here once the proof brick measures them.",
+  "metrics": {
+    "corpus_total": 555,
+    "valid_macros": 516,
+    "held_out_eval": 17,
+    "contract_clean_rate": 1.0,
+    "skills": 12,
+    "calendar_providers": 3,
+    "provider_macros_checked": 252,
+    "provider_contract_clean_rate": 1.0,
+    "provider_op_coverage_complete": 3,
+    "plan_steps_checked": 69,
+    "executors_are_dry_run": 1
+  }
+}
