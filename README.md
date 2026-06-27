@@ -13,7 +13,7 @@
 
 Emberglass treats every app you're logged into as a **skill** you can train. You fine-tune a small per-account LoRA adapter (in-browser, on a frozen int4 base), equip it like an RPG loadout, and from then on plain-language intent compiles into a **verified, provider-resolved action plan** for that surface (Inbox & Calendar is the flagship skill).
 
-The model is a **planner/compiler**, never an executor: it emits a constrained macro, the macro is checked against a declarative contract, and the plan is run through a **dry-run executor only** — every receipt is `simulated`, nothing is ever sent. A real, approval-gated executor is a deliberately separate future milestone (enforced by the `executors_are_dry_run` ratchet).
+The model is a **planner/compiler**, never an executor: it emits a constrained macro, the macro is checked against a declarative contract, and the plan is run through a **dry-run executor only** — every receipt is `simulated`, nothing is ever sent. Provider/DOM writes remain intentionally blocked by the `executors_are_dry_run` ratchet until a separate approval-gated executor review changes that boundary.
 
 ```
 intent → model → macro → verifyMacro → checkContract → compilePlan → DryRunExecutor → simulated receipts
@@ -84,58 +84,9 @@ Requires port **8013**, WebGPU **`subgroups`**, and weights in `./model` (not bu
 
 ## Performance
 
-Throughput is hardware-dependent. Latest clean local browser run:
-`npm run bench:wgpu` on Chrome Canary/WebGPU with `timestamp-query`, 3B-shaped mock weights, June 25, 2026.
-
-| Measurement | Result |
-|---|---:|
-| Greedy decode @ ctx 128 | 114.3 tok/s |
-| Greedy decode @ ctx 1,024 | 118.0 tok/s |
-| Greedy decode @ ctx 4,096 | 101.3 tok/s |
-| Greedy decode @ ctx 7,800 | 82.8 tok/s |
-| GPU top-k sampling (`topK=40`, 4-byte readback) | 21.4 tok/s |
-| One training step, rank 8, 17 active labels | 31.9 train tok/s |
-| Selected decode batch | 16 tokens |
-| LoRA decode | skipped (`adapters_sel` fixture unavailable) |
-
-Prefill latency:
-
-| Prompt length | Latency |
-|---:|---:|
-| 64 tokens | 99.0 ms |
-| 256 tokens | 240.0 ms |
-| 1,024 tokens | 1,012.9 ms |
-| 4,096 tokens | 6,148.1 ms |
-| 8,192 tokens | 18,397.2 ms |
-
-Training step detail:
-
-| Measurement | Result |
-|---|---:|
-| Training tokens / active labels | 18 / 17 |
-| Trainable LoRA matrices | 252 |
-| Micro-step time | 538.7 ms |
-| AdamW optimizer time | 24.8 ms |
-| Total step time | 563.5 ms |
-| Loss | 11.9312 |
-
-Single-token decode profile at ctx 18:
-
-| Kernel category | GPU time |
-|---|---:|
-| `embed` | 9.2 us |
-| `rms` | 522.1 us |
-| `g4:2048x2048` | 404.4 us |
-| `g4:256x2048` | 372.3 us |
-| `ropeQK` | 113.5 us |
-| `attnP` | 639.9 us |
-| `attnC` | 104.3 us |
-| `g4add:2048x2048` | 371.3 us |
-| `gu:11008x2048` | 1,741.7 us |
-| `g4add:2048x11008` | 1,308.4 us |
-| `gemv:151936x2048` | 547.4 us |
-
-Fused decode path: `fuseQKV` / `fuseRoPE` / `fuseMLP` / `fuseResidual`.
+Throughput is hardware-dependent. No public performance table is checked in right
+now. Publish numbers only from a clean browser run against real model weights
+under `/model`.
 
 ## Performance features added
 

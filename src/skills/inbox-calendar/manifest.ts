@@ -1,7 +1,8 @@
 // manifest.ts — block.json-shaped metadata for the Inbox & Calendar block.
 //
-// Declared now so the transfer/CATALOG seam (later brick) has something to package and the
-// detector can map an origin -> provider grade. Not yet wired into buildSkill's output.
+// Declared so the transfer/CATALOG seam has something to package and the detector
+// can map an origin -> provider grade. buildSkill still consumes the stable skill
+// definition directly.
 import type { BlockManifest } from '../types.ts';
 
 export const MANIFEST: BlockManifest = {

@@ -9,7 +9,7 @@ export const DOMAIN = 'an Inbox & Calendar operator';
 export const SCOPE = 'inbox or calendar';
 
 // Anchored "today" + the normalization rule, stated in the system prompt at train time.
-// The live app can substitute the real current date later (the write-layer's job).
+// Runtime date injection belongs to the write-layer boundary, not the model output.
 export const CONTEXT =
   'Assume today is Monday 2026-06-29, local time. Express every date and time as ISO 8601 ' +
   '(YYYY-MM-DDTHH:MM) and always set end = start + the requested duration.';

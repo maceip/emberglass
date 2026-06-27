@@ -2846,24 +2846,14 @@ var QwenWGPU = class {
       uploadF32: /* @__PURE__ */ __name((arr) => this._f32(arr), "uploadF32"),
       uploadU32: /* @__PURE__ */ __name((arr) => this._u32(arr), "uploadU32")
     });
-    if (source === "mock") {
-      for (const name of this.schema.expectedNames) {
-        const desc = this.schema.tensors.find((t) => t.name === name);
-        const shape = desc.shape;
-        const numel = shape.reduce((a, b) => a * b, 1);
-        const type = desc.quant === "int8" ? "I8" : "F32";
-        uploader.visit({ name, shape, data: new Uint8Array(numel * (type === "I8" ? 1 : 4)), type });
-      }
-    } else {
-      await streamSafetensors(source, {
-        names: this.schema.expectedNames,
-        onProgress,
-        onTensor: /* @__PURE__ */ __name(async (tensor) => {
-          uploader.visit(tensor);
-          if (uploader.seen.size % 48 === 0) await new Promise((r) => setTimeout(r, 0));
-        }, "onTensor")
-      });
-    }
+    await streamSafetensors(source, {
+      names: this.schema.expectedNames,
+      onProgress,
+      onTensor: /* @__PURE__ */ __name(async (tensor) => {
+        uploader.visit(tensor);
+        if (uploader.seen.size % 48 === 0) await new Promise((r) => setTimeout(r, 0));
+      }, "onTensor")
+    });
     uploader.finalize();
     await this._buildPackedProjectionBuffers();
     this._buildRope(this.maxCtx);
@@ -9212,10 +9202,10 @@ function renderDock() {
       }
     } else {
       addTile(svc, {
-        state: "soon",
+        state: "locked",
         lock: true,
-        tip: `${svc.name} \u2014 planned surface`,
-        onClick: /* @__PURE__ */ __name(() => stageMsg(`\u201C${svc.name}\u201D is not trainable yet \u2014 the Atlas grows as we add account surfaces.`), "onClick")
+        tip: `${svc.name} \u2014 locked account root`,
+        onClick: /* @__PURE__ */ __name(() => stageMsg(`\u201C${svc.name}\u201D is locked in this build. Train one of the unlocked account roots first.`), "onClick")
       });
     }
   }
@@ -9812,8 +9802,9 @@ window.addEventListener("DOMContentLoaded", () => {
   selectSkill(selectedSkillKey);
   $("learnBtn")?.addEventListener("click", () => openTrainer());
   $("learnCta")?.addEventListener("click", () => openTrainer());
-  $("jobBoardBtn")?.addEventListener("click", () => stageMsg("Job Board will compare trained surfaces, evals, levels, and export status."));
-  $("worldMapBtn")?.addEventListener("click", () => stageMsg("World Map will show account roots, segmented app surfaces, and workflow handoffs."));
+  $("jobBoardBtn")?.addEventListener("click", () => {
+    window.location.href = new URL("wireframes/job-board.html", window.location.href).href;
+  });
   $("trainerClose")?.addEventListener("click", () => closeTrainer());
   $("trainer")?.addEventListener("click", (e) => {
     if (e.target.id === "trainer") closeTrainer();

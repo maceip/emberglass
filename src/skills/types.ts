@@ -122,7 +122,7 @@ export interface Lesson {
   evidence?: string;
 }
 
-// block.json-shaped manifest (consumed by the future transfer/CATALOG seam, not buildSkill yet).
+// block.json-shaped manifest consumed by the transfer/CATALOG seam.
 export interface BlockGrade {
   grade: 'nursery' | 'elementary' | 'graduated';
   adapter: string;

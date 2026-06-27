@@ -87,7 +87,7 @@
   .history__learn{ margin-left:auto; align-self:center; padding:3px 9px; font:700 11px Verdana,sans-serif; }
   .history__empty p{ margin:0 0 10px; }
   .history__empty button.primary{ width:100%; }
-  .atlasnav{ margin-top:10px; padding-top:10px; border-top:1px dashed #0002; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .atlasnav{ margin-top:10px; padding-top:10px; border-top:1px dashed #0002; display:grid; grid-template-columns:1fr; gap:6px; }
   .atlasnav__btn{ height:30px; padding:0 8px; font:700 11px Verdana,sans-serif; }
 
   /* ── LEARN menu (training overlay) — opened like an RPG menu, not a tab ── */
@@ -395,8 +395,8 @@
   /* one-shot equip flourish (pop) when a surface snaps into the lead slot */
   .dock__tile--pop .dock__glyph{ animation:equipPop .42s var(--ease); }
   @keyframes equipPop{ 0%{ transform:scale(.82); } 55%{ transform:scale(1.12); } 100%{ transform:scale(1); } }
-  .dock__tile[data-state=soon] .dock__glyph{ filter:grayscale(.9) opacity(.5); }
-  .dock__tile[data-state=soon]:hover .dock__glyph{ filter:grayscale(.35) opacity(.9); }
+  .dock__tile[data-state=locked] .dock__glyph{ filter:grayscale(.9) opacity(.5); }
+  .dock__tile[data-state=locked]:hover .dock__glyph{ filter:grayscale(.35) opacity(.9); }
   .dock__lv{ position:absolute; left:-4px; bottom:-5px; min-width:16px; height:15px; padding:0 3px; display:flex;
     align-items:center; justify-content:center; font:800 9px ui-monospace,monospace; color:#fff; background:#7a4a16;
     border:1.5px solid #fff; border-radius:5px; box-shadow:0 1px 2px #0004; }
@@ -673,9 +673,8 @@
             <p>No trained surfaces yet. Start with an account surface like Gmail, Pipedrive, or Gong; each local LoRA becomes a page you can equip into a workflow chain.</p>
             <button id="learnCta" class="primary">🗺 Train first surface</button>
           </div>
-          <div class="atlasnav" aria-label="Planned atlas screens">
+          <div class="atlasnav" aria-label="Atlas screens">
             <button id="jobBoardBtn" class="ghost atlasnav__btn" title="Review trained surfaces">Job Board</button>
-            <button id="worldMapBtn" class="ghost atlasnav__btn" title="Explore account progression">World Map</button>
           </div>
         </aside>
 

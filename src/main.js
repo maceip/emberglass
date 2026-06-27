@@ -613,8 +613,8 @@ function renderDock() {
       }
     } else {
       addTile(svc, {
-        state: 'soon', lock: true, tip: `${svc.name} — planned surface`,
-        onClick: () => stageMsg(`“${svc.name}” is not trainable yet — the Atlas grows as we add account surfaces.`),
+        state: 'locked', lock: true, tip: `${svc.name} — locked account root`,
+        onClick: () => stageMsg(`“${svc.name}” is locked in this build. Train one of the unlocked account roots first.`),
       });
     }
   }
@@ -1076,8 +1076,9 @@ window.addEventListener('DOMContentLoaded', () => {
   // open the train surface menu from the Atlas header or empty-state CTA
   $('learnBtn')?.addEventListener('click', () => openTrainer());
   $('learnCta')?.addEventListener('click', () => openTrainer());
-  $('jobBoardBtn')?.addEventListener('click', () => stageMsg('Job Board will compare trained surfaces, evals, levels, and export status.'));
-  $('worldMapBtn')?.addEventListener('click', () => stageMsg('World Map will show account roots, segmented app surfaces, and workflow handoffs.'));
+  $('jobBoardBtn')?.addEventListener('click', () => {
+    window.location.href = new URL('wireframes/job-board.html', window.location.href).href;
+  });
   $('trainerClose')?.addEventListener('click', () => closeTrainer());
   // click the dimmed backdrop (outside the menu window) to dismiss
   $('trainer')?.addEventListener('click', (e) => { if (e.target.id === 'trainer') closeTrainer(); });

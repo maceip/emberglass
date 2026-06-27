@@ -86,7 +86,7 @@ if (dockBad.length) failures.push(`dock: ${dockBad.length} tiles missing bg/glyp
 console.log(perSkill.join('\n'));
 console.log('────────────────────────────────────────────');
 console.log(`skills: ${SKILLS.length}   examples: ${total}   valid-macros: ${valid}   oos: ${oos}   held-out eval: ${evalTotal}   contract-checked: ${contractChecked}`);
-console.log(`dock tiles: ${POPULAR_2026.length} (${POPULAR_2026.filter((d) => d.skill).length} forgeable, ${POPULAR_2026.filter((d) => !d.skill).length} coming-soon)`);
+console.log(`dock tiles: ${POPULAR_2026.length} (${POPULAR_2026.filter((d) => d.skill).length} forgeable, ${POPULAR_2026.filter((d) => !d.skill).length} locked)`);
 console.log(`calendar providers: ${Object.keys(PROVIDERS).length} (${Object.keys(PROVIDERS).join(', ')})   provider-macros-checked: ${providerChecks}`);
 
 const pass = total >= 500 && failures.length === 0 && (valid + oos === total);

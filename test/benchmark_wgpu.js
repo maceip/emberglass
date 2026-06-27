@@ -98,6 +98,9 @@ async function timeGreedy(rt, ids, startCtx, tokens) {
 }
 
 window.run = async () => {
+  const params = new URLSearchParams(location.search);
+  const modelPath = params.get('model') || '/model';
+  const adapterDir = params.get('adapterDir') || '';
   const { adapter, dev, hasTimestamp } = await requestDevice();
   dev.addEventListener?.('uncapturederror', (e) => row({ type: 'gpu-error', message: e.error.message.slice(0, 200) }));
   row({
@@ -115,9 +118,10 @@ window.run = async () => {
     maxSamplingTopK: 64,
   });
   const tBuild = performance.now();
-  await rt.build('mock');
+  await rt.build(modelPath);
   row({
     type: 'load',
+    modelPath,
     seconds: (performance.now() - tBuild) / 1000,
     shaderCompileMs: rt.shaderCompileMs || 0,
     kvBytes: rt.estimateKvCacheBytes(),
@@ -244,19 +248,21 @@ window.run = async () => {
     });
   }
 
-  const adapterFiles = await tryFetchAdapter('adapters_sel');
-  if (adapterFiles) {
+  if (adapterDir) {
+    const adapterFiles = await tryFetchAdapter(adapterDir);
+    if (!adapterFiles) throw new Error(`adapterDir not found: ${adapterDir}`);
     const lora = await loadLoraAdapterGPU(dev, adapterFiles, QWEN25_3B);
     rt.setLora(lora);
     const r = await timeGreedy(rt, ref.ids, 256, 16);
     row({
       type: 'lora-greedy-decode',
+      adapterDir,
       modules: Object.keys(lora.modules).length,
       tokens: r.tokens,
       seconds: r.seconds,
       tokPerSec: r.tokens / r.seconds,
     });
-  } else row({ type: 'lora-greedy-decode', skipped: 'adapters_sel fixture unavailable' });
+  }
 
   row({ type: 'done' });
   console.log('VWG DONE');

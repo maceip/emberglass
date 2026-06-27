@@ -112,7 +112,7 @@ Items:
 
 **Evaluation**
 - **Correctness (critical):** Compare f16 path vs f32 path on the same prompt using the reference harness. Accept small numeric delta (document tolerance, e.g. 1e-3 or 1e-4 relative on logits). Full generation must produce "equivalent" output (same top tokens within temperature 0 greedy).
-- **Accuracy tests:** Extend `test/q4_accuracy.mjs` style checks; add a dedicated `f16_vs_f32_diff` test.
+- **Accuracy tests:** Compare f16/f32 on real model weights only. Do not use reduced model or generated-weight fixtures for public correctness or performance claims.
 - **Performance:** Significant bandwidth win on matmul/attention. Target 10-30%+ decode speedup on hardware that supports native f16 (measure with bench + profiler).
 - **Feature detection:** Only enable when both `shader-f16` and (optionally) `subgroups` (for f16+subgroups) are present.
 - **Portability:** f32 path must remain fully functional and be the default.
@@ -203,7 +203,7 @@ Items:
 - Started Phase 2 items: `requires subgroup_id;`, `requires linear_indexing;`, and `@builtin(subgroup_id)` / `global_invocation_index` in example kernels (GEMV + ADD).
 
 **Phases 3-5 representative work (same commit 1e75287):**
-- Phase 3: `hasF16Compute()` stub + comment; device already requests shader-f16 when present.
+- Phase 3: device requests shader-f16 when present; f16 verification must run against real model weights.
 - Phase 4: `override WG` example in ADD kernel (specialization constants).
 - Phase 5: `onSubmittedWorkDone()` polish in argmax readback path; more lifetime / overlap work can follow the plan criteria.
 
@@ -277,11 +277,6 @@ Next linear: more f16 kernels (RoPE math, attention score/softmax/V, GEMV4 accum
 
 - Added RMSNORM_T_F16 + rmsTF16 pipe + selection in rmsT() (prefill / batched row RMS also uses f16 math when enabled).
 
-Continuing to accuracy harness stub + Phase 4 (more overrides + workgroup tuning) on next step.
-
-**Harness artifact added (linear):**
-- `test/f16_vs_f32_diff.js` stub created. Demonstrates toggle via setUseF16/usingF16 + skeleton for logit/activation diff capture. Ready to be wired into deep_kernel_diff or a new playwright flow for numeric tolerance + token-id parity checks (per Phase 3 eval criteria).
-
 **Phase 4 start (linear hygiene):**
 - RMSNORM / RMSNORM_T / *_F16 now declare `override WG` (specialization constant) and pipes pass `{ WG: ... }` at creation time. This prepares for per-hw workgroup autotuning without codegen at runtime.
 - Consistent with ADD / SILU f16/f32 which already used overrides.
@@ -292,27 +287,17 @@ Continuing to accuracy harness stub + Phase 4 (more overrides + workgroup tuning
 - ATTN_COMBINE (f32) also upgraded to `override WG`.
 - Pipe `attnCF16` + conditional selection in `attn()` and `attnPaged()` combine step.
 - Log updated: "f16 compute enabled (add/silu/rms/rope/attn-combine paths)".
-- f16 harness stub refreshed with attn guidance.
 - Note: heavy lifting (QK dots, softmax, inner V accum) in ATTN_PARTIAL remains f32 this slice; combine is the first safe attn f16 win.
 - Still 0 var<uniform>.
-- f16_vs_f32_diff.js now ships concrete helpers: maxAbsDiff, maxRelDiff, topKMatch (plus window export) so browser tests can compute tolerance + top-k parity immediately after capture.
 
-Next linear: real numeric f16-vs-f32 harness execution + tolerance logging (using the helpers), ATTN_PARTIAL_F16 candidate or prefill attn f16, basic WG autotune loop (Phase 4), more overrides, Phase 5 GPU sampling.
+Next linear: real-model f16-vs-f32 execution + tolerance logging, ATTN_PARTIAL_F16 candidate or prefill attn f16, basic WG autotune loop (Phase 4), more overrides, Phase 5 GPU sampling.
 
 **Latest linear step (continue):**
 - Added `QwenWGPU.readLogits()` public helper (MAP_READ copy of s.logits) for easy numeric harnesses and evals.
-- `test/f16_vs_f32_diff.js` now contains *real executable* comparison:
-  - Reuses prebuilt rt or builds one.
-  - Re-prefills same ids with setUseF16(false) then true.
-  - Captures final logits via readLogits + short greedy continuation via argmaxLogits + decodeBatch.
-  - Uses the shipped maxAbsDiff / maxRelDiff / topKMatch helpers for reporting.
-  - Logs dispatches, argmax, generated ids, maxAbs/Rel, top-5 overlap, gen parity, top-1 match.
-  - Returns structured result + simple pass criterion (gen match or (rel<tol && top1)).
-  - Documents the covered f16 paths and that partial attn remains f32.
-- This fulfills the plan item "real numeric f16-vs-f32 harness execution + tolerance logging (using the helpers)".
+- f16/f32 comparison should re-prefill the same ids with setUseF16(false) then true, capture logits via readLogits, and compare generation parity on the real model path.
 - Build validated. Still 0 var<uniform>. Phase 3/4 linear progress recorded.
 
-Ready for: run the harness on real hardware for numbers; next could be ATTN_PARTIAL_F16 exploration or Phase 4 workgroup microbench.
+Ready for: run real-model f16 verification on hardware for numbers; next could be ATTN_PARTIAL_F16 exploration or Phase 4 workgroup microbench.
 
 **This slice also (Phase 4 hygiene):**
 - ATTN_PARTIAL now declares `override WG` (pipe creation passes it). (Workgroup arrays still sized for the 128 default; full dynamic sizing is future.)
@@ -349,7 +334,7 @@ Next linear: run f16 harness on hardware for real deltas (partial attn now cover
 Next linear items (in order):
 - Wire `sampleToken` into high-level generation (e.g. `generate(..., doSample=true)` path) so end-to-end sampled decode uses it.
 - Optional: fused topK-select + sample in one encoder (avoid the intermediate k-value readbacks even for the selection step when sampling).
-- Run the f16_vs_f32_diff + sampling parity on real hardware; record numbers.
+- Run f16/f32 + sampling parity on real hardware with real model weights; record numbers.
 - Flesh autotune further (timestamp-based when requested, save best-per-adapter, auto-apply at build for common kernels).
 - More overrides and paged/prefill f16 attention kernels.
 - Continue Phase 5 (stop token checks on GPU, Gumbel-max option, etc.).
@@ -360,7 +345,7 @@ Next linear items (in order):
   - When `sample: true`, the loop uses `sampleToken(temp)` instead of `argmaxLogits()` for every generated token (after prefill).
   - Greedy path unchanged (argmax).
   - This makes the GPU sampler participate in end-to-end generation (the item "Wire sampleToken into high-level generation").
-- Small test harness update: f16 diff now also exercises sampling parity (fixed r) under both precisions.
+- f16 verification should also exercise sampling parity under both precisions on real model weights.
 - Still 0 var<uniform>. Build clean.
 
 **Pure-GPU topK + sample chaining (this step):**
@@ -373,7 +358,7 @@ Next linear items (in order):
 - `generate(..., {sample:true})` now gets the full benefit automatically.
 
 Next linear (pick one on next continue):
-- Real hardware run of harness + sampling numbers + record results.
+- Real hardware run with sampling numbers + record results.
 - More Phase 5 (GPU stop token checks, Gumbel, etc.).
 - paged / prefill attention f16 variants if desired.
 - More overrides.
@@ -381,29 +366,9 @@ Next linear (pick one on next continue):
 **Latest linear step (continue):**
 - Autotune improvements completed in previous slice + small polish:
   - Added `getBestWorkgroupSizes()` for easy inspection of chosen sizes (and source).
-- Harness execution prepared:
-  - `test/f16_vs_f32_diff.js` is fully executable in browser (re-uses or builds rt, exercises f16 paths + sampleToken parity with fixed r, uses the helpers, reports pass).
-  - Invocation example added to plan below.
-  - Also exercises the new `generate({sample: true})` path indirectly via sampleToken.
-- "Real hardware run" item advanced to "ready + documented"; actual numeric capture (maxRel, sampleMatch, etc.) will be appended on next real-hardware session.
+- Real-model f16 verification remains required before publishing any f16 correctness or performance number.
 
-**How to capture numbers on hardware (Chrome 149+ with subgroups + ts + f16):**
-```js
-import { runF16Diff, maxAbsDiff, maxRelDiff, topKMatch } from './test/f16_vs_f32_diff.js';
-// after page/model loaded:
-const res = await runF16Diff({ genLen: 6, tolRel: 3e-3 });
-console.dir(res);
-```
-
-Placeholder for results (to be filled from real run):
-- maxAbs: ...
-- maxRel: ...
-- genMatch / sampleMatch: ...
-- f16Covered: ...
-
-This moves the "run harness on hardware" item forward as far as code + docs allow in this environment.
-
-Ready for deeper Phase 5 or f16 attn paged/prefill on next continue.
+Ready for deeper Phase 5, real-model f16 verification, or f16 attn paged/prefill on next continue.
 
 ## WGSL Shader Size & Compile Time
 

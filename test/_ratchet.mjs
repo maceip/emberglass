@@ -5,7 +5,7 @@
  * test/baselines/ratchet.json. Floors are higher-is-better minimums and are TIGHTEN-ONLY:
  *   node test/_ratchet.mjs          # enforce: every measured metric >= its floor
  *   node test/_ratchet.mjs --bump   # ratchet up: floor = max(floor, measured), then rewrite
- * The mechanism is designed so trained held-out accuracy floors slot in unchanged later. */
+ * The mechanism is designed so trained held-out accuracy floors can slot in unchanged. */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { SKILLS, verifyMacro, checkContract, planFor, EXECUTORS } from '../src/skills.js';
 import { generateCorpus } from '../src/skills/inbox-calendar/generate.ts';

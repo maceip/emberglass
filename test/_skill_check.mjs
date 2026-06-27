@@ -26,13 +26,13 @@ checks.registry = await p.evaluate(() => {
 });
 
 // 1) Fresh dock → the two functional skills show as "forge" tiles; popular
-//    services render as dimmed "soon" tiles with generated brand icons.
+//    services render as dimmed locked tiles with generated brand icons.
 checks.dockFresh = await p.evaluate(() => {
   const tiles = [...document.querySelectorAll('#dockSlots .dock__tile')];
   const by = (s) => tiles.filter((t) => t.dataset.state === s).length;
   const google = tiles.find((t) => t.dataset.key === 'google');
   return {
-    total: tiles.length, forge: by('forge'), soon: by('soon'), owned: by('owned'), equipped: by('equipped'),
+    total: tiles.length, forge: by('forge'), locked: by('locked'), owned: by('owned'), equipped: by('equipped'),
     inboxForge: tiles.find((t) => t.dataset.key === 'inbox-calendar')?.dataset.state,
     iconBg: google?.querySelector('.dock__glyph')?.style.background || '',
   };
@@ -127,7 +127,7 @@ checks.dockForged = await p.evaluate(() => {
     inbox: st('inbox-calendar'), music: st('music'),
     owned: tiles.filter((t) => t.dataset.state === 'owned').length,
     equipped: tiles.filter((t) => t.dataset.state === 'equipped').length,
-    soon: tiles.filter((t) => t.dataset.state === 'soon').length,
+    locked: tiles.filter((t) => t.dataset.state === 'locked').length,
     keys: tiles.filter((t) => t.querySelector('.dock__key')).map((t) => t.querySelector('.dock__key').textContent),
     hasByodSep: !!document.querySelector('#dockSlots .dock__sep'),
     byodTile: tiles.some((t) => t.dataset.key && t.dataset.key.startsWith('byod-')),
@@ -207,7 +207,7 @@ await b.close();
 const pass =
   checks.registry.n >= 12 && checks.registry.allHaveSpec &&
   checks.registry.corpus >= 500 && checks.registry.hasGithub && checks.registry.dockTiles >= 30 &&
-  checks.dockFresh.forge === checks.registry.n && checks.dockFresh.soon >= 5 && checks.dockFresh.owned === 0 &&
+  checks.dockFresh.forge === checks.registry.n && checks.dockFresh.locked >= 5 && checks.dockFresh.owned === 0 &&
   checks.dockFresh.inboxForge === 'forge' && checks.dockFresh.iconBg.length > 0 &&
   checks.picker.btnCount === checks.registry.n && checks.picker.onKey === 'inbox-calendar' &&
   checks.picker.iconStyled && checks.picker.hasMeta &&
@@ -219,7 +219,7 @@ const pass =
   checks.musicSelect.hasMusicOp && checks.macroSwapped &&
   checks.verify.ok && checks.verify.oos && checks.verify.badArg && checks.verify.badOp && checks.verify.musicOk &&
   checks.dockForged.inbox === 'equipped' && checks.dockForged.music === 'owned' &&
-  checks.dockForged.equipped === 1 && checks.dockForged.owned >= 2 && checks.dockForged.soon >= 5 &&
+  checks.dockForged.equipped === 1 && checks.dockForged.owned >= 2 && checks.dockForged.locked >= 5 &&
   checks.dockForged.keys.includes('1') && checks.dockForged.keys.includes('2') &&
   checks.dockForged.hasByodSep && checks.dockForged.byodTile &&
   checks.inventory.count === 3 && checks.inventory.countBadge === '3' &&

@@ -1,9 +1,9 @@
-// detect.ts — origin -> provider detection seam (stub).
+// detect.ts — origin -> provider detection.
 //
-// Given a logged-in tab's origin/URL, resolve which calendar provider profile to use. Today
-// it's a checked-in host map; later the installed extension can supply the active tab's origin
-// and this picks the executor profile with no user prompt. Shaped so a richer detector (cookies,
-// account hints, manifest sniffing) can drop in behind the same two functions.
+// Given a logged-in tab's origin/URL from the extension capture bridge, resolve which
+// calendar provider profile to use. This starts as a checked-in host map and keeps
+// the same two-function boundary for richer detectors such as account hints or
+// manifest sniffing.
 import type { ProviderProfile } from '../types.ts';
 import { PROVIDERS } from './providers/index.ts';
 
