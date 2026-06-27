@@ -17,7 +17,7 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VibeBounty · in-browser Qwen2.5 triage (WebGPU) + LoRA hot-swap</title>
+<title>Emberglass — Train a private skill for this app (WebGPU · LoRA · verified plans)</title>
 <style>
   :root { color-scheme: dark; }
   body { font: 14px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 940px; padding: 24px; background:#0e0f13; color:#e6e6e6; }
@@ -34,10 +34,9 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 </style>
 </head>
 <body>
-<h1>VibeBounty · in-browser Qwen2.5-3B triage <span style="color:#7c8">(WebGPU · custom WGSL runtime · int4 · runtime LoRA swap)</span></h1>
+<h1>Emberglass — Train a private skill for this app <span style="color:#7c8">(WebGPU · LoRA · contract-verified plans · dry-run only)</span></h1>
 <div class="banner">
-  Runs the bug-bounty triage model <b>entirely client-side</b> on WebGPU. Custom WGSL compute kernels (int4 weights, GPU-resident KV cache) — we own every matmul,
-  so LoRA adapters can be <b>hot-swapped at runtime</b> with no base reload. ~50 tok/s decode. BYO model: served under <code>/model/</code>.
+  Load real weights from <code>/model</code> or HF. Train a per-account skill (LoRA) on the real Calendar drills or your own text. Cast a request; the equipped skill emits a macro that is parsed and checked against the skill contract. Everything stays in-browser; executors are dry-run only (no account writes).
 </div>
 
 <div class="row">
