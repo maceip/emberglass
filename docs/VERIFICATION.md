@@ -1,98 +1,124 @@
-# How Emberglass verifies a skill — and what it does *not* verify
+# Verification — what "the test passed" actually means
 
-This is the honest answer to "how do you actually know a trained skill works?"
-There are four levels of verification. We do **1–3 today**. **Level 4 (executing
-against a real Google Calendar and reading the change back) does not exist yet**,
-because the execution/auth layer (extension + OAuth) is unbuilt — see
-[`KERNELS_SHARING.md`](./KERNELS_SHARING.md) and the action-layer review. We write
-that down here instead of pretending the number is something it isn't.
+> The honest answer to: *"Do you have a calendar write target you can track —
+> train on Google Calendar, prompt, then verify the action was actually executed —
+> and what is the success rate?"*
+>
+> **No, not at the real-provider level — by design.** Today the executor is
+> dry-run only and never touches Google. So "the event was actually created on a
+> real calendar" is **not yet verifiable**, and there is **no real-execution
+> success rate** to report. This document writes that down, defines the levels of
+> verification we *do* run, and records the numbers we *can* produce.
 
-## The verification levels
+Last run: 2026-06-27. Re-run everything below to refresh.
 
-| Level | Question it answers | Built? | Where |
-|------|----------------------|--------|-------|
-| **L1 — Emission** | Does the trained adapter *emit the right operation* for a natural-language prompt? | ✅ | `test/run_live_gpu.mjs` [5] |
-| **L2 — Contract** | Is the emitted macro *well-formed and safe* (ISO times, non-zero duration, ordered slot windows, mapped provider method, idempotency key, resolved data-flow refs)? | ✅ | `test/_plan.mjs`, `contract.ts`, `_gold_calendar.mjs:contractHolds` |
-| **L3 — Target match** | Does the intended action *match the requested target* (right duration, right weekday, right hour, mentions the right person)? | ✅ | `test/_gold_calendar.mjs` gold cases + `run_live_gpu.mjs` [5] |
-| **L4 — Execution** | Was the action *actually executed on the real account* and can we read the created event back? | ❌ **unbuilt** | needs extension + OAuth (`chrome.identity`) + a real executor |
+---
 
-By design, the only executor today is `DryRunExecutor`: it performs **zero I/O**
-(no `fetch`, no DOM, no provider SDK, no `chrome.*`) and every receipt is
-`status: 'simulated'`. A ratchet invariant (`executors_are_dry_run`) trips if that
-ever changes, forcing an explicit safety review. So L4 cannot silently appear.
+## The verification ladder
 
-## What "the calendar write target" is
+We separate four things that are easy to conflate. A higher level does **not**
+imply a lower one is the bottleneck — they fail for different reasons.
 
-The user's question — *"do you have a calendar target, a prompt, then verify the
-action executed?"* — maps to L3, not L4. The target is checked-in, machine-readable,
-and adapter-agnostic. Example (`test/_gold_calendar.mjs`):
+| Level | Question it answers | Touches a real account? | Status here |
+|------|----------------------|--------------------------|-------------|
+| **L0 — Grammar / contract** | Is the emitted macro spec-valid (allowed ops + args) or a clean `OUT_OF_SCOPE` bounce, and does it satisfy the skill contract (assertions + forbidden patterns)? | No | ✅ runs, enforced by tests |
+| **L1 — Model accuracy** | Does the *fine-tuned* model emit the **correct** macro for a held-out request (vs. the golden target)? | No | ⚠️ harness exists; needs local weights (see below) |
+| **L2 — Closed-loop execution** | If we *execute* the plan against a real (in-memory) calendar/inbox and **read the store back**, did the intended writes land with read→write dataflow fully resolved? | No (mock store) | ✅ **100% (17/17)** |
+| **L3 — Real-provider execution** | Did the action **actually happen on real Google Calendar**, confirmed by reading it back through the API? | **Yes** | ❌ **not built** (dry-run boundary + no login broker) |
 
-```
-prompt:  "Email the design team this week's notes, then put a 30-minute review
-          on my calendar for Monday morning."
-expectOps: ['create_event']
-target assertions:  duration === 30 min · weekday === Monday · hour ∈ [6,12)
-                    · also emits compose_email/schedule_send
-```
+---
 
-A case **passes only if** the op is present **and** the contract holds **and** every
-target assertion is true. `run_live_gpu.mjs` asks the prompt to the *real trained
-adapter*, parses the emitted macro, and scores it. Result is written to
-`/tmp/eg_ui_scratch/gold_results.json` with a per-check breakdown so the rate is honest.
+## L0 — Grammar / contract  (`npm run test:skills`)
 
-What we do **not** do at L3: create the event on a real Google Calendar and re-read it.
-That requires being logged in (the session precondition added in `state.js`/`ui.js`)
-**and** a real executor with a token — neither exists yet. So "the action executed"
-is verified as *"the intended action is correct and contract-clean"*, not *"the event
-now exists in the account."* That distinction is the whole point of this document.
+`src/skills.js#verifyMacro` + `#checkContract` gate every macro against the
+canonical port (`src/skills/inbox-calendar/port.ts`): only declared ops, only
+that op's params, ISO times, `end = start + duration`, no forbidden patterns, or
+a clean `OUT_OF_SCOPE`. This is a **pass/fail gate**, not a rate. It is the
+precondition the dry-run executor enforces (`canExecute: plan.contractOk === true`).
 
-## Success rates (measured)
+## L2 — Closed-loop execution  (`npm run test:closedloop`)
 
-### L2/L3 plan gate — `npm run test:plan` (no model needed)
-Compiles **every held-out calendar request × 3 providers (Google / Outlook / Zoho)**
-through the planner + contract + dry-run executor:
+This is the real "did the action happen?" check we can run **today, with no
+account and no model**, and it is the headline number.
 
-```
-plans: 45   steps: 69   receipts: 69   executors: dry-run        →  PLAN_PASS
-```
-
-**45 / 45 plans (100%)** compile contract-clean and dry-run into 69 simulated
-receipts; the fail-closed guard (a zero-duration event produces 0 receipts) holds.
-Note: this proves the *planner/contract* is correct **given the correct macro** — it
-does not, by itself, measure whether the model emits that macro.
-
-### L1/L3 model gate — `node test/run_live_gpu.mjs` (real WebGPU + 3B adapter)
-Runs the 4 gold cases against the **actual trained LoRA adapter** in Chrome Canary.
-This is the number that measures the *model*, base vs. tuned:
+`test/verify_calendar_closed_loop.mjs`:
+1. Takes the skill's **held-out golden eval split** (request → expected macro).
+2. Compiles each macro to an `ActionPlan` (`compilePlan`, the real planner).
+3. Executes it against a **genuinely separate in-memory executor that MUTATES a
+   store** (calendar/inbox) — unlike the shipped `DryRunExecutor`, which mutates
+   nothing. Reads (`find_slot`, `find_email`) return synthetic bindings, so any
+   write that depends on a read (`find_slot → create_event`) **must resolve its
+   refs to land**.
+4. **Reads the store back** and asserts every intended write is present with its
+   arguments fully resolved (no leftover `$refs`), and `OUT_OF_SCOPE` bounces
+   write nothing.
 
 ```
-L1 (emits the op):        <pending>/4
-L3 (op+contract+target):  <pending>/4   = <pending>% success rate
+eval cases   : 17 (held-out golden split)
+passed       : 17
+failed       : 0
+SUCCESS RATE : 100.0%
+by headline op: OUT_OF_SCOPE 2/2 · archive_email 1/1 · compose_email 1/1 ·
+                create_event 3/3 · find_email 2/2 · forward_email 1/1 ·
+                label_email 2/2 · reply_email 1/1 · rsvp 2/2 ·
+                schedule_send 1/1 · set_reminder 1/1
 ```
 
-> Status: **not yet measured in this environment.** The run is real and self-verifying
-> (WebGPU device initializes, tokenizer loads), but streaming + int4-quantizing the
-> multi-GB VibeThinker-3B weights from HuggingFace is slow/unreliable on this machine,
-> so a clean adapter-eval pass has not completed here. The canonical proof that the GPU
-> train→persist→reload→re-hydrate→export path works end-to-end is the committed
-> `test/e2e_roundtrip.mjs` (loads local `/model` weights). When `run_live_gpu.mjs`
-> completes, paste the `gold_results.json` numbers into the block above.
+**What this proves:** the macro → plan → execute → read-back pipeline is faithful,
+including read→write dataflow wiring. **What it does NOT prove:** model accuracy
+(it uses golden macros, not model output) or that anything happened on real Google.
+
+## L1 — Model accuracy  (`npm run test:roundtrip` / `npm run live:gpu`)
+
+`test/e2e_roundtrip.mjs` (real GPU, real model) loads VibeThinker-3B in WebGPU,
+gets a BASE answer, runs in-browser LoRA training (real backward + AdamW),
+persists + re-hydrates + exports a `.safetensors`, and asserts the tuned answer
+emits the calendar/email macro ops and **differs from base**.
+
+- ✅ It verifies the *real ML roundtrip* (load → train → persist → reload →
+  re-hydrate → export) and that tuning **changes** behavior toward the macro grammar.
+- ⚠️ It currently checks **macro-op presence (regex)**, not exact-match accuracy
+  against the golden target. Upgrading it to compute a per-prompt accuracy over the
+  held-out eval split (then feeding that output through the L2 store read-back) is
+  the path to a true **model success rate** — tracked as TODO.
+- 🚧 **Environment note (2026-06-27):** `e2e_roundtrip` expects **local** weights
+  served at same-origin `/model`. The HF-streaming variant (`test/run_live_gpu.mjs`,
+  loading `WeiboAI/VibeThinker-3B`) was run headed in Chrome Canary twice on this
+  machine; WebGPU initialised fine (`maxBuffer=4.29GB`, f16, timestamp-query), the
+  tokenizer loaded, but the renderer **crashed at ~4.6 min while int4-quantizing the
+  streamed weights (0% progress shown)**. So L1 is currently **blocked on staging
+  local weights** in this environment, not on the harness. To run it for real:
+  download the model to `./model` and `BASE_URL=… npm run test:roundtrip`.
+
+## L3 — Real-provider execution  (NOT BUILT — by design)
+
+`src/skills/action/executor.ts` is the only executor and is a **hard dry-run
+boundary**: no `fetch`, no DOM, no provider SDK, no `chrome.*`. Every receipt is
+`status:'simulated'`. Adding a real executor must trip the ratchet invariant
+`executors_are_dry_run` and force the action-layer review.
+
+Therefore there is **no real Google Calendar write, no API read-back, and no
+real-execution success rate.** Reporting one would be dishonest.
+
+**To make L3 measurable** we need the two pieces the architecture review under-
+specified, now scaffolded in the wireframes (`docs/wireframes/`):
+1. **A signed-in surface (the login/session precondition)** — `SessionState`
+   (logged_in/out/expired) + a sign-in gate, so capture/train/cast never run
+   against a logged-out account. (Built in the wireframes; the mock Google
+   account-chooser stands in for `chrome.identity`.)
+2. **A real, approval-gated executor + a dedicated test calendar** — a throwaway
+   Google Calendar as the write target. The closed-loop test then becomes:
+   train → prompt the model → execute on the test calendar → **read the event
+   back via the Calendar API** → assert title/start/end → repeat over N → report
+   the rate. That is the number this document will carry once L3 exists.
+
+---
 
 ## How to reproduce
 
 ```bash
-npm run test:plan          # L2/L3 plan gate — fast, deterministic, no model
-npm run test:skills        # skill registry + macro verifier (ok/oos/bad classes)
-node test/run_live_gpu.mjs # L1/L3 against the real adapter (needs WebGPU + weights)
-                           #   → writes /tmp/eg_ui_scratch/gold_results.json
-node test/run_live_tour.mjs# product + login-gate UX tour (headed, client-only)
+npm run test:closedloop   # L2 closed-loop (execute + read back) — the headline rate
+npm run test:skills       # L0 grammar/contract gate
+npm run tour              # headed product+login workflow (client-only, dry-run)
+npm run test:roundtrip    # L1 real GPU roundtrip — needs local ./model weights
 ```
-
-## The honest summary
-
-- We verify that a skill **emits the correct, contract-clean, on-target action** (L1–L3).
-- We do **not** verify that the action was **executed on a live account** (L4) — there is
-  no extension, no OAuth token, and the executor does no I/O, on purpose.
-- The deterministic plan gate is **45/45 (100%)**. The model-level gold success rate is
-  produced by `run_live_gpu.mjs` and is currently **unmeasured here** due to the weight-
-  stream constraint above — recorded as a gap rather than guessed.
