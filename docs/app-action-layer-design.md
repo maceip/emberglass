@@ -43,11 +43,22 @@ See src/skills/types.ts for current VerifiedPlan / ActionPlan / ApprovalPacket /
 - Only approved structured ActionPlan reaches any executor.
 - DOM actions must re-validate origin + element identity at execution time.
 
+## Existing Real Skeletons (source of truth in the tree)
+
+The following interfaces already exist and must be the basis for the design (src/skills/types.ts and src/skills/action/*):
+
+- ActionPlan (with steps, providerMethod, idempotencyKey, risk, requiredCapabilities, fingerprint, contractOk)
+- ActionStep (op, effect, binds, args, provider, capability, idempotent, risk, dependsOn)
+- Receipt (step, op, provider, method, status:'simulated', idempotencyKey, at, detail)
+- Executor (canExecute, execute)
+
+See also the current DryRunExecutor implementation (only one allowed today).
+
 ## Next Real Steps (only after current Recovery Cards are solid)
 
-- Flesh out exact ApprovalPacket UI contract.
+- Flesh out exact ApprovalPacket UI contract (title, summary, steps preview, risk, canEdit, canRunPartially).
 - Define idempotency strategy per provider macro.
-- Define receipt schema + audit log format.
+- Define full receipt schema + audit log format (extend the current receipt.ts).
 - Design rollback/undo paths where feasible.
 - Write the design review checklist before any executor code beyond dry-run.
 

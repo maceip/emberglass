@@ -664,6 +664,17 @@ function renderDock() {
     });
   }
   justEquippedId = null; // consumed
+
+  // Saturday review.MD: keep first screen focused.
+  // Only show the full future armory if user explicitly asks.
+  if (!showFullDock) {
+    const more = document.createElement('div');
+    more.className = 'dock__tile dock__more';
+    more.textContent = '…';
+    more.title = 'Show additional planned surfaces (not yet trainable)';
+    more.onclick = () => { showFullDock = true; renderDock(); };
+    tray.appendChild(more);
+  }
 }
 // GW2-style rich tooltip card for a dock tile.
 function dockTip(name, { lv, rarity, scope, opsN, uses, keyN, equipped } = {}) {
