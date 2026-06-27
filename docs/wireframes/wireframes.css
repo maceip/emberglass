@@ -76,6 +76,7 @@ code{ background:#0002; padding:1px 5px; border-radius:3px; font-family:ui-monos
 .ico--lg{ width:54px; height:54px; font-size:26px; } .ico--lg img{ width:34px; height:34px; }
 .ico--sm{ width:26px; height:26px; font-size:14px; } .ico--sm img{ width:17px; height:17px; }
 .ico--locked{ filter:grayscale(1); opacity:.5; }
+.gly{ font-style:normal; line-height:1; } /* fallback glyph, shown only if a bundled SVG fails to load */
 
 /* ── AccountTile / SurfaceNode ── */
 .tile{ position:relative; display:flex; align-items:center; gap:var(--s2); padding:var(--s2) var(--s3);

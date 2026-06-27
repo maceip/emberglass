@@ -39,11 +39,15 @@ in this order via `.pri-*` classes:
 Surfaces marked `.keep` are **never** hidden: active skill, dry-run/action status,
 command input, verification result. Resize any standalone page to see this in action.
 
+These live under `docs/wireframes/` so they publish on GitHub Pages (which serves
+from `main:/docs`). The handful of brand SVGs they use are bundled in
+`docs/wireframes/logos/` so the screens are fully self-contained — no `vendor/`
+dependency, no network. If a logo ever fails to load it falls back to an inline glyph.
+
 ## Viewing
 
-- `npm run serve` (port 8013) → open `http://localhost:8013/wireframes/`
-- or open the `.html` files directly in a browser (local brand SVGs come from
-  `../vendor/logos/`; missing ones fall back to a glyph, no network needed).
+- `npm run serve` (port 8013) → open `http://localhost:8013/docs/wireframes/`
+- or open the `.html` files directly in a browser.
 - Live (GitHub Pages): `https://maceip.github.io/emberglass/wireframes/`
 
 ## Smoke test

@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 
 const PORT = Number(process.env.WF_PORT || 8019);
 const BASE = `http://localhost:${PORT}`;
+const DIR = 'docs/wireframes';
 
 function startServer() {
   const cp = spawn('npx', ['http-server', '.', '-p', String(PORT), '-c-1', '--silent'], {
@@ -27,12 +28,12 @@ async function waitForServer(url, tries = 40) {
   throw new Error(`server did not come up at ${url}`);
 }
 
-const PAGES = ['wireframes/index.html', 'wireframes/desktop.html', 'wireframes/foldable.html', 'wireframes/mobile.html'];
+const PAGES = [`${DIR}/index.html`, `${DIR}/desktop.html`, `${DIR}/foldable.html`, `${DIR}/mobile.html`];
 
 const server = startServer();
 let failed = false;
 try {
-  await waitForServer(`${BASE}/wireframes/index.html`);
+  await waitForServer(`${BASE}/${DIR}/index.html`);
   const b = await chromium.launch({ headless: true, args: ['--no-first-run'] });
 
   for (const path of PAGES) {
