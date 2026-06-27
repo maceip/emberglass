@@ -479,6 +479,17 @@ function renderHistory() {
   $('historyEmpty').style.display = runs.length ? 'none' : '';
   const ul = $('historyList');
   ul.innerHTML = '';
+
+  // Saturday review.MD — UI symptoms + "remove or hide complexity":
+  // Adapter history competes for first-screen attention.
+  // Default to collapsed. User can expand if needed.
+  const histContainer = $('history') || $('historyRail') || $('historySection');
+  if (histContainer && !histContainer.dataset.saturdayExpanded) {
+    histContainer.style.display = 'none';
+  }
+
+  // Expose a minimal way to show it (for power users / future three-screen work)
+  window.__egShowHistory = () => { if (histContainer) { histContainer.style.display = ''; histContainer.dataset.saturdayExpanded = '1'; } };
   for (const m of runs) {
     const { lv, xp } = skillLevel(m);
     const rar = rarityOf(lv);

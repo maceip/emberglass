@@ -59,6 +59,9 @@ if (existsSync('model')) {
 if (!existsSync('docs/saturday-later-fixes-status.md')) {
   fail('tracking for Later Fixes is missing');
 }
+if (!existsSync('SATURDAY_CONCISE.md')) {
+  fail('concise task list (derived from Saturday review.MD) is missing');
+}
 
 if (violations.length) {
   console.error('Saturday review.MD contract violations:');
