@@ -37,7 +37,7 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 </head>
 <body>
 <h1>Internal WebGPU Benchmark</h1>
-<p>Runs load, prefill, decode, LoRA overhead, and one real backward/optimizer step. Records are emitted as <code>VWG_BENCH</code> console JSON and mirrored below.</p>
+<p>Runs load, prefill, decode, LoRA overhead, and one real backward/optimizer step against real /model weights only. Records are emitted as <code>VWG_BENCH</code> console JSON. The runner writes <code>benchmark-artifact.json</code> — this is the raw evidence artifact required by the review. No synthetic weights or runs are accepted for published numbers.</p>
 <div class="grid">
   <section class="panel"><ol id="benchRows"></ol></section>
   <section class="panel"><pre id="benchJson">{ "rows": [] }</pre></section>

@@ -109,6 +109,15 @@ window.run = async () => {
     maxBufferSize: adapter.limits.maxBufferSize,
     maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
   });
+
+  // Explicit environment record for the real benchmark artifact (Saturday review requirement).
+  row({
+    type: 'browser',
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    platform: navigator.platform,
+    hardwareConcurrency: navigator.hardwareConcurrency || null,
+  });
   const ref = await (await fetch('./ref.json')).json();
 
   const rt = new QwenWGPU(dev, QWEN25_3B, {

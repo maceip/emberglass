@@ -79,6 +79,43 @@ try {
     await page.waitForTimeout(1000);
   }
   if (!rows.some(l => l.includes('"type":"done"'))) process.exitCode = 1;
+
+  // Real artifact emission for the Saturday review benchmark card.
+  // When this runs against a real /model in a real browser, we write the raw evidence
+  // that can be committed. README numbers must come from this artifact.
+  if (rows.some(l => l.includes('"type":"done"'))) {
+    const parsedRows = [];
+    for (const line of rows) {
+      const jsonPart = line.replace(/^VWG_BENCH\s*/, '');
+      try { parsedRows.push(JSON.parse(jsonPart)); } catch { parsedRows.push({ raw: line }); }
+    }
+
+    let userAgent = 'unknown';
+    try {
+      userAgent = await page.evaluate(() => navigator.userAgent);
+    } catch {}
+
+    const artifact = {
+      schema: 'emberglass/real-browser-benchmark-artifact/v1',
+      generatedBy: 'npm run bench:wgpu (real Chromium + WebGPU subgroups)',
+      capturedAt: new Date().toISOString(),
+      environment: {
+        userAgent,
+        executablePath: executablePath || 'system playwright chromium',
+        webgpuFlags: ['--enable-unsafe-webgpu', '--enable-features=WebGPU'],
+      },
+      model: {
+        path: '/model (or ?model=... override)',
+        note: 'Must be real safetensors from /model — no substitutes allowed for published numbers',
+      },
+      rows: parsedRows,
+      acceptance: 'This artifact is the single source of truth. Copy tok/s, prefill, load times etc. from a committed version of this file only after a clean run on real weights. Device, Chrome version, and model path must be visible here.',
+    };
+
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile('benchmark-artifact.json', JSON.stringify(artifact, null, 2));
+    console.log('Wrote benchmark-artifact.json — this is the raw evidence artifact for the review card.');
+  }
 } finally {
   await browser.close();
   await new Promise(resolve => server.close(resolve));
