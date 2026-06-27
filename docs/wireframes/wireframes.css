@@ -139,12 +139,18 @@ code{ background:#0002; padding:1px 5px; border-radius:3px; font-family:ui-monos
 .gallery{ max-width:1180px; margin:0 auto; display:grid; gap:var(--s5); }
 .intro{ color:#eafffb; }
 .intro p{ opacity:.9; max-width:70ch; }
-.frames{ display:grid; gap:var(--s5); grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); align-items:start; }
+.frames{ display:flex; flex-direction:column; gap:var(--s5); align-items:stretch; }
 .frame{ background:#0e1a1c; border:1px solid #0b3033; border-radius:14px; padding:var(--s3); box-shadow:var(--shadow-2); }
+.frame--phone{ align-self:center; max-width:430px; width:100%; }
 .frame h3{ color:#eafffb; margin:0 0 2px; font-size:15px; }
 .frame .cap{ color:#9fc7c2; font-size:12px; margin:0 0 var(--s2); }
-.frame .screen{ border-radius:10px; overflow:hidden; border:1px solid #0b3033; background:#000; }
-.frame iframe{ display:block; width:100%; border:0; background:var(--surface); }
+.frame .screen{ border-radius:10px; overflow:auto; border:1px solid #0b3033; background:#000; }
+/* preview each form factor at (about) its true width so the layout reads true;
+   the screen scrolls if the viewport is narrower than the target. */
+.frame iframe{ display:block; border:0; background:var(--surface); }
+.frame--desktop iframe,
+.frame--foldable iframe{ width:100%; min-width:1000px; }
+.frame--phone iframe{ width:100%; }
 .frame .open{ display:inline-block; margin-top:var(--s2); font-size:12px; color:#7fd1c6; text-decoration:none; }
 .frame .open:hover{ color:#eafffb; }
 

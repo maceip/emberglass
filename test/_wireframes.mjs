@@ -45,12 +45,16 @@ try {
     const facts = await p.evaluate(() => {
       // the gallery frames each screen in iframes; standalone pages embed the surfaces directly
       const framed = document.querySelectorAll('iframe').length > 0;
+      const imgs = Array.from(document.images);
+      const broken = imgs.filter((im) => !im.complete || im.naturalWidth === 0).map((im) => im.getAttribute('src'));
       return {
         keep: document.querySelectorAll('.keep').length,
         dryrun: !!document.querySelector('.dryrun') || framed,
         command: !!document.querySelector('.cmd input') || framed,
         plan: !!document.querySelector('.plan') || framed,
         equipped: !!document.querySelector('.chip--on, .tile--equipped') || framed,
+        imgCount: imgs.length,
+        broken,
       };
     });
 
@@ -60,12 +64,13 @@ try {
     if (!facts.command) problems.push('missing command input');
     if (!facts.plan) problems.push('missing verified-plan card');
     if (!facts.equipped) problems.push('missing equipped skill');
+    if (facts.broken.length) problems.push(`broken brand SVG(s): ${facts.broken.join(', ')}`);
 
     if (problems.length) {
       failed = true;
       console.error(`FAIL ${path}\n  - ${problems.join('\n  - ')}`);
     } else {
-      console.log(`ok   ${path}  (keep=${facts.keep})`);
+      console.log(`ok   ${path}  (keep=${facts.keep}, imgs=${facts.imgCount})`);
     }
     await p.close();
   }
