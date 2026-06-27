@@ -363,17 +363,6 @@
       ],
       "file": "skill/meter-strip.png"
     },
-    "badge-unknown": {
-      "marker": "*P1",
-      "source": "Game Boy Advance - Flashback Legend (Prototype) - Miscellaneous - Screens (Faces).png",
-      "src_bbox": [
-        2,
-        50,
-        42,
-        96
-      ],
-      "file": "icons/badge-unknown.png"
-    },
     "callout-frame": {
       "marker": "*C1",
       "source": "SNES - Dragon Ball Z_ Legend of the Super Saiyan (JPN) - Miscellaneous - Interface Icons and Text Box.png",
@@ -385,21 +374,15 @@
       ],
       "file": "skill/callout-frame.png"
     },
-    "slot-box": {
-      "marker": "*H1",
-      "source": "Game Boy Advance - Pokemon FireRed _ LeafGreen - Menu Elements - PC Interface.png",
-      "src_bbox": [
-        10,
-        944,
-        128,
-        1018
-      ],
-      "file": "home/slot-box.png"
-    },
     "_D1_provenance": {
       "marker": "*D1",
       "source": "PC _ Computer - Agatha Christie_ Murder on the Orient Express - Inventory - Interface.png",
-      "note": "Referenced for selected-detail framing; not skinned (noir palette excluded per review)."
+      "note": "Selected-detail framing reference; not skinned (noir palette excluded per review)."
+    },
+    "_H1_provenance": {
+      "marker": "*H1",
+      "source": "Game Boy Advance - Pokemon FireRed _ LeafGreen - Menu Elements - PC Interface.png",
+      "note": "Home slot reference; not 9-sliced (header bar + wallpaper give a non-uniform ring). Heroic equipped slot realized in CSS."
     }
   }
 }

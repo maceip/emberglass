@@ -50,13 +50,16 @@ derivatives are generated into `docs/ui/processed/` by
 
 | Marker | Source game sheet | Used for |
 | --- | --- | --- |
-| `*I1` | Shining Force CD — Weapon & Spell Icons | skill + allowed-write icons (native, `@2x` pixel, mono, locked) |
-| `*H1` | Pokémon FireRed/LeafGreen — PC Interface | heroic equipped-slot frame |
-| `*S1` | Heroes of Might & Magic 3 — Spellbook | Skill / Train Surface page metaphor |
-| `*J1` | Fortune Street — Menu Boxes | Job Board status bands + detail panel |
-| `*P1` | Flashback Legend — Screens | forge/training progress meter + unknown badge |
-| `*C1` | Dragon Ball Z — Text Box | ornate reward/boundary callout (border-image) |
-| `*D1` | Agatha Christie — Inventory Interface | provenance only (noir palette intentionally not skinned) |
+| `*I1` | Shining Force CD — Weapon & Spell Icons | skill + allowed-write icons — `@2x` pixel variant wired via `srcset`; `-mono` + `-locked` also produced (`-locked` used for locked skills) |
+| `*S1` | Heroes of Might & Magic 3 — Spellbook | Skill / Train Surface page metaphor (CSS) |
+| `*J1` | Fortune Street — Menu Boxes | Job Board status bands + detail panel (cover backgrounds) |
+| `*P1` | Flashback Legend — Screens | forge/training progress meter track |
+| `*C1` | Dragon Ball Z — Text Box | ornate reward/boundary callout (`border-image`, slice 6 = real border; interior text discarded) |
+| `*H1` | Pokémon FireRed/LeafGreen — PC Interface | **provenance only** — boxes carry a header bar + wallpaper, so they don't 9-slice into a uniform ring; the heroic equipped slot is realized in CSS |
+| `*D1` | Agatha Christie — Inventory Interface | **provenance only** (noir palette intentionally not skinned) |
+
+The kept `*I1` icons retain the source spell-tile background (rounded corners are
+keyed transparent); they are styled tiles, not glyphs matted onto full transparency.
 
 Regenerate: `python3 scripts/process_ui_assets.py all` (Pillow). The processed
 bitmaps publish under `docs/`, so the screens are self-contained — no `vendor/`

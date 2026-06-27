@@ -34,10 +34,12 @@ export function nav(active) {
 /** Skill icon tile (processed *I1), with optional pixel @2x and locked variant. */
 export function skillIcon(skill, { size = 'md', locked = false } = {}) {
   const key = skill.iconKey;
-  const src = locked ? `${iconUrl(key).replace('.png', '-locked.png')}` : iconUrl(key);
+  const src = locked ? iconUrl(key).replace('.png', '-locked.png') : iconUrl(key);
+  // wire the @2x pixel derivative so retina/upscaled renders stay crisp
+  const srcset = locked ? '' : ` srcset="${src} 1x, ${src.replace('.png', '@2x.png')} 2x"`;
   const cls = `sicon sicon--${size}` + (locked ? ' sicon--locked' : '');
   const brand = skill.logo ? `<img class="sicon__brand" src="${logoUrl(skill.logo)}" alt="" onerror="this.remove()">` : '';
-  return `<span class="${cls}"><img src="${src}" alt="" onerror="this.style.opacity=0">${brand}</span>`;
+  return `<span class="${cls}"><img src="${src}"${srcset} alt="" onerror="this.style.opacity=0">${brand}</span>`;
 }
 
 /** Earned-state badge: label first, number as proof. */

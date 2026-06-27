@@ -233,13 +233,14 @@ FRAME_CROPS = {
     "band-learning": ("J1", (6, 431, 527, 465), BOARD, 1, True),   # gold
     "band-review":   ("J1", (6, 469, 527, 503), BOARD, 1, True),   # pink
     "panel-light":   ("J1", (6, 221, 579, 331), BOARD, 1, True),   # detail/plan panel
-    # *P1 Flashback -> training console meter + unknown badge
+    # *P1 Flashback -> training console meter (used as the forge track)
     "meter-strip":   ("P1", (0, 1, 362, 47), SKILL, 1, True),
-    "badge-unknown": ("P1", (2, 50, 42, 96), os.path.join(OUT, "icons"), 2, True),
-    # *C1 DBZ -> ornate callout frame (border-image; center text discarded)
+    # *C1 DBZ -> ornate callout frame (border-image at slice=6; real border ~6px,
+    # so the interior alphabet is discarded — do NOT slice deeper or text ghosts)
     "callout-frame": ("C1", (2, 2, 208, 60), SKILL, 1, True),
-    # *H1 Pokemon PC -> inventory slot/box frame
-    "slot-box":      ("H1", (10, 944, 128, 1018), HOME, 1, False),
+    # NOTE: *H1 (Pokemon PC) intentionally NOT skinned. Its boxes carry a header
+    # bar + wallpaper interior, so they don't 9-slice into a uniform border ring;
+    # the heroic equipped slot is realized in CSS instead. *H1 stays provenance.
 }
 
 
@@ -265,9 +266,11 @@ def do_frames():
         MANIFEST["frames"][name] = {"marker": f"*{mk}", "source": SRC[mk],
                                     "src_bbox": list(box), "file": rel}
         print(f"[frames] {name} <- *{mk} {box} -> {rel}")
-    # D1 is provenance-only (noir palette intentionally not skinned per review).
+    # Provenance-only markers (intentionally not skinned with bitmaps):
     MANIFEST["frames"]["_D1_provenance"] = {"marker": "*D1", "source": SRC["D1"],
-        "note": "Referenced for selected-detail framing; not skinned (noir palette excluded per review)."}
+        "note": "Selected-detail framing reference; not skinned (noir palette excluded per review)."}
+    MANIFEST["frames"]["_H1_provenance"] = {"marker": "*H1", "source": SRC["H1"],
+        "note": "Home slot reference; not 9-sliced (header bar + wallpaper give a non-uniform ring). Heroic equipped slot realized in CSS."}
 
 
 def write_manifest():
