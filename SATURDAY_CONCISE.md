@@ -22,6 +22,7 @@ All work must obey the Recovery Contract (Tactic 1 + Tactic 2) and only use real
    - One loop on declared source data.
    - Before + after eval on held-out set.
    - Real adapter artifact + inputs + scores + notes proving actual behavior change (no hiding failures).
+   - Evidence template: test/skill_training_evidence_template.json.
 
 4. **UI Reset Card** (explicitly deferred from current cleanup pass)
    - Only the three approved screens: Skillbook/Home, Skill/Train Surface, Job Board.

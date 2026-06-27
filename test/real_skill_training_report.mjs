@@ -51,5 +51,5 @@ console.log('1. Load real weights.');
 console.log('2. Run before eval on cal.eval.');
 console.log('3. Train using the declared examples (not UI state advancement).');
 console.log('4. Run after eval, record delta and failure cases.');
-console.log('5. Save adapter artifact + full report.');
+console.log('5. Save adapter artifact + full report matching test/skill_training_evidence_template.json.');
 console.log('\nCurrently the substrate (examples, contracts, eval split) is real and exercised by test:skills and test:plan.');
