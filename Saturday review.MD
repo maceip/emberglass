@@ -338,17 +338,19 @@ files in the repo root are legitimate design assets and are not part of the clea
 Before committing, review the diff file-by-file and decide whether the deleted prototype
 artifacts should stay deleted or be replaced by real implementations in the same change.
 
-## Saturday Recovery Progress (2026-06-27)
+## Saturday Recovery Progress (2026-06-28)
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Real Browser Benchmark Card | **done** | `benchmark-artifact.json`, `npm run bench:wgpu` |
-| Real Skill Training Card | **runner ready** | `npm run evidence:skill-training` → `skill-training-artifact.json` |
-| Real Provider Evaluation Card | **blocked** | `npm run evidence:provider` → `provider-eval-artifact.json` (needs OAuth + action layer) |
-| UI Reset Card | **wireframes + evidence runner** | `docs/product/`, `docs/wireframes/*`, `npm run evidence:ui` |
-| F-16 parity (Later Fix) | **runner ready** | `npm run test:f16-parity` → `f16-parity-artifact.json` |
+| Real Browser Benchmark Card | **done** | `benchmark-artifact.json`, `npm run bench:wgpu`, `npm run test:validate-bench-artifact` |
+| Real Skill Training Card | **in progress** | `npm run evidence:skill-training` — no `skill-training-artifact.json` yet |
+| Real Provider Evaluation Card | **blocked** | `provider-eval-artifact.json` (`implementation_required`); needs OAuth + action layer |
+| UI Reset Card | **partial** | `docs/product/`, `docs/wireframes/*`, `docs/evidence/ui/`; live `docs/index.html` still harness |
+| F-16 parity (Later Fix) | **done** | `f16-parity-artifact.json`, `npm run test:f16-parity` |
 | App-action layer design | **done** | `docs/app-action-layer-design.md` |
 | Extension architecture design | **done** | `docs/extension-architecture-design.md` |
-| Training/eval provenance | **partial** | `pools.ts` provenance header; wireframe mock state labeled in UI copy |
+| Training/eval provenance | **partial** | `pools.ts`, `state.js` headers; not full product surfacing |
 
 **Still implementation_required:** real provider writes, extension code, live app UI merge (runtime at `docs/index.html` remains over-composed; product shape at `docs/product/` → wireframes).
+
+Canonical concise list: `SATURDAY_CONCISE.md`. Later-fixes checkboxes: `docs/saturday-later-fixes-status.md`.
