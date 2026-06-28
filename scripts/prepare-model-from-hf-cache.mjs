@@ -23,7 +23,7 @@
  * It looks for the standard HF hub cache layout for WeiboAI/VibeThinker-3B.
  */
 
-import { existsSync, readdirSync, mkdirSync, symlinkSync, copyFileSync } from 'node:fs';
+import { existsSync, readdirSync, mkdirSync, symlinkSync, copyFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -66,8 +66,8 @@ function findSnapshotDir(hubDir, explicit) {
 
   // Prefer the most recent by mtime of the dir
   hashes.sort((a, b) => {
-    const ma = existsSync(join(snaps, a)) ? (require('fs').statSync(join(snaps, a)).mtimeMs || 0) : 0;
-    const mb = existsSync(join(snaps, b)) ? (require('fs').statSync(join(snaps, b)).mtimeMs || 0) : 0;
+    const ma = existsSync(join(snaps, a)) ? (statSync(join(snaps, a)).mtimeMs || 0) : 0;
+    const mb = existsSync(join(snaps, b)) ? (statSync(join(snaps, b)).mtimeMs || 0) : 0;
     return mb - ma;
   });
 
