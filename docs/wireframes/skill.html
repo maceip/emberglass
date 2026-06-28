@@ -37,9 +37,14 @@ import * as S from './state.js';
 document.getElementById('nav').innerHTML = nav('skill');
 
 const sk = S.skillById('calendar');
+const qs = new URLSearchParams(location.search);
 // mutable trial + score model for this session (the wireframe's "training run")
 let trials = S.TRIALS.calendar.map(t=>({ ...t }));
-let score = sk.evalScore, oos = sk.oosPassRate, trained = false, training = false, justId = null;
+let score = Number(qs.get('score')) || sk.evalScore;
+let oos = Number(qs.get('oos')) || sk.oosPassRate;
+let trained = qs.get('trained') === '1';
+let training = false, justId = null;
+if (trained) trials = trials.map(t => ({ ...t, status: t.id === 't1' ? 'pass' : t.status }));
 
 function toast(msg){
   const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');

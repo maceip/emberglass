@@ -337,3 +337,18 @@ files in the repo root are legitimate design assets and are not part of the clea
 
 Before committing, review the diff file-by-file and decide whether the deleted prototype
 artifacts should stay deleted or be replaced by real implementations in the same change.
+
+## Saturday Recovery Progress (2026-06-27)
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| Real Browser Benchmark Card | **done** | `benchmark-artifact.json`, `npm run bench:wgpu` |
+| Real Skill Training Card | **runner ready** | `npm run evidence:skill-training` → `skill-training-artifact.json` |
+| Real Provider Evaluation Card | **blocked** | `npm run evidence:provider` → `provider-eval-artifact.json` (needs OAuth + action layer) |
+| UI Reset Card | **wireframes + evidence runner** | `docs/product/`, `docs/wireframes/*`, `npm run evidence:ui` |
+| F-16 parity (Later Fix) | **runner ready** | `npm run test:f16-parity` → `f16-parity-artifact.json` |
+| App-action layer design | **done** | `docs/app-action-layer-design.md` |
+| Extension architecture design | **done** | `docs/extension-architecture-design.md` |
+| Training/eval provenance | **partial** | `pools.ts` provenance header; wireframe mock state labeled in UI copy |
+
+**Still implementation_required:** real provider writes, extension code, live app UI merge (runtime at `docs/index.html` remains over-composed; product shape at `docs/product/` → wireframes).

@@ -1,9 +1,17 @@
 /*
  * Emberglass — browser harness for the custom WebGPU VibeThinker-3B runtime.
- * Single-screen Account Atlas: equip a trained account/app surface, then ask for
- * writes over that surface. Training a small LoRA adapter is fast and the result
- * hot-swaps live so the before/after is visible immediately in the same tab.
- * Nothing leaves the device except the optional URL import lane.
+ *
+ * Per Saturday review.MD (control document):
+ * Approved product = three screens only:
+ *   1. Skillbook / Home / Inventory (primary)
+ *   2. Skill / Train Surface
+ *   3. Job Board
+ *
+ * This current surface is the engine harness for real weights + real training + verified dry-run plans.
+ * Full UI Reset Card is later. Current changes must remove/hide complexity.
+ *
+ * All execution is dry-run only until action layer designed.
+ * Only real evidence accepted for any card.
  */
 import { QWEN25_3B } from './config.js';
 import { urlReader, hfReader, fileReader } from './readers.js';
@@ -473,6 +481,17 @@ function renderHistory() {
   $('historyEmpty').style.display = runs.length ? 'none' : '';
   const ul = $('historyList');
   ul.innerHTML = '';
+
+  // Saturday review.MD — UI symptoms + "remove or hide complexity":
+  // Adapter history competes for first-screen attention.
+  // Default to collapsed. User can expand if needed.
+  const histContainer = $('history') || $('historyRail') || $('historySection');
+  if (histContainer && !histContainer.dataset.saturdayExpanded) {
+    histContainer.style.display = 'none';
+  }
+
+  // Expose a minimal way to show it (for power users / future three-screen work)
+  window.__egShowHistory = () => { if (histContainer) { histContainer.style.display = ''; histContainer.dataset.saturdayExpanded = '1'; } };
   for (const m of runs) {
     const { lv, xp } = skillLevel(m);
     const rar = rarityOf(lv);
@@ -545,7 +564,14 @@ function itemTypeLabel(m) {
 // app you're logged into" — shown as dimmed planned tiles. Tiles render from
 // tiny glyph fallback metadata first, then upgrade to vendored SVG logos.
 const BYOD_TILE = { bg: '#6b6256', fg: '#fff', glyph: '📜', fs: 20 };
-const SERVICES = POPULAR_2026; // dock catalog (12 forgeable + the broader armory)
+// Per Saturday review.MD UI symptoms and "remove surfaces" guidance:
+// The broad catalog (most of POPULAR_2026) is future vision and must not dominate the first experience.
+// Only the core forgeable skills (those with .skill) are immediately relevant.
+// The rest are collapsed behind an explicit "more" affordance.
+const ALL_SERVICES = POPULAR_2026;
+const CORE_SERVICES = ALL_SERVICES.filter(s => s.skill);
+const SERVICES = CORE_SERVICES; // start minimal; full armory is secondary
+let showFullDock = false;
 let dockRuns = []; // run ids in dock order — the source of truth for number-key equip
 let justEquippedId = null; // run id that should play the one-shot equip flourish on next render
 // platform-correct label for the quick-switcher chord (Slack-style ⌘/Ctrl-K)
@@ -558,6 +584,11 @@ function renderDock() {
   tray.innerHTML = '';
   dockRuns = [];
   const seen = new Set();
+
+  // Saturday review.MD: first screen must answer "What can I do now?"
+  // Keep the dock minimal by default (core forgeable skills only).
+  // Full future catalog is secondary and collapsed.
+  const servicesToShow = showFullDock ? ALL_SERVICES : SERVICES;
 
   const addTile = (svc, opts) => {
     const el = document.createElement('div');
@@ -587,7 +618,7 @@ function renderDock() {
     tray.appendChild(el);
   };
 
-  for (const svc of SERVICES) {
+  for (const svc of servicesToShow) {
     if (svc.skill) {
       const run = runs.find((r) => skillByKey(r.base)?.key === svc.skill);
       if (run) {
@@ -635,6 +666,17 @@ function renderDock() {
     });
   }
   justEquippedId = null; // consumed
+
+  // Saturday review.MD: keep first screen focused.
+  // Only show the full future armory if user explicitly asks.
+  if (!showFullDock) {
+    const more = document.createElement('div');
+    more.className = 'dock__tile dock__more';
+    more.textContent = '…';
+    more.title = 'Show additional planned surfaces (not yet trainable)';
+    more.onclick = () => { showFullDock = true; renderDock(); };
+    tray.appendChild(more);
+  }
 }
 // GW2-style rich tooltip card for a dock tile.
 function dockTip(name, { lv, rarity, scope, opsN, uses, keyN, equipped } = {}) {
@@ -1083,6 +1125,9 @@ window.addEventListener('DOMContentLoaded', () => {
   // click the dimmed backdrop (outside the menu window) to dismiss
   $('trainer')?.addEventListener('click', (e) => { if (e.target.id === 'trainer') closeTrainer(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTrainer(); });
+  // Saturday review.MD (Recovery Contract + UI symptoms):
+  // Hide secondary chrome by default. Remove complexity before adding surfaces.
+  $('settings').hidden = true;
   $('gear').onclick = () => {
     const open = $('settings').hidden;
     $('settings').hidden = !open;

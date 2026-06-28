@@ -62,11 +62,9 @@ It is still all **dry-run** — no account, network, model, or DOM write happens
 
 ## Chrome side panel
 
-The side-panel path is implemented under `extension/` and rooted by the repo-level
-`manifest.json`. Load `/Users/mac/Emberglass` as an unpacked extension in
-`chrome://extensions`, click the toolbar action, and use **Capture Tab** in the
-panel. The content script captures a bounded, read-only page snapshot and the
-side panel maps known surfaces to skills. It does not execute provider writes.
+**implementation_required** — extension code was removed pending architecture approval.
+Design only: `docs/extension-architecture-design.md`. No `extension/` directory or
+`npm run test:extension` until approved.
 
 ## Shared state
 
@@ -127,6 +125,4 @@ or network dependency. Brand SVGs are bundled in `docs/wireframes/logos/`.
 primary action, dry-run trust line, dominant-verb surface, rendered `*I1` icons),
 the `*H1`/`*S1`/`*J1` markers are present, and no broken processed/brand assets.
 
-`npm run test:extension` loads the repo root as an unpacked MV3 extension in
-Playwright, captures a local fixture page through the service worker/content-script
-bridge, and verifies the side panel can produce a dry-run plan seal.
+UI evidence screenshots: `npm run evidence:ui` → `docs/evidence/ui/manifest.json`.

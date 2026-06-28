@@ -17,7 +17,7 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VibeBounty · in-browser Qwen2.5 triage (WebGPU) + LoRA hot-swap</title>
+<title>Emberglass — Train a private skill for this app (WebGPU · LoRA · verified plans)</title>
 <style>
   :root { color-scheme: dark; }
   body { font: 14px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 940px; padding: 24px; background:#0e0f13; color:#e6e6e6; }
@@ -34,10 +34,10 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 </style>
 </head>
 <body>
-<h1>VibeBounty · in-browser Qwen2.5-3B triage <span style="color:#7c8">(WebGPU · custom WGSL runtime · int4 · runtime LoRA swap)</span></h1>
+<h1>Emberglass — Train a private skill for this app <span style="color:#7c8">(WebGPU · LoRA · contract-verified plans · dry-run only)</span></h1>
 <div class="banner">
-  Runs the bug-bounty triage model <b>entirely client-side</b> on WebGPU. Custom WGSL compute kernels (int4 weights, GPU-resident KV cache) — we own every matmul,
-  so LoRA adapters can be <b>hot-swapped at runtime</b> with no base reload. ~50 tok/s decode. BYO model: served under <code>/model/</code>.
+  <strong>Engine harness only</strong> (per Saturday review.MD). Real weights, real drills, verified dry-run plans.<br>
+  <strong>Trust:</strong> dry-run only. No writes. Full UI reset to approved three screens is a later pass.
 </div>
 
 <div class="row">
@@ -53,21 +53,20 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 </div>
 <div id="status">idle.</div>
 
-<h3>LoRA adapter</h3>
+<h3>LoRA adapter (optional)</h3>
 <div class="row">
   <select id="adapter"><option value="none">none (base / merged)</option></select>
   <input id="loraFile" type="file" multiple disabled accept=".safetensors,.json">
-  <span style="color:#9ad;font-size:12px">load adapter files → dropdown → Triage to hot-swap</span>
+  <span style="color:#9ad;font-size:12px">load files → select to hot-swap</span>
 </div>
 <div class="row">
-  <input id="hfLora" type="text" placeholder="…or a Hugging Face LoRA repo id (PEFT or MLX)">
-  <button id="loadHFLora">Load LoRA from HF</button>
+  <input id="hfLora" type="text" placeholder="Hugging Face LoRA repo id (PEFT/MLX)">
+  <button id="loadHFLora">Load from HF</button>
 </div>
 
-<h3>Researcher submission</h3>
-<textarea id="report" rows="9">Title: IDOR: download any user's invoice PDF via sequential id
-Asset: api.example.com. GET /api/v1/invoices/{id}/pdf returns any invoice with no ownership check; ids are sequential. Decrementing id returns other customers' invoice PDFs (PII). PoCs + raw HTTP requests with only my own session cookie attached.</textarea>
-<div class="row"><button id="go" disabled>Triage</button></div>
+<h3>Request (dry-run plan)</h3>
+<textarea id="report" rows="3">Schedule 30 minutes with Sarah tomorrow afternoon for the Q3 roadmap sync.</textarea>
+<div class="row"><button id="go" disabled>Plan</button></div>
 
 <h3>Output</h3>
 <div id="out">—</div>
