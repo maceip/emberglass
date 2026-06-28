@@ -38,10 +38,16 @@ document.getElementById('nav').innerHTML = nav('skill');
 
 const sk = S.skillById('calendar');
 const qs = new URLSearchParams(location.search);
+const queryNumber = (key, fallback) => {
+  const value = qs.get(key);
+  if (value === null) return fallback;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
 // mutable trial + score model for this session (the wireframe's "training run")
 let trials = S.TRIALS.calendar.map(t=>({ ...t }));
-let score = Number(qs.get('score')) || sk.evalScore;
-let oos = Number(qs.get('oos')) || sk.oosPassRate;
+let score = queryNumber('score', sk.evalScore);
+let oos = queryNumber('oos', sk.oosPassRate);
 let trained = qs.get('trained') === '1';
 let training = false, justId = null;
 if (trained) trials = trials.map(t => ({ ...t, status: t.id === 't1' ? 'pass' : t.status }));

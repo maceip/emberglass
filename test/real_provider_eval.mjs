@@ -72,4 +72,5 @@ if (account) {
   // Placeholder for future real account steps. Must never be synthetic.
   console.log('\nReal account steps would go here (auth, read current state, perform planned change, read-after-write, cleanup).');
   console.log('Output must match provider_eval_artifact_template.json structure.');
+  process.exit(2);
 }
