@@ -8,6 +8,22 @@ await listen(server);
 
 const executablePath = chromeExecutable();
 const browser = await launchWebGpuBrowser({ headless: false });
+
+function parityFailures(rows) {
+  const failures = [];
+  for (const precision of ['f32', 'f16']) {
+    const decode = rows.find((row) => row.type === 'decode' && row.precision === precision);
+    if (!decode) {
+      failures.push(`missing ${precision} decode row`);
+      continue;
+    }
+    if (decode.matchLen !== decode.refLen) {
+      failures.push(`${precision} matched ${decode.matchLen}/${decode.refLen} ref tokens`);
+    }
+  }
+  return failures;
+}
+
 try {
   const page = await browser.newPage();
   const rows = [];
@@ -46,6 +62,12 @@ try {
     };
     await writeFile('f16-parity-artifact.json', JSON.stringify(artifact, null, 2));
     console.log('Wrote f16-parity-artifact.json');
+
+    const failures = parityFailures(parsedRows);
+    if (failures.length) {
+      console.error('F16 parity failed:', failures.join('; '));
+      process.exitCode = 1;
+    }
   }
 } finally {
   await browser.close();

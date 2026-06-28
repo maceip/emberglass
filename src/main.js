@@ -485,7 +485,7 @@ function renderHistory() {
   // Saturday review.MD — UI symptoms + "remove or hide complexity":
   // Adapter history competes for first-screen attention.
   // Default to collapsed. User can expand if needed.
-  const histContainer = $('history') || $('historyRail') || $('historySection');
+  const histContainer = $('history') || $('historyRail') || $('historySection') || document.querySelector('.history');
   if (histContainer && !histContainer.dataset.saturdayExpanded) {
     histContainer.style.display = 'none';
   }
