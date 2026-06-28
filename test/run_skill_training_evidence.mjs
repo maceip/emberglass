@@ -61,9 +61,15 @@ try {
   console.log('[before] GOLD eval (base adapter)');
   const beforeResults = [];
   for (const g of GOLD) {
-    const macro = await ask(g.prompt);
-    const v = verifyMacro(macro, g);
-    beforeResults.push({ phase: 'before', ...v, macro: macro.slice(0, 400) });
+    let macro = '';
+    let v;
+    try {
+      macro = await ask(g.prompt);
+      v = verifyMacro(macro || '', g);
+    } catch (e) {
+      v = { id: g.id, pass: false, error: String(e.message || e) };
+    }
+    beforeResults.push({ phase: 'before', ...v, macro: (macro || '').slice(0, 400) });
     console.log(`  ${v.pass ? 'PASS' : 'FAIL'} · ${g.id}`);
   }
   const beforePass = beforeResults.filter((r) => r.pass).length;
@@ -113,9 +119,15 @@ try {
   console.log('[after] GOLD eval (trained adapter)');
   const afterResults = [];
   for (const g of GOLD) {
-    const macro = await ask(g.prompt);
-    const v = verifyMacro(macro, g);
-    afterResults.push({ phase: 'after', ...v, macro: macro.slice(0, 400) });
+    let macro = '';
+    let v;
+    try {
+      macro = await ask(g.prompt);
+      v = verifyMacro(macro || '', g);
+    } catch (e) {
+      v = { id: g.id, pass: false, error: String(e.message || e) };
+    }
+    afterResults.push({ phase: 'after', ...v, macro: (macro || '').slice(0, 400) });
     console.log(`  ${v.pass ? 'PASS' : 'FAIL'} · ${g.id}`);
   }
   const afterPass = afterResults.filter((r) => r.pass).length;

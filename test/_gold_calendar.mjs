@@ -45,7 +45,7 @@ export function contractHolds(macro) {
 
 const minutesBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / 60000;
 const weekday = (iso) => new Date(iso + ':00').getDay(); // 0=Sun..6=Sat (local)
-const hour = (iso) => Number((iso.match(/T(\d{2}):/) || [])[1]);
+const hour = (iso) => (iso ? Number((String(iso).match(/T(\d{2}):/) || [])[1]) : NaN);
 
 export const GOLD = [
   {
