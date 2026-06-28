@@ -86,7 +86,7 @@ Requires port **8013**, WebGPU **`subgroups`**, and weights in `./model` (not bu
 
 Throughput is hardware-dependent. No public performance table is checked in right
 now. Publish numbers only from a clean browser run against real model weights
-under `/model`.
+under `/model` (see test/validate_benchmark_artifact.mjs and SATURDAY_CONCISE.md).
 
 ## Performance features added
 
