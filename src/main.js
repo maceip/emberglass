@@ -1123,6 +1123,8 @@ window.addEventListener('DOMContentLoaded', () => {
   // click the dimmed backdrop (outside the menu window) to dismiss
   $('trainer')?.addEventListener('click', (e) => { if (e.target.id === 'trainer') closeTrainer(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTrainer(); });
+  // Saturday review.MD: hide secondary controls by default to reduce first-screen noise.
+  $('settings').hidden = true;
   $('gear').onclick = () => {
     const open = $('settings').hidden;
     $('settings').hidden = !open;

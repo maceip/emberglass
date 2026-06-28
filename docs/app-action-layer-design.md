@@ -58,11 +58,13 @@ Current real dry-run path (src/skills/action/executor.ts + plan.ts + receipt.ts)
 
 ## Next Real Steps (only after current Recovery Cards are solid)
 
-- Flesh out exact ApprovalPacket UI contract (title, summary, steps preview, risk, canEdit, canRunPartially).
-- Define idempotency strategy per provider macro.
-- Define full receipt schema + audit log format (extend the current receipt.ts).
+- Flesh out exact ApprovalPacket UI contract (title, summary, steps preview, risk, canEdit, canRunPartially). Base on existing ActionPlan.summary and requiredCapabilities.
+- Define idempotency strategy per provider macro (leverage idempotent flag already in ActionStep).
+- Define full receipt schema + audit log format (extend src/skills/action/receipt.ts and auditLog).
 - Design rollback/undo paths where feasible.
 - Write the design review checklist before any executor code beyond dry-run.
+
+Current real implementation reference: src/skills/action/plan.ts (compilePlan), executor.ts (DryRunExecutor), receipt.ts.
 
 This document is the real start of the required "design before implementation".
 Do not write production write executors until this (or a successor) is accepted.

@@ -48,4 +48,12 @@ All work must obey the Recovery Contract (Tactic 1 + Tactic 2) and only use real
 - Remove or hide complexity before adding surfaces.
 
 Status is tracked in real code/tests, not in broad docs.
-Last updated: autonomous pass 2026-06-27
+Last updated: autonomous pass 2026-06-28
+
+## Progress Notes (real-only changes)
+- #1: Validator added (test/validate_benchmark_artifact.mjs). Artifact emission hardened.
+- #2: Full evidence template + harness that refuses without real dedicated account.
+- #3: Evidence template + report skeleton using declared real source data.
+- #4: Current main surface explicitly documented as "engine harness only". Dock and history simplified/collapsed to reduce complexity (per symptoms + "remove surfaces" directive). Full three-screen reset remains deferred.
+- Later Fixes: app-action-layer-design.md started with real code references. F-16 placeholder added.
+- Contract enforcement: saturday_contract_check.mjs + updates.
