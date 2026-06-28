@@ -1,15 +1,17 @@
 /*
  * Emberglass — browser harness for the custom WebGPU VibeThinker-3B runtime.
  *
- * This file implements the **engine harness** only.
- * Per Saturday review.MD (the active control document):
- *   - The approved product is the three-screen loop: Skillbook/Home, Skill/Train Surface, Job Board.
- *   - The full UI Reset Card is explicitly a later/separate pass.
- *   - Current work focuses on the 4 Recovery Work Cards + Later Fixes, under the Recovery Contract.
- *   - Only real model weights, real declared training sources, real accounts (when supplied), and
- *     real browser runs are acceptable. No local substitutes.
+ * Per Saturday review.MD (control document):
+ * Approved product = three screens only:
+ *   1. Skillbook / Home / Inventory (primary)
+ *   2. Skill / Train Surface
+ *   3. Job Board
  *
- * All writes are dry-run only (executors_are_dry_run ratchet) until the action layer is designed.
+ * This current surface is the engine harness for real weights + real training + verified dry-run plans.
+ * Full UI Reset Card is later. Current changes must remove/hide complexity.
+ *
+ * All execution is dry-run only until action layer designed.
+ * Only real evidence accepted for any card.
  */
 import { QWEN25_3B } from './config.js';
 import { urlReader, hfReader, fileReader } from './readers.js';
