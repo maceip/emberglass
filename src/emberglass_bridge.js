@@ -13,7 +13,8 @@
  *                   ;;,,..,:         !;.
  */
 
-// Embeddable Emberglass runtime for third-party demos (e.g. VibeBounty GitHub Pages).
+// Embeddable Emberglass runtime (harness for real weights + skill training + verified dry-run plans).
+// Per Saturday review.MD this is not the final product surface.
 // Exports a small chat-completions-shaped API over the custom WebGPU harness.
 import { QWEN25_3B } from './config.js';
 import { hfReader, urlReader } from './readers.js';

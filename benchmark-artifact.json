@@ -1,0 +1,324 @@
+{
+  "schema": "emberglass/real-browser-benchmark-artifact/v1",
+  "generatedBy": "npm run bench:wgpu (real Chromium + WebGPU subgroups)",
+  "capturedAt": "2026-06-27T22:04:17.569Z",
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "executablePath": "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+    "webgpuFlags": [
+      "--enable-unsafe-webgpu",
+      "--enable-features=WebGPU"
+    ]
+  },
+  "model": {
+    "path": "/model (or ?model=... override)",
+    "note": "Must be real safetensors from /model — no substitutes allowed for published numbers"
+  },
+  "rows": [
+    {
+      "type": "device",
+      "timestampQuery": true,
+      "maxBufferSize": 4294967292,
+      "maxStorageBufferBindingSize": 4294967292
+    },
+    {
+      "type": "browser",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "language": "en-US",
+      "platform": "MacIntel",
+      "hardwareConcurrency": 18
+    },
+    {
+      "type": "load",
+      "modelPath": "/model",
+      "seconds": 10.880799999952316,
+      "shaderCompileMs": 2.1000001430511475,
+      "kvBytes": 603979776,
+      "pool": {
+        "buffersCreated": 979,
+        "dynamicUniformWrites": 0,
+        "staticUniformHits": 0,
+        "staticUniformMisses": 5,
+        "bindGroupHits": 0,
+        "bindGroupMisses": 0,
+        "uncachedBindGroups": 1,
+        "uniformPoolSize": 0,
+        "staticUniforms": 5,
+        "bindGroups": 0
+      }
+    },
+    {
+      "type": "workgroup-autotune",
+      "add:32": 0.042957499999999996,
+      "add:64": 0.008687000000000002,
+      "add:128": 0.0028955,
+      "add:256": 0.0028754999999999996,
+      "bestAdd": {
+        "wg": 256,
+        "ms": 0.0028754999999999996
+      },
+      "rms:32": 0.057498999999999995,
+      "rms:64": 0.0436865,
+      "rms:128": 0.0221455,
+      "rms:256": 0.0127705,
+      "bestRms": {
+        "wg": 256,
+        "ms": 0.0127705
+      },
+      "silu:32": 0.0038335,
+      "silu:64": 0.0038955,
+      "silu:128": 0.047999,
+      "silu:256": 0.0040835,
+      "bestSilu": {
+        "wg": 32,
+        "ms": 0.0038335
+      }
+    },
+    {
+      "type": "decode-autotune",
+      "selected": 16,
+      "candidates": [
+        {
+          "k": 1,
+          "ms": 16.90000009536743,
+          "msPerToken": 16.90000009536743
+        },
+        {
+          "k": 2,
+          "ms": 24.899999856948853,
+          "msPerToken": 12.449999928474426
+        },
+        {
+          "k": 4,
+          "ms": 31.600000143051147,
+          "msPerToken": 7.900000035762787
+        },
+        {
+          "k": 8,
+          "ms": 63.299999952316284,
+          "msPerToken": 7.9124999940395355
+        },
+        {
+          "k": 16,
+          "ms": 122.40000009536743,
+          "msPerToken": 7.6500000059604645
+        },
+        {
+          "k": 32,
+          "ms": 248.20000004768372,
+          "msPerToken": 7.756250001490116
+        }
+      ],
+      "reason": "auto wall-clock decodeGreedyBatch with reset state"
+    },
+    {
+      "type": "prefill",
+      "L": 64,
+      "ms": 101.90000009536743,
+      "scratchBytes": 7864832,
+      "pool": {
+        "buffersCreated": 1046,
+        "dynamicUniformWrites": 0,
+        "staticUniformHits": 0,
+        "staticUniformMisses": 5,
+        "bindGroupHits": 18142,
+        "bindGroupMisses": 293,
+        "uncachedBindGroups": 7554,
+        "uniformPoolSize": 0,
+        "staticUniforms": 5,
+        "bindGroups": 293
+      }
+    },
+    {
+      "type": "prefill",
+      "L": 256,
+      "ms": 250.69999980926514,
+      "scratchBytes": 31459328,
+      "pool": {
+        "buffersCreated": 1058,
+        "dynamicUniformWrites": 0,
+        "staticUniformHits": 0,
+        "staticUniformMisses": 5,
+        "bindGroupHits": 18180,
+        "bindGroupMisses": 294,
+        "uncachedBindGroups": 7988,
+        "uniformPoolSize": 0,
+        "staticUniforms": 5,
+        "bindGroups": 294
+      }
+    },
+    {
+      "type": "prefill",
+      "L": 1024,
+      "ms": 1078.2000000476837,
+      "scratchBytes": 125837312,
+      "pool": {
+        "buffersCreated": 1070,
+        "dynamicUniformWrites": 0,
+        "staticUniformHits": 0,
+        "staticUniformMisses": 5,
+        "bindGroupHits": 18218,
+        "bindGroupMisses": 295,
+        "uncachedBindGroups": 8422,
+        "uniformPoolSize": 0,
+        "staticUniforms": 5,
+        "bindGroups": 295
+      }
+    },
+    {
+      "type": "prefill",
+      "L": 4096,
+      "ms": 6725.700000047684,
+      "scratchBytes": 503349248,
+      "pool": {
+        "buffersCreated": 1082,
+        "dynamicUniformWrites": 0,
+        "staticUniformHits": 0,
+        "staticUniformMisses": 5,
+        "bindGroupHits": 18256,
+        "bindGroupMisses": 296,
+        "uncachedBindGroups": 8856,
+        "uniformPoolSize": 0,
+        "staticUniforms": 5,
+        "bindGroups": 296
+      }
+    },
+    {
+      "type": "prefill",
+      "L": 8192,
+      "ms": 20394.700000047684,
+      "scratchBytes": 1006698496,
+      "pool": {
+        "buffersCreated": 1094,
+        "dynamicUniformWrites": 0,
+        "staticUniformHits": 0,
+        "staticUniformMisses": 5,
+        "bindGroupHits": 18294,
+        "bindGroupMisses": 297,
+        "uncachedBindGroups": 9290,
+        "uniformPoolSize": 0,
+        "staticUniforms": 5,
+        "bindGroups": 297
+      }
+    },
+    {
+      "type": "greedy-decode",
+      "ctx": 128,
+      "selectedBatch": 16,
+      "tokens": 32,
+      "seconds": 0.28530000019073487,
+      "tokPerSec": 112.16263574695644,
+      "readbackBytesPerToken": 4
+    },
+    {
+      "type": "greedy-decode",
+      "ctx": 1024,
+      "selectedBatch": 16,
+      "tokens": 32,
+      "seconds": 0.2760999999046326,
+      "tokPerSec": 115.90003625879423,
+      "readbackBytesPerToken": 4
+    },
+    {
+      "type": "greedy-decode",
+      "ctx": 4096,
+      "selectedBatch": 16,
+      "tokens": 32,
+      "seconds": 0.31909999990463256,
+      "tokPerSec": 100.28204327660183,
+      "readbackBytesPerToken": 4
+    },
+    {
+      "type": "greedy-decode",
+      "ctx": 7800,
+      "selectedBatch": 16,
+      "tokens": 32,
+      "seconds": 0.3862999999523163,
+      "tokPerSec": 82.83717319169035,
+      "readbackBytesPerToken": 4
+    },
+    {
+      "type": "batch-candidate",
+      "k": 1,
+      "seconds": 0.009700000047683717,
+      "tokPerSec": 103.09278299836629
+    },
+    {
+      "type": "batch-candidate",
+      "k": 2,
+      "seconds": 0.0155,
+      "tokPerSec": 129.03225806451613
+    },
+    {
+      "type": "batch-candidate",
+      "k": 4,
+      "seconds": 0.029799999952316285,
+      "tokPerSec": 134.22818813424493
+    },
+    {
+      "type": "batch-candidate",
+      "k": 8,
+      "seconds": 0.060700000047683715,
+      "tokPerSec": 131.7957165356753
+    },
+    {
+      "type": "batch-candidate",
+      "k": 16,
+      "seconds": 0.12189999985694885,
+      "tokPerSec": 131.25512730743392
+    },
+    {
+      "type": "batch-candidate",
+      "k": 32,
+      "seconds": 0.2417999999523163,
+      "tokPerSec": 132.34077752816583
+    },
+    {
+      "type": "sampling-topk",
+      "topK": 40,
+      "tokens": 8,
+      "seconds": 0.37180000019073484,
+      "tokPerSec": 21.516944582829396,
+      "readbackBytesPerToken": 4
+    },
+    {
+      "type": "profile-token",
+      "ctx": 18,
+      "categoriesUs": {
+        "embed": 10.209,
+        "rms": 522.6560000000001,
+        "g4:2048x2048": 405.07300000000004,
+        "g4:256x2048": 365.91900000000004,
+        "ropeQK": 116.91199999999998,
+        "attnP": 628.3639999999999,
+        "attnC": 103.873,
+        "g4add:2048x2048": 372.2469999999999,
+        "gu:11008x2048": 1673.31,
+        "g4add:2048x11008": 1356.393,
+        "gemv:151936x2048": 521.951
+      }
+    },
+    {
+      "type": "train-mask",
+      "tokens": 18,
+      "activeLabels": 17,
+      "trainedKeys": 252,
+      "rank": 8
+    },
+    {
+      "type": "train-step",
+      "tokens": 18,
+      "activeLabels": 17,
+      "loss": 9.989761296440573,
+      "gradNorm": 659.2111289260823,
+      "microStepMs": 544.2000000476837,
+      "optimizerStepMs": 24.799999952316284,
+      "totalStepMs": 569,
+      "trainTokPerSec": 31.634446397188054
+    },
+    {
+      "type": "done"
+    }
+  ],
+  "acceptance": "This artifact is the single source of truth. Copy tok/s, prefill, load times etc. from a committed version of this file only after a clean run on real weights. Device, Chrome version, and model path must be visible here."
+}

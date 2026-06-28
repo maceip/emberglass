@@ -1,5 +1,6 @@
 /* Emberglass wireframes — shared mock state.
- * One underlying model reused by Home / Inventory, Skill / Train Surface, and
+ * PROVENANCE: design/walkthrough state only — not real provider, model, or training evidence.
+ * Real training proof: skill-training-artifact.json from npm run evidence:skill-training.
  * Job Board (the review forbids separate mock states per screen). Client-only,
  * no build step, no network. Mirrors the AccountSkill / EquippedChain /
  * DrillFailure interfaces from architecture_review_including_app_actions.md.

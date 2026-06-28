@@ -84,20 +84,30 @@ Requires port **8013**, WebGPU **`subgroups`**, and weights in `./model` (not bu
 
 ## Performance
 
-Throughput is hardware-dependent. No public performance table is checked in right
-now. Publish numbers only from a clean browser run against real model weights
-under `/model`.
+Throughput is hardware-dependent. Published numbers must come from a committed
+`benchmark-artifact.json` produced by `npm run bench:wgpu` on real `/model` weights.
+Validate with `npm run test:validate-bench-artifact` (see `SATURDAY_CONCISE.md`).
 
-## Performance features added
+**Last captured run** (2026-06-27, Chrome Canary 151, MacIntel, WeiboAI/VibeThinker-3B):
 
-- Hot kernels use `var<immediate>` + `setImmediates` for per-dispatch metadata; the benchmark completed without WebGPU validation errors.
-- `shader-f16` paths are active for RMS normalization, RoPE, attention partial/combine, elementwise add, and SiLU.
-- GPU-resident sampling keeps top-k selection and sampling on GPU; measured `topK=40` sampling was 21.4 tok/s with one token ID read back.
-- Workgroup autotuning uses `timestamp-query`; clean-run winners were `add=64`, `rms=256`, `silu=256`.
-- Specialization constants (`override`) are used for workgroup sizes on key kernels and are reflected in dispatch sizing.
-- High-level `generate()` can use the GPU sampler when requested.
-- Benchmark harness reports prefill latency, greedy decode tok/s, GPU top-k sampling tok/s, decode sub-kernel timings, and a real backward/AdamW training step.
-- Forward and backward WGSL now live in Jinja templates; `npm run kernels:check` verifies generated kernel modules are up to date.
+| Metric | Value |
+|--------|-------|
+| Model load | 10.9 s |
+| Prefill L=1024 | 1078 ms |
+| Greedy decode @ ctx=1024 | **115.9 tok/s** |
+| Greedy decode @ ctx=4096 | **100.3 tok/s** |
+| Top-k sampling (k=40) | 21.5 tok/s |
+| Train step (18 tok, rank 8) | 31.6 train-tok/s |
+
+Full raw rows: see `benchmark-artifact.json` in the repo root.
+
+## Performance features (implementation)
+
+- Hot kernels use `var<immediate>` + `setImmediates` for per-dispatch metadata.
+- `shader-f16` paths for RMS, RoPE, attention, add, and SiLU (parity: `npm run test:f16-parity`).
+- GPU-resident top-k sampling; one token ID readback per sample step.
+- Workgroup autotuning via `timestamp-query` when available.
+- Benchmark harness reports prefill, greedy decode, sampling, profiling, and a real backward/AdamW step.
 
 ---
 

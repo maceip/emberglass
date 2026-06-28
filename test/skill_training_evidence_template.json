@@ -1,0 +1,9 @@
+{
+  "schema": "emberglass/real-skill-training-evidence/v1",
+  "skill": "inbox-calendar",
+  "source": "declared drills (fixed + generated from intents, held-out eval disjoint)",
+  "before": { "contractPass": 0, "notes": "real eval on cal.eval before training" },
+  "after": { "contractPass": 0, "delta": 0, "failureCasesVisible": true },
+  "adapter": { "rank": 16, "alpha": 32, "artifact": "the exported safetensors + config from real TrainingController" },
+  "runtime": { "steps": 0, "finalLoss": 0, "trainTokPerSec": 0 }
+}

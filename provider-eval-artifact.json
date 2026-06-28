@@ -1,0 +1,27 @@
+{
+  "schema": "emberglass/provider-eval-artifact/v1",
+  "status": "implementation_required",
+  "capturedAt": "2026-06-27T22:19:16.046Z",
+  "blockers": [
+    "missing env: GOOGLE_OAUTH_CLIENT_ID",
+    "missing env: GOOGLE_OAUTH_CLIENT_SECRET",
+    "missing env: GOOGLE_TEST_REFRESH_TOKEN",
+    "app-action layer not approved for writes (see docs/app-action-layer-design.md)",
+    "no dedicated test account OAuth refresh token configured on this machine"
+  ],
+  "nextSteps": [
+    "Create dedicated Google test account for Calendar eval",
+    "Register OAuth client; store refresh token in env (never commit)",
+    "Approve app-action layer design",
+    "Implement read-only Calendar API executor for eval v1",
+    "Add write + read-after-write + cleanup after action layer approval"
+  ],
+  "evidenceRequired": [
+    "real auth",
+    "real read",
+    "planned write",
+    "confirmed write",
+    "read-after-write",
+    "cleanup"
+  ]
+}
