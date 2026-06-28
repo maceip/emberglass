@@ -1,0 +1,114 @@
+{
+  "schema": "emberglass/ui-evidence-artifact/v1",
+  "capturedAt": "2026-06-27T22:19:17.608Z",
+  "shots": [
+    {
+      "phase": "first-run",
+      "screen": "home",
+      "viewport": "desktop",
+      "path": "docs/evidence/ui/first-run-home-desktop.png"
+    },
+    {
+      "phase": "first-run",
+      "screen": "skill",
+      "viewport": "desktop",
+      "path": "docs/evidence/ui/first-run-skill-desktop.png"
+    },
+    {
+      "phase": "first-run",
+      "screen": "job-board",
+      "viewport": "desktop",
+      "path": "docs/evidence/ui/first-run-job-board-desktop.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "home",
+      "viewport": "desktop",
+      "path": "docs/evidence/ui/post-training-home-desktop.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "skill",
+      "viewport": "desktop",
+      "path": "docs/evidence/ui/post-training-skill-desktop.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "job-board",
+      "viewport": "desktop",
+      "path": "docs/evidence/ui/post-training-job-board-desktop.png"
+    },
+    {
+      "phase": "first-run",
+      "screen": "home",
+      "viewport": "mobile",
+      "path": "docs/evidence/ui/first-run-home-mobile.png"
+    },
+    {
+      "phase": "first-run",
+      "screen": "skill",
+      "viewport": "mobile",
+      "path": "docs/evidence/ui/first-run-skill-mobile.png"
+    },
+    {
+      "phase": "first-run",
+      "screen": "job-board",
+      "viewport": "mobile",
+      "path": "docs/evidence/ui/first-run-job-board-mobile.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "home",
+      "viewport": "mobile",
+      "path": "docs/evidence/ui/post-training-home-mobile.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "skill",
+      "viewport": "mobile",
+      "path": "docs/evidence/ui/post-training-skill-mobile.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "job-board",
+      "viewport": "mobile",
+      "path": "docs/evidence/ui/post-training-job-board-mobile.png"
+    },
+    {
+      "phase": "first-run",
+      "screen": "home",
+      "viewport": "foldable-unfolded",
+      "path": "docs/evidence/ui/first-run-home-foldable-unfolded.png"
+    },
+    {
+      "phase": "first-run",
+      "screen": "skill",
+      "viewport": "foldable-unfolded",
+      "path": "docs/evidence/ui/first-run-skill-foldable-unfolded.png"
+    },
+    {
+      "phase": "first-run",
+      "screen": "job-board",
+      "viewport": "foldable-unfolded",
+      "path": "docs/evidence/ui/first-run-job-board-foldable-unfolded.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "home",
+      "viewport": "foldable-unfolded",
+      "path": "docs/evidence/ui/post-training-home-foldable-unfolded.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "skill",
+      "viewport": "foldable-unfolded",
+      "path": "docs/evidence/ui/post-training-skill-foldable-unfolded.png"
+    },
+    {
+      "phase": "post-training",
+      "screen": "job-board",
+      "viewport": "foldable-unfolded",
+      "path": "docs/evidence/ui/post-training-job-board-foldable-unfolded.png"
+    }
+  ]
+}

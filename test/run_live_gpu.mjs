@@ -126,6 +126,9 @@ try {
   await shot('2-base');
 
   console.log('\n[3] in-browser LoRA training (real backward + AdamW) …');
+  await p.evaluate(() => window.__eg?.openTrainer?.());
+  await p.waitForSelector('#trainer:not([hidden])', { timeout: 10000 });
+  await p.waitForFunction(() => !document.getElementById('trainGuided')?.disabled, null, { timeout: 60000 });
   await p.click('#trainGuided');
   const seen = new Set(); const t0 = Date.now(); let trained = false;
   while (Date.now() - t0 < TRAIN_MS) {

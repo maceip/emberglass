@@ -2,8 +2,9 @@
 //
 // HARD BOUNDARY: this file performs no I/O. No fetch, no XMLHttpRequest, no DOM, no provider
 // SDK, no chrome.* — nothing that leaves the process. Every receipt is 'simulated'. A real
-// provider/DOM executor is a separate, approval-gated milestone (see the action-layer review);
-// adding one must trip the ratchet invariant `executors_are_dry_run` and force that review.
+// provider/DOM executor is implementation_required — separate, approval-gated milestone
+// (see docs/app-action-layer-design.md); adding one must trip the ratchet invariant
+// `executors_are_dry_run` and force that review.
 import type { ActionPlan, Executor, Receipt } from '../types.ts';
 import { record } from './receipt.ts';
 

@@ -16,7 +16,7 @@
  * - Current main surface is documented as harness, not the final three-screen product
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 
 const violations = [];
 
@@ -50,7 +50,7 @@ if (existsSync('model')) {
   // Having a model dir is fine if it contains real weights.
   // We cannot easily verify they are "real" here, but we can require that
   // no obvious mock files are present.
-  const files = require('fs').readdirSync('model');
+  const files = readdirSync('model');
   if (files.some(f => /mock|fake|synthetic/i.test(f))) {
     fail('model/ contains obvious synthetic files');
   }

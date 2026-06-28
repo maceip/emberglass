@@ -1,0 +1,106 @@
+{
+  "schema": "emberglass/f16-parity-artifact/v1",
+  "generatedBy": "npm run test:f16-parity",
+  "capturedAt": "2026-06-27T22:19:27.219Z",
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "executablePath": "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+    "webgpuFlags": [
+      "--enable-unsafe-webgpu",
+      "--enable-features=WebGPU"
+    ]
+  },
+  "model": {
+    "path": "/model",
+    "note": "Real WeiboAI/VibeThinker-3B weights; greedy decode vs ref.json gen_ids"
+  },
+  "rows": [
+    {
+      "type": "device",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "maxBufferSize": 4294967292
+    },
+    {
+      "type": "load",
+      "modelPath": "/model",
+      "seconds": 10.512200000047685
+    },
+    {
+      "type": "decode",
+      "precision": "f32",
+      "usingF16": false,
+      "tokens": [
+        151665,
+        785,
+        1196,
+        2727,
+        330,
+        13048,
+        3263,
+        2938,
+        594,
+        264,
+        42113,
+        13,
+        576,
+        1196,
+        12492,
+        944
+      ],
+      "matchLen": 16,
+      "refLen": 16
+    },
+    {
+      "type": "decode",
+      "precision": "f16",
+      "usingF16": false,
+      "tokens": [
+        151665,
+        785,
+        1196,
+        2727,
+        330,
+        13048,
+        3263,
+        2938,
+        594,
+        264,
+        42113,
+        13,
+        576,
+        1196,
+        12492,
+        944
+      ],
+      "matchLen": 16,
+      "refLen": 16
+    },
+    {
+      "type": "parity",
+      "f16VsF32MatchLen": 16,
+      "f32VsRefMatchLen": 16,
+      "f16VsRefMatchLen": 16,
+      "refGen": [
+        151665,
+        785,
+        1196,
+        2727,
+        330,
+        13048,
+        3263,
+        2938,
+        594,
+        264,
+        42113,
+        13,
+        576,
+        1196,
+        12492,
+        944
+      ]
+    },
+    {
+      "type": "done"
+    }
+  ]
+}

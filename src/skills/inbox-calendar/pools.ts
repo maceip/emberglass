@@ -1,5 +1,8 @@
 // pools.ts — the Inbox & Calendar training vocab, shared across providers.
 //
+// PROVENANCE: generated teaching examples — not real user/test-account eval evidence.
+// User-facing claims must distinguish this corpus from provider eval or live account data.
+//
 // These fixtures describe the USER's world (who they email, what about, when), not any
 // provider's API. So Google, Outlook, and Zoho all draw from the same pool — the provider
 // profile only changes conventions + the op->method executor map, never this vocabulary.
