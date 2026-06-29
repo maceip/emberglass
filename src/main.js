@@ -71,7 +71,10 @@ const GEN = { maxTokens: 2048, temperature: 0.6, topP: 0.95, topK: 64 };
 // SKILLS is the trained-surface registry; POPULAR_2026 is the dock catalog of
 // account/app roots; verifyMacro is the "does what we say" gate.
 const skillByKey = (key) => SKILLS.find((s) => key && (key === s.key || String(key).startsWith(s.key + ' ')));
-let selectedSkillKey = SKILLS[0].key;
+// Dumb and simple home page: only the Calendar skill.
+// Click the calendar icon → magically train the one skill using its real declared drills.
+// Then chat in the request box to tell the calendar what to do.
+let selectedSkillKey = 'inbox-calendar';
 let trainLosses = [];
 
 // Real-only: populated from the dedicated test account (Google Calendar at google.com/calendar).
@@ -585,9 +588,9 @@ const BYOD_TILE = { bg: '#6b6256', fg: '#fff', glyph: '📜', fs: 20 };
 // The broad catalog (most of POPULAR_2026) is future vision and must not dominate the first experience.
 // Only the core forgeable skills (those with .skill) are immediately relevant.
 // The rest are collapsed behind an explicit "more" affordance.
-const ALL_SERVICES = POPULAR_2026;
-const CORE_SERVICES = ALL_SERVICES.filter(s => s.skill);
-const SERVICES = CORE_SERVICES; // start minimal; full armory is secondary
+const ALL_SERVICES = POPULAR_2026.filter(s => s.skill === 'inbox-calendar');
+const CORE_SERVICES = ALL_SERVICES;
+const SERVICES = CORE_SERVICES; // only the calendar skill — dumb and simple home
 let showFullDock = false;
 let dockRuns = []; // run ids in dock order — the source of truth for number-key equip
 let justEquippedId = null; // run id that should play the one-shot equip flourish on next render
@@ -655,8 +658,14 @@ function renderDock() {
         });
       } else {
         addTile(svc, {
-          state: 'forge', forge: true, tip: `${svc.name} — select to train in the skillbook`,
-          onClick: () => { selectSkill(svc.skill); /* Training is part of the skillbook for the selected skill */ },
+          state: 'forge', forge: true, tip: `${svc.name} — click to magically train the calendar skill`,
+          onClick: () => {
+            selectedSkillKey = 'inbox-calendar';
+            // magically train using the real declared starter drills for calendar
+            const btn = $('trainGuided');
+            if (btn) btn.click();
+            else selectSkill('inbox-calendar');
+          },
         });
       }
     } else {
@@ -882,7 +891,7 @@ function renderStage() {
   const skill = active ? skillByKey(active.base) : null;
   const d = skill ? dockOf(skill.key) : null;
   const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
-  set('stageScore', `${acquired.size} / ${SKILLS.length}`);
+  set('stageScore', acquired.has('inbox-calendar') ? 'Calendar trained' : 'Train the Calendar skill');
   set('stageLv', String(lvl));
   set('stageRank', rank);
   const xp = $('stageXp'); if (xp) xp.style.width = xpPct + '%';
@@ -908,30 +917,30 @@ function renderSkillPicker() {
   if (!host) return;
   const runs = store.listRuns();
   host.innerHTML = '';
-  for (const sk of SKILLS) {
-    const d = dockOf(sk.key);
-    const run = runs.find((r) => skillByKey(r.base)?.key === sk.key);
-    const lv = run ? skillLevel(run).lv : 0;
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'skillpick__btn' + (sk.key === selectedSkillKey ? ' on' : '') + (lv ? ' forged' : '');
-    b.dataset.key = sk.key;
-    const icon = document.createElement('span');
-    icon.className = 'skillpick__icon';
-    paintIcon(icon, d, sk.icon, 0.78);
-    const txt = document.createElement('span');
-    txt.className = 'skillpick__txt';
-    txt.innerHTML = `<b>${esc(sk.label)}</b><i>${sk.spec.ops.length} writes · ${sk.examples.length} drills</i>`;
-    b.append(icon, txt);
-    if (lv) {
-      const badge = document.createElement('span');
-      badge.className = 'skillpick__lv';
-      badge.textContent = 'L' + lv;
-      b.appendChild(badge);
-    }
-    b.onclick = () => selectSkill(sk.key);
-    host.appendChild(b);
+  // Dumb simple: only the one Calendar skill. Click icon → train it.
+  const sk = SKILLS.find(s => s.key === 'inbox-calendar') || SKILLS[0];
+  const d = dockOf(sk.key);
+  const run = runs.find((r) => skillByKey(r.base)?.key === sk.key);
+  const lv = run ? skillLevel(run).lv : 0;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'skillpick__btn' + (sk.key === selectedSkillKey ? ' on' : '') + (lv ? ' forged' : '');
+  b.dataset.key = sk.key;
+  const icon = document.createElement('span');
+  icon.className = 'skillpick__icon';
+  paintIcon(icon, d, sk.icon, 0.78);
+  const txt = document.createElement('span');
+  txt.className = 'skillpick__txt';
+  txt.innerHTML = `<b>${esc(sk.label)}</b><i>${sk.spec.ops.length} writes · ${sk.examples.length} drills</i>`;
+  b.append(icon, txt);
+  if (lv) {
+    const badge = document.createElement('span');
+    badge.className = 'skillpick__lv';
+    badge.textContent = 'L' + lv;
+    b.appendChild(badge);
   }
+  b.onclick = () => selectSkill(sk.key);
+  host.appendChild(b);
 }
 function renderPairList(host, pairs, { limit = 4, compact = false } = {}) {
   if (!host) return;
@@ -994,16 +1003,14 @@ function selectSkill(key) {
   selectedSkillKey = sk.key;
   document.querySelectorAll('#skillPicker .skillpick__btn').forEach((b) =>
     b.classList.toggle('on', b.dataset.key === sk.key));
-  const title = $('skillTitle'); if (title) title.innerHTML = `${sk.icon} ${esc(sk.label)} surface`;
+  const title = $('skillTitle'); if (title) title.innerHTML = `${sk.icon} ${esc(sk.label)}`;
   const desc = $('skillDesc'); if (desc) desc.textContent = sk.desc;
   renderSurfacePlan(sk);
 
-  // One-screen skillbook: Training is the main action on the selected skill here.
-  // No separate full "train screen" — train lives in the book.
+  // Only calendar: training the one skill is the main action. Then use the chat to tell it things.
   const trainHint = $('trainHint');
-  if (trainHint) trainHint.textContent = `Train ${sk.label} to improve its plans for this surface.`;
+  if (trainHint) trainHint.textContent = `Train the calendar skill, then tell it what to do.`;
 
-  // One-screen skillbook: ensure a direct Train action for the selected skill (idempotent).
   const detailHost = $('skillDetail') || $('surfacePlan');
   let trainDirect = document.getElementById('skillbookTrain');
   if (detailHost) {
@@ -1013,7 +1020,7 @@ function selectSkill(key) {
       trainDirect.style.marginTop = '8px';
       detailHost.appendChild(trainDirect);
     }
-    trainDirect.textContent = `Train ${sk.label}`;
+    trainDirect.textContent = `Train Calendar skill`;
     trainDirect.onclick = () => { $('trainGuided')?.click(); };
     trainDirect.disabled = !state.loaded;
   }
@@ -1303,6 +1310,14 @@ window.addEventListener('DOMContentLoaded', () => {
   initFs();
   initIconTheme();
   renderHistory();
+  // Dumb simple home: hide extra chrome. Only calendar. Train it. Chat to tell it things.
+  const hist = $('history') || $('historyRail') || $('historySection');
+  if (hist) hist.style.display = 'none';
+  if ($('settings')) $('settings').hidden = true;
+  if ($('gear')) $('gear').style.display = 'none';
+  const adapterWrap = $('adapterWrap');
+  if (adapterWrap) adapterWrap.hidden = true;
+  // keep the request area as the chat to the calendar
   switchTab('infer'); setBadge(); refreshOwn(); gateButtons();
 });
 

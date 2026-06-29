@@ -17,7 +17,7 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Emberglass — Train a private skill for this app (WebGPU · LoRA · verified plans)</title>
+<title>Emberglass — Calendar</title>
 <style>
   :root { color-scheme: dark; }
   body { font: 14px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 940px; padding: 24px; background:#0e0f13; color:#e6e6e6; }
@@ -34,12 +34,14 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
 </style>
 </head>
 <body>
-<h1>Emberglass — Skillbook</h1>
+<h1>Emberglass</h1>
 <div class="banner">
-  <strong>Skillbook</strong> — one screen (Google Calendar). Select skill, Train on real drills, Equip, Request → verified dry-run plan.<br>
-  <strong>Real-only:</strong> Real model weights + real test account (Google) for provider surfaces. No fakes.
+  <strong>Home.</strong> One thing: the Calendar skill.<br>
+  Click the calendar icon → train the calendar skill (real drills) → chat and tell the calendar what to do (verified plans).
 </div>
-<div id="surfaceContext" style="font-size:12px;opacity:.7;margin-bottom:8px;">Surface: Google Calendar (calendar.google.com) — real test account login ready; set via window.__eg.setRealSurfaceContext({provider:'google', label:'your-test'})</div>
+<div style="text-align:center; margin:16px 0; font-size:42px; cursor:pointer;" id="calendarHero" title="Calendar skill — the one thing. Train it in the app, then tell it things here.">📅</div>
+<script>document.getElementById('calendarHero')?.addEventListener('click', ()=>{document.getElementById('report')?.focus();});</script>
+<div id="surfaceContext" style="font-size:12px;opacity:.7;margin-bottom:8px;">Calendar skill — real weights required to train and use. No other skills here.</div>
 
 <div class="row">
   <input id="hfRepo" type="text" value="WeiboAI/VibeThinker-3B" placeholder="Hugging Face repo id">
@@ -65,9 +67,9 @@ _@@@@@@#+\|/!;;!-@@@--;    ,@@@@@;
   <button id="loadHFLora">Load from HF</button>
 </div>
 
-<h3>Request (dry-run plan)</h3>
+<h3>Tell the Calendar what to do</h3>
 <textarea id="report" rows="3">Schedule 30 minutes with Sarah tomorrow afternoon for the Q3 roadmap sync.</textarea>
-<div class="row"><button id="go" disabled>Plan</button></div>
+<div class="row"><button id="go" disabled>Tell it</button></div>
 
 <h3>Output</h3>
 <div id="out">—</div>
