@@ -1003,15 +1003,19 @@ function selectSkill(key) {
   const trainHint = $('trainHint');
   if (trainHint) trainHint.textContent = `Train ${sk.label} to improve its plans for this surface.`;
 
-  // Inject a direct Train action in the skill detail if there's a host.
+  // One-screen skillbook: ensure a direct Train action for the selected skill (idempotent).
   const detailHost = $('skillDetail') || $('surfacePlan');
-  if (detailHost && !document.getElementById('skillbookTrain')) {
-    const btn = document.createElement('button');
-    btn.id = 'skillbookTrain';
-    btn.textContent = `Train ${sk.label}`;
-    btn.style.marginTop = '8px';
-    btn.onclick = () => { $('trainGuided')?.click(); };
-    detailHost.appendChild(btn);
+  let trainDirect = document.getElementById('skillbookTrain');
+  if (detailHost) {
+    if (!trainDirect) {
+      trainDirect = document.createElement('button');
+      trainDirect.id = 'skillbookTrain';
+      trainDirect.style.marginTop = '8px';
+      detailHost.appendChild(trainDirect);
+    }
+    trainDirect.textContent = `Train ${sk.label}`;
+    trainDirect.onclick = () => { $('trainGuided')?.click(); };
+    trainDirect.disabled = !state.loaded;
   }
 }
 async function applyRun(id) {
