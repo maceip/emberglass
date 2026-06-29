@@ -1,17 +1,16 @@
 /*
- * Emberglass — browser harness for the custom WebGPU VibeThinker-3B runtime.
+ * Emberglass — one screen: the Skillbook.
  *
- * Per Saturday review.MD (control document):
- * Approved product = three screens only:
- *   1. Skillbook / Home / Inventory (primary)
- *   2. Skill / Train Surface
- *   3. Job Board
+ * Direction: Single Skillbook/Home view.
+ * - Inventory of skills (Calendar front and center).
+ * - Select a skill → see its state, allowed writes, and Train action.
+ * - Training happens here (no separate full train screen for now).
+ * - Equip a skill → command box uses it.
+ * - Request → verified dry-run plan.
  *
- * This current surface is the engine harness for real weights + real training + verified dry-run plans.
- * Full UI Reset Card is later. Current changes must remove/hide complexity.
- *
- * All execution is dry-run only until action layer designed.
- * Only real evidence accepted for any card.
+ * Real-only: real model weights required for training/inference.
+ * Dry-run only until action layer is designed.
+ * No benchmarks needed right now.
  */
 import { QWEN25_3B } from './config.js';
 import { urlReader, hfReader, fileReader } from './readers.js';
@@ -74,6 +73,23 @@ const GEN = { maxTokens: 2048, temperature: 0.6, topP: 0.95, topK: 64 };
 const skillByKey = (key) => SKILLS.find((s) => key && (key === s.key || String(key).startsWith(s.key + ' ')));
 let selectedSkillKey = SKILLS[0].key;
 let trainLosses = [];
+
+// Real-only: will be populated when a real test account is supplied.
+// This replaces any synthetic account state.
+let realSurfaceContext = null; // e.g. { provider: 'google', label: 'test-account-xxx', resources: [...] }
+
+function setRealSurfaceContext(ctx) {
+  realSurfaceContext = ctx || null;
+  const el = $('surfaceContext');
+  if (el) {
+    if (ctx && ctx.label) {
+      el.textContent = `Surface: ${ctx.label} (real)`;
+    } else {
+      el.textContent = 'Surface: (no real account context yet — provide test account)';
+    }
+  }
+  // Later: pass ctx into planFor / dryRun so plans are grounded in the real surface.
+}
 
 // Pick up to `n` examples for a single forge: always keep the OUT_OF_SCOPE pairs
 // (so the adapter still learns to bounce), then fill with a deterministic spread
@@ -302,6 +318,7 @@ function openTrainer() {
   renderSkillPicker(); selectSkill(selectedSkillKey);
   t.hidden = false; document.body.classList.add('modal-open');
   $('gear')?.classList.remove('on'); $('settings') && ($('settings').hidden = true);
+  // Training is part of the skillbook for the selected skill (one screen).
 }
 function closeTrainer() {
   const t = $('trainer'); if (t) t.hidden = true;
@@ -638,8 +655,8 @@ function renderDock() {
         });
       } else {
         addTile(svc, {
-          state: 'forge', forge: true, tip: `${svc.name} — train this surface`,
-          onClick: () => { selectSkill(svc.skill); openTrainer(); },
+          state: 'forge', forge: true, tip: `${svc.name} — select to train in the skillbook`,
+          onClick: () => { selectSkill(svc.skill); /* Training is part of the skillbook for the selected skill */ },
         });
       }
     } else {
@@ -962,6 +979,15 @@ function renderSurfacePlan(sk) {
   set('guidedSummary', `${inscope.length} train`);
   set('evalSummary', `${(sk.eval || []).length} held out`);
   set('guardSummary', `${guards.length} OOS`);
+
+  // One-screen skillbook: prominent Train action for the selected skill.
+  // Training lives here, not on a separate screen.
+  const trainBtn = $('skillTrainBtn');
+  if (trainBtn) {
+    trainBtn.textContent = `Train ${sk.label} starter`;
+    trainBtn.onclick = () => { $('trainGuided').click(); };
+    trainBtn.disabled = !state.loaded;
+  }
 }
 function selectSkill(key) {
   const sk = skillByKey(key) || SKILLS[0];
@@ -971,6 +997,22 @@ function selectSkill(key) {
   const title = $('skillTitle'); if (title) title.innerHTML = `${sk.icon} ${esc(sk.label)} surface`;
   const desc = $('skillDesc'); if (desc) desc.textContent = sk.desc;
   renderSurfacePlan(sk);
+
+  // One-screen skillbook: Training is the main action on the selected skill here.
+  // No separate full "train screen" — train lives in the book.
+  const trainHint = $('trainHint');
+  if (trainHint) trainHint.textContent = `Train ${sk.label} to improve its plans for this surface.`;
+
+  // Inject a direct Train action in the skill detail if there's a host.
+  const detailHost = $('skillDetail') || $('surfacePlan');
+  if (detailHost && !document.getElementById('skillbookTrain')) {
+    const btn = document.createElement('button');
+    btn.id = 'skillbookTrain';
+    btn.textContent = `Train ${sk.label}`;
+    btn.style.marginTop = '8px';
+    btn.onclick = () => { $('trainGuided')?.click(); };
+    detailHost.appendChild(btn);
+  }
 }
 async function applyRun(id) {
   const meta = store.getRun(id);
@@ -1251,7 +1293,8 @@ window.addEventListener('DOMContentLoaded', () => {
     openTrainer, closeTrainer, openWheel, closeWheel, commitWheel, setWheelSel, sfx, SKILLS, POPULAR_2026, selectSkill, renderSkillPicker, verifyMacro, planFor, dryRun, setMacroCheck, equipByIndex, skillByKey, sampleExamples,
     setIconTheme: (theme) => { const t = setIconTheme(theme); const sel = $('iconTheme'); if (sel) sel.value = t; repaintIconSurfaces(); return t; },
     get iconTheme() { return iconTheme(); },
-    get selectedSkillKey() { return selectedSkillKey; }, get lastEquipIntent() { return lastEquipIntent; } };
+    get selectedSkillKey() { return selectedSkillKey; }, get lastEquipIntent() { return lastEquipIntent; },
+    setRealSurfaceContext, get realSurfaceContext() { return realSurfaceContext; } };
 
   initFs();
   initIconTheme();
