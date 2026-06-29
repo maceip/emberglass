@@ -1,47 +1,5 @@
 /*
- * Saturday review.MD — Real Provider Evaluation Card
- *
- * Real-only harness. Produces evidence ONLY from a dedicated test account on a real provider.
- * No local mocks, no synthetic stores, no fabricated responses.
- *
- * User directive (2026-06-29): use the Google test account ("use mine").
- * Login/browser context: Google Calendar at calendar.google.com (and google.com).
- *
- * === WHAT THE AGENT NEEDS FROM YOU RIGHT NOW (to finish this card) ===
- * 1. Preferred (for this cloud agent):
- *    Cursor Desktop → Dashboard → Cloud Agents → Secrets (for this workspace)
- *    Add secret:
- *      Name:  GOOGLE_TEST_TOKEN
- *      Value: OAuth2 access token (https://www.googleapis.com/auth/calendar scope)
- *             for the *dedicated test account* you are logged into at calendar.google.com.
- *    (Optional) also add GOOGLE_TEST_ACCOUNT = short-label
- *    Then tell the agent "secret added" or just say go — the next run will see it.
- *
- * 2. If you prefer not to inject the token here:
- *    - On *your* machine (where the calendar login lives), run:
- *        npm run test:real-provider-eval -- --provider=google --account=your-label
- *      (you can temporarily export GOOGLE_TEST_TOKEN=... locally, or patch the script to pull from your browser cookies via playwright).
- *    - Commit + push the produced test/provider-eval-artifact-google.json
- *    - Say "artifact pushed on the branch".
- *
- * 3. Short-term one-off: you can give a short-lived token on a call / here as --token=... and I will run once.
- *
- * The browser login you have open at google.com/calendar is the "normal person" experience.
- * This harness does direct API calls for clean, reproducible evidence + cleanup.
- *
- * How credentials reach this cloud agent:
- *   Cursor Dashboard → Cloud Agents → Secrets → add GOOGLE_TEST_TOKEN
- *   The token is injected as env var on agent start. Never commit tokens.
- *
- * For the browser app (Skillbook): the real logged-in session the end-user has at
- * calendar.google.com is the intended runtime context for future (action-layer) execution.
- * This harness uses direct API for reproducible verification independent of any DOM.
- *
- * Run (agent or local):
- *   npm run test:real-provider-eval -- --provider=google --account=your-test-label
- *   (optionally --token=... )
- *
- * On success it writes test/provider-eval-artifact-google.json with the required shape.
+ * Saturday review.MD — Real Provider Evaluation Card (the current blocker) is the dedicated Google test account + your login on calendar.google.com; the harness (test/real_provider_eval.mjs) is already written for a real full cycle against the dedicated test account (auth → real readBefore on Calendar API → contract-verified plan → real create_event write → readAfter + delta → cleanup delete) and refuses and prints instructions if it can't do it for real — preferred: Cursor Desktop → Dashboard → Cloud Agents → Secrets add GOOGLE_TEST_TOKEN (OAuth2 access token for the dedicated test account with https://www.googleapis.com/auth/calendar scope) then say "go" and I'll run, produce the artifact, commit/push/update PR; alt: run locally where your calendar login lives and push the artifact.
  */
 
 import { SKILLS, planFor, clearAudit } from '../src/skills.js';
