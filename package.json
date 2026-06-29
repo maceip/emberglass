@@ -25,7 +25,7 @@
     "test:package": "node --experimental-strip-types test/_package.mjs",
     "test:detect": "node --experimental-strip-types test/_detect.mjs",
     "test:plan": "node --experimental-strip-types test/_plan.mjs",
-    "test:real-provider-eval": "node test/real_provider_eval.mjs",
+    "test:real-provider-eval": "node --experimental-strip-types test/real_provider_eval.mjs",
     "test:saturday-contract": "node test/saturday_contract_check.mjs",
     "test:validate-bench-artifact": "node test/validate_benchmark_artifact.mjs",
     "test:wireframes": "node test/_wireframes.mjs",

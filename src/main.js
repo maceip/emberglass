@@ -74,21 +74,21 @@ const skillByKey = (key) => SKILLS.find((s) => key && (key === s.key || String(k
 let selectedSkillKey = SKILLS[0].key;
 let trainLosses = [];
 
-// Real-only: will be populated when a real test account is supplied.
-// This replaces any synthetic account state.
-let realSurfaceContext = null; // e.g. { provider: 'google', label: 'test-account-xxx', resources: [...] }
+// Real-only: populated from the dedicated test account (Google Calendar at google.com/calendar).
+// Never synthetic. When user supplies the account/login, call setRealSurfaceContext with it.
+let realSurfaceContext = null; // e.g. { provider: 'google', label: 'test-google-xxx', resources: [...] }
 
 function setRealSurfaceContext(ctx) {
   realSurfaceContext = ctx || null;
   const el = $('surfaceContext');
   if (el) {
     if (ctx && ctx.label) {
-      el.textContent = `Surface: ${ctx.label} (real)`;
+      el.textContent = `Surface: Google Calendar (${ctx.label}) (real)`;
     } else {
-      el.textContent = 'Surface: (no real account context yet — provide test account)';
+      el.textContent = 'Surface: Google Calendar (calendar.google.com) — no real account context yet (provide test account)';
     }
   }
-  // Later: pass ctx into planFor / dryRun so plans are grounded in the real surface.
+  // Future: real read state from the account can be shown here; plans stay dry-run until action layer.
 }
 
 // Pick up to `n` examples for a single forge: always keep the OUT_OF_SCOPE pairs
