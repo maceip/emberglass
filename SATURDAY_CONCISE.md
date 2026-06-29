@@ -14,10 +14,12 @@ All work must obey the Recovery Contract (Tactic 1 + Tactic 2) and only use real
   - Keep real-only bar: real weights, real drills, no fakes. Real test account will be used when supplied.
   - Benchmarks deprioritized ("don't care about benchmarks" for now).
 
-- **Real Provider Evaluation Card** (unblocked when test account arrives)
-  - Use the offered real test account (user: "why don't you use mine?").
-  - Full cycle against real provider surfaces.
-  - Evidence only from real reads/writes on the dedicated account.
+- **Real Provider Evaluation Card** (Google test account — account supplied)
+  - User: "We're introduced you by Google, higher browser and login now on the calendar, like Google.com."
+  - Harness (`test:real-provider-eval`) now performs real Calendar API v3 cycle (auth/read/plan/real-write/read-after/cleanup) when `GOOGLE_TEST_TOKEN` is injected.
+  - Exact secret injection instructions printed when missing (Cursor Dashboard Secrets).
+  - Artifact written on success. Browser login context at calendar.google.com documented as the user surface.
+  - Still gated: no token in this env yet → reports cleanly what is needed. No fakes.
 
 - **Real Skill Training Card**
   - Real training loop on declared drills from the skillbook.
